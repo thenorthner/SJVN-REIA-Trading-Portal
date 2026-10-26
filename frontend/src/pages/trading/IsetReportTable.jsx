@@ -267,7 +267,7 @@ export default function IsetReportTable({
                 </tbody>
               </table>
             </div>
-            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-muted)' }}>
+            <p style={{ marginTop: 10, fontSize: 15, color: 'var(--text-muted)' }}>
               Showing {filtered.length ? 1 : 0} to {filtered.length} of {filtered.length} entries.
             </p>
           </>

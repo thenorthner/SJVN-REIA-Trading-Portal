@@ -47,7 +47,7 @@ export default function ClientBids() {
       key: 'status',
       header: 'Status',
       render: (r) => (r.status === 'SUBMITTED' && r.submission_mode === 'STUB'
-        ? <span style={{ color: '#ca8a04', fontWeight: 600, fontSize: 13.5 }} title="Recorded by the desk; the exchange API is not live yet.">Not sent — stub</span>
+        ? <span style={{ color: '#ca8a04', fontWeight: 600, fontSize: 15 }} title="Recorded by the desk; the exchange API is not live yet.">Not sent — stub</span>
         : <Badge status={r.status} />),
     },
   ];

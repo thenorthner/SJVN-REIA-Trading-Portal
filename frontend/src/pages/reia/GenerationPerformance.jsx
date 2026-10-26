@@ -16,7 +16,8 @@ import { PageHeader, Card, Badge, StatCard, Field, AlertPopup, fmtNumber, fmtCur
 
 const pct = (v) => (v == null ? '—' : `${fmtNumber(v, 2)}%`);
 // Who may raise a note (the notes desk's own writers); a second person approves it there.
-const CAN_RAISE = [...new Set([...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'])];
+// A true-up note is drafted by the maker or Finance (routes/notes.js, Phase B.2).
+const CAN_RAISE = [...new Set([...ROLE_GROUPS.REIA_MAKE, 'FINANCE_USER'])];
 const YEAR_STATE = {
   IN_PROGRESS: { tone: 'neutral', label: 'Year in progress' },
   AWAITING_ENERGY: { tone: 'warning', label: 'Waiting on locked energy' },

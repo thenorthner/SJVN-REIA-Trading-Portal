@@ -270,7 +270,7 @@ export default function ExchangeBiddingLatest() {
           </div>
 
           <div style={{ border: '1px solid var(--slate-200)', borderRadius: 6, padding: 16, marginBottom: 16, background: 'var(--slate-50)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 14 }}>General Information</div>
+            <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 15.5 }}>General Information</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <Field label="Delivery Date (T+1)">
                 <input type="date" className="input" value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} required />
@@ -297,14 +297,14 @@ export default function ExchangeBiddingLatest() {
           </div>
 
           <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 8 }}>
               Upload Request details in CSV format<span style={{ color: 'var(--red)' }}> *</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={(e) => setCsvName(e.target.files?.[0]?.name || '')} />
               <WriteOnly><button type="button" className="btn" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button></WriteOnly>
               <button type="button" className="btn btn-link" style={{ color: 'var(--on-blue)', padding: 0 }} onClick={downloadSample}>Download Samples</button>
-              {csvName && <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{csvName}</span>}
+              {csvName && <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>{csvName}</span>}
             </div>
           </div>
 
@@ -352,13 +352,13 @@ export default function ExchangeBiddingLatest() {
 
               <div style={{ marginTop: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <strong style={{ fontSize: 13 }}>PQData:</strong>
+                  <strong style={{ fontSize: 14.5 }}>PQData:</strong>
                   <WriteOnly><button type="button" className="btn btn-sm btn-primary" onClick={() => addPq(dIndex)}>Add PQData</button></WriteOnly>
                 </div>
                 {detail.pq_data.length === 0 ? (
-                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>No PQ rows yet — click Add PQData (rate / quantity).</div>
+                  <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>No PQ rows yet — click Add PQData (rate / quantity).</div>
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                     <thead>
                       <tr style={{ background: 'var(--slate-100)' }}>
                         <th style={{ padding: 6, textAlign: 'left' }}>Rate / Price</th>
@@ -393,7 +393,7 @@ export default function ExchangeBiddingLatest() {
             Add New Bid Detail
           </button></WriteOnly>
 
-          <div style={{ background: 'var(--t-blue-50)', border: '1px solid var(--t-blue-line)', borderRadius: 6, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: 'var(--on-blue)' }}>
+          <div style={{ background: 'var(--t-blue-50)', border: '1px solid var(--t-blue-line)', borderRadius: 6, padding: '12px 14px', marginBottom: 16, fontSize: 14.5, color: 'var(--on-blue)' }}>
             <strong>Important Notes:</strong>
             <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
               <li>A bid can only be cancelled after it appears in the Bid Book.</li>
@@ -401,9 +401,9 @@ export default function ExchangeBiddingLatest() {
             </ul>
           </div>
 
-          {error && <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>{error}</div>}
           {success && (
-            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>
               Bid submitted — Transaction ID <strong>{success.transaction_id}</strong>.
               {success.bid_ids?.length > 0 && (
                 <>

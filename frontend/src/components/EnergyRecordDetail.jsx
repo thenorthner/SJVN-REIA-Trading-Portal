@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
-import { Badge, Field, fmtNumber } from './ui.jsx';
+import { Badge, Field, AlertPopup, fmtNumber } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
@@ -33,7 +33,7 @@ export function ResponseBadge({ row }) {
   }
   return row.status === 'VALIDATED'
     ? <Badge status="PENDING" label="Awaiting confirmation" />
-    : <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>—</span>;
+    : <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>—</span>;
 }
 
 function Summary({ d, run, onPreview, setError }) {
@@ -86,10 +86,10 @@ function Summary({ d, run, onPreview, setError }) {
         {item('Status', <Badge status={d.status} />)}
         {item('Energy', <strong>{mwh(d.energy_mwh)}</strong>)}
         {item('CUF', d.cuf_percent != null
-          ? <>{fmtNumber(d.cuf_percent)}%{d.cuf_computed ? <span style={{ fontSize: 13, color: 'var(--slate-500)' }}> (worked out from energy and capacity)</span> : ''}</>
+          ? <>{fmtNumber(d.cuf_percent)}%{d.cuf_computed ? <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}> (worked out from energy and capacity)</span> : ''}</>
           : '—')}
         {d.min_cuf_percent != null && item('Contractual minimum CUF', `${fmtNumber(d.min_cuf_percent)}%`)}
-        {d.lock_override_reason && item('Locked with a reason', <>{d.lock_override_reason}{d.lock_override_by ? <span style={{ fontSize: 13, color: 'var(--slate-500)' }}> — {d.lock_override_by}</span> : ''}</>)}
+        {d.lock_override_reason && item('Locked with a reason', <>{d.lock_override_reason}{d.lock_override_by ? <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}> — {d.lock_override_by}</span> : ''}</>)}
         {item('Availability', d.availability_percent != null ? `${fmtNumber(d.availability_percent)}%` : '—')}
         {item('Source', d.source)}
         {item('Bill', d.invoice ? `${d.invoice.invoice_no} (${d.invoice.status})` : 'Not billed yet')}
@@ -114,19 +114,19 @@ function Summary({ d, run, onPreview, setError }) {
       {d.deviation_notes && (
         <>
           <div className="section-title" style={{ marginTop: 18 }}>SJVN's validation note</div>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-600)', lineHeight: 1.5 }}>{d.deviation_notes}</p>
+          <p style={{ margin: 0, fontSize: 14.5, color: 'var(--slate-600)', lineHeight: 1.5 }}>{d.deviation_notes}</p>
         </>
       )}
 
       <div className="section-title" style={{ marginTop: 18 }}>Source document</div>
       {d.source_document ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13.5 }}><strong>{d.source_document.title}</strong> · {d.source_document.file_name}</span>
+          <span style={{ fontSize: 15 }}><strong>{d.source_document.title}</strong> · {d.source_document.file_name}</span>
           <button type="button" className="btn btn-primary btn-sm" onClick={() => onPreview(d.source_document.version_id, d.source_document.file_name)}>View source document</button>
         </div>
       ) : (
         <>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-500)' }}>
+          <p style={{ margin: 0, fontSize: 14.5, color: 'var(--slate-500)' }}>
             {d.can_manage ? 'No source document is attached to this period yet.' : 'SJVN has not attached the source document for this period yet. You can ask for it in a message to the desk, or through an objection or a notice on the contract.'}
           </p>
           {!d.can_manage && (
@@ -137,11 +137,11 @@ function Summary({ d, run, onPreview, setError }) {
         </>
       )}
       {d.rea && (
-        <p style={{ margin: '8px 0 0', fontSize: 13 }}>
+        <p style={{ margin: '8px 0 0', fontSize: 14.5 }}>
           The {d.rea.rpc_source} energy account for this period, as published: <a href={d.rea.pdf_url} target="_blank" rel="noopener noreferrer">open on the RPC's site</a>
         </p>
       )}
-      {d.can_manage && (
+      {d.can_make && (
         <form className="cw-form" onSubmit={attach}>
           <div className="form-grid">
             <Field label={d.source_document ? 'Replace with' : 'Attach the document this figure was taken from'}>
@@ -191,7 +191,7 @@ function Blocks({ d, reload, setError }) {
 
   return (
     <div>
-      {d.can_manage && (
+      {d.can_make && (
         <form className="cw-form" onSubmit={upload} style={{ marginTop: 0 }}>
           <Field label={`${has ? 'Replace' : 'Load'} the 15-minute blocks for ${d.period_month} (Excel or CSV: Date, Block 1–96, Scheduled MWh, Actual MWh)`}>
             <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files[0])} />
@@ -208,12 +208,12 @@ function Blocks({ d, reload, setError }) {
       {!has ? (
         <div className="empty-cell" style={{ padding: 28 }}>
           No 15-minute data has been loaded for this period.
-          {!d.can_manage && <div style={{ marginTop: 6, fontSize: 13.5 }}>The monthly figure above is what is billed. Block-wise data appears here once SJVN loads the SLDC / RLDC block statement.</div>}
+          {!d.can_manage && <div style={{ marginTop: 6, fontSize: 15 }}>The monthly figure above is what is billed. Block-wise data appears here once SJVN loads the SLDC / RLDC block statement.</div>}
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-            <span style={{ fontSize: 13, color: 'var(--slate-600)' }}>
+            <span style={{ fontSize: 14.5, color: 'var(--slate-600)' }}>
               {data.days.length} day(s) loaded · scheduled {mwh(d.blocks.scheduled_mwh)} · actual {mwh(d.blocks.actual_mwh)}
             </span>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => api.energyRecords.blocksXlsx(d.id).then((b) => saveBlob(b, `blocks-${d.period_month}.xlsx`)).catch((e) => setError(errText(e)))}>
@@ -225,10 +225,10 @@ function Blocks({ d, reload, setError }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.days} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} onClick={(e) => e?.activeLabel && load(e.activeLabel)}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="date" tickFormatter={(v) => v.slice(8)} tick={{ fontSize: 13 }} />
-                <YAxis tick={{ fontSize: 13 }} width={48} />
+                <XAxis dataKey="date" tickFormatter={(v) => v.slice(8)} tick={{ fontSize: 14.5 }} />
+                <YAxis tick={{ fontSize: 14.5 }} width={48} />
                 <Tooltip formatter={(v) => `${fmtNumber(v, 3)} MWh`} />
-                <Legend wrapperStyle={{ fontSize: 13.5 }} />
+                <Legend wrapperStyle={{ fontSize: 15 }} />
                 <Bar dataKey="scheduled_mwh" name="Scheduled" fill="url(#eliteSlate)" isAnimationActive={false} />
                 <Bar dataKey="actual_mwh" name="Actual" fill="url(#eliteBlue)" isAnimationActive={false} />
               </BarChart>
@@ -236,11 +236,11 @@ function Blocks({ d, reload, setError }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '14px 0 8px' }}>
-            <label htmlFor="block-day" style={{ fontSize: 13, fontWeight: 600 }}>Day</label>
+            <label htmlFor="block-day" style={{ fontSize: 14.5, fontWeight: 600 }}>Day</label>
             <select id="block-day" value={data.date || ''} onChange={(e) => load(e.target.value)}>
               {data.days.map((x) => <option key={x.date} value={x.date}>{fmtDate(x.date)} — {fmtNumber(x.actual_mwh, 3)} MWh</option>)}
             </select>
-            <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{data.blocks.length} of 96 blocks</span>
+            <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>{data.blocks.length} of 96 blocks</span>
           </div>
           <div className="table-wrap" style={{ maxHeight: 320, overflowY: 'auto' }}>
             <table className="data-table" style={{ margin: 0 }}>
@@ -274,6 +274,7 @@ function Blocks({ d, reload, setError }) {
 
 function Response({ d, run, onPreview, setError, disputesPath }) {
   const [form, setForm] = useState(null);   // objection: { note, claimed_mwh, file }
+  const [asking, setAsking] = useState(false); // accepting the figure, asked in the page
   const [answer, setAnswer] = useState(null); // SJVN: { outcome, note }
   const [busy, setBusy] = useState(false);
   const open = d.response_status === 'OBJECTED' && !d.objection_outcome;
@@ -307,7 +308,7 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
   return (
     <div>
       {!d.response_status && (
-        <p style={{ margin: '0 0 12px', fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 12px', fontSize: 15, color: 'var(--slate-600)', lineHeight: 1.5 }}>
           {d.can_manage
             ? 'The counterparty has not yet answered this figure.'
             : d.status === 'DRAFT'
@@ -325,15 +326,15 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
       {d.response_status === 'OBJECTED' && (
         <div className="cw-card" style={{ borderLeft: `4px solid ${open ? '#dc2626' : '#94a3b8'}` }}>
           <strong>Objection</strong>
-          <span style={{ marginLeft: 8, fontSize: 13.5, color: 'var(--slate-500)' }}>{d.response_by_name} · {fmtDateTime(d.response_at)}</span>
-          <p style={{ margin: '6px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{d.response_note}</p>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ marginLeft: 8, fontSize: 15, color: 'var(--slate-500)' }}>{d.response_by_name} · {fmtDateTime(d.response_at)}</span>
+          <p style={{ margin: '6px 0', fontSize: 15, whiteSpace: 'pre-wrap' }}>{d.response_note}</p>
+          <div style={{ fontSize: 15, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span>On record: {mwh(d.energy_mwh)}</span>
             {d.claimed_mwh != null && <span>Counterparty's figure: <strong>{mwh(d.claimed_mwh)}</strong> ({d.claimed_mwh - d.energy_mwh > 0 ? '+' : ''}{fmtNumber(d.claimed_mwh - d.energy_mwh, 3)})</span>}
             {d.response_version_id && <button type="button" className="btn-link" onClick={() => onPreview(d.response_version_id, 'meter-record')}>View their record</button>}
           </div>
           {d.objection_outcome && (
-            <div style={{ marginTop: 8, fontSize: 13, color: d.objection_outcome === 'UPHELD' ? 'var(--on-green)' : 'var(--on-red)' }}>
+            <div style={{ marginTop: 8, fontSize: 14.5, color: d.objection_outcome === 'UPHELD' ? 'var(--on-green)' : 'var(--on-red)' }}>
               <strong>{d.objection_outcome === 'UPHELD' ? 'SJVN agrees — the record is to be corrected' : 'SJVN has not accepted the objection'}</strong>
               {' '}· {d.objection_resolved_by_name} · {fmtDateTime(d.objection_resolved_at)} — {d.objection_resolution}
             </div>
@@ -343,10 +344,19 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
 
       {d.can_respond && !form && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-          <button className="btn btn-success" onClick={() => window.confirm(`Accept ${d.energy_mwh} MWh for ${d.period_month}? This is recorded as your agreement to the figure and cannot be undone.`) && run(() => api.energyRecords.respond(d.id, { response: 'ACCEPTED' }))}>
+          <button className="btn btn-success" onClick={() => setAsking(true)}>
             {open ? 'Withdraw objection and accept' : 'Accept & confirm'}
           </button>
           {!d.response_status && <button className="btn btn-danger" onClick={() => setForm({ note: '', claimed_mwh: '', file: null })}>Object to this figure</button>}
+          <AlertPopup
+            open={asking}
+            tone="warning"
+            title="Accept this energy figure?"
+            message={`Accept ${fmtNumber(d.energy_mwh)} MWh for ${d.period_month}? This is recorded as your agreement to the figure and cannot be undone.`}
+            okLabel="Back"
+            onClose={() => setAsking(false)}
+            actions={<button type="button" className="btn btn-success" onClick={() => { setAsking(false); run(() => api.energyRecords.respond(d.id, { response: 'ACCEPTED' })); }}>Accept the figure</button>}
+          />
         </div>
       )}
 
@@ -364,7 +374,7 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
       )}
 
       {!d.can_manage && (
-        <div style={{ marginTop: 18, fontSize: 13, color: 'var(--slate-600)' }}>
+        <div style={{ marginTop: 18, fontSize: 14.5, color: 'var(--slate-600)' }}>
           <div className="section-title">Dispute on the bill</div>
           {disputeUrl
             ? <>This period was billed on <strong>{d.invoice.invoice_no}</strong>. A dispute is raised against the bill: <a href={disputeUrl} className="btn btn-secondary btn-sm" style={{ marginLeft: 6 }}>Raise dispute on {d.invoice.invoice_no}</a></>
@@ -372,7 +382,7 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
         </div>
       )}
 
-      {d.can_manage && open && !answer && (
+      {d.can_check && open && !answer && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button className="btn btn-success btn-sm" onClick={() => setAnswer({ outcome: 'UPHELD', note: '' })}>Agree — record to be corrected</button>
           <button className="btn btn-danger btn-sm" onClick={() => setAnswer({ outcome: 'REJECTED', note: '' })}>Not accepted</button>
@@ -383,7 +393,7 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
           <Field label={answer.outcome === 'UPHELD' ? 'What will be corrected' : 'Why the objection is not accepted'} required>
             <textarea required rows={3} value={answer.note} onChange={(e) => setAnswer({ ...answer, note: e.target.value })} />
           </Field>
-          {answer.outcome === 'UPHELD' && <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--slate-600)' }}>This records the decision. Enter the corrected figure as a new record for the period.</p>}
+          {answer.outcome === 'UPHELD' && <p style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--slate-600)' }}>This records the decision. Enter the corrected figure as a new record for the period.</p>}
           <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setAnswer(null)}>Cancel</button><button type="submit" className="btn btn-primary">Send answer</button></div>
         </form>
       )}

@@ -65,7 +65,7 @@ export default function BidForecastPanel({ exchange, product, deliveryDate, bloc
 
   const box = {
     border: '1px solid var(--border)', borderLeft: '3px solid var(--amber)', borderRadius: 'var(--radius-sm)',
-    background: 'var(--surface)', padding: '10px 14px', marginBottom: 20, fontSize: 13,
+    background: 'var(--surface)', padding: '10px 14px', marginBottom: 20, fontSize: 14.5,
   };
 
   if (error) return <div style={box} role="status" className="audit-muted">{error}</div>;

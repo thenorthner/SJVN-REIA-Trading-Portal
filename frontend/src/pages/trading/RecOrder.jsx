@@ -138,10 +138,10 @@ export default function RecOrder() {
     <div style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>REC Order Details</div>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>REC Order Details</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>REC Order</h1>
         </div>
-        <div style={{ display: 'flex', gap: 14, fontSize: 13 }}>
+        <div style={{ display: 'flex', gap: 14, fontSize: 14.5 }}>
           <Link to="/trading/rec/order-report" style={{ color: 'var(--on-blue)' }}>Order Report →</Link>
           <Link to="/trading/rec/bid-entry" style={{ color: 'var(--on-blue)' }}>Bid Entry →</Link>
         </div>
@@ -164,13 +164,13 @@ export default function RecOrder() {
             <button type="button" className="btn btn-outline btn-sm" onClick={fillFromReport} disabled={filling || !form.trade_date}>
               {filling ? 'Reading report…' : 'Fill from uploaded obligation report'}
             </button>
-            <Link to="/trading/rec/obligations" style={{ fontSize: 13.5, color: 'var(--on-blue)' }}>Upload a report →</Link>
+            <Link to="/trading/rec/obligations" style={{ fontSize: 15, color: 'var(--on-blue)' }}>Upload a report →</Link>
           </div>
           {fromReport && (
             <div
               role="status"
               style={{
-                marginTop: 10, fontSize: 13, padding: 10, borderRadius: 4,
+                marginTop: 10, fontSize: 14.5, padding: 10, borderRadius: 4,
                 background: fromReport.found ? 'var(--t-blue-50)' : 'var(--t-amber-100)',
                 color: fromReport.found ? 'var(--on-blue)' : 'var(--on-amber)',
               }}
@@ -220,7 +220,7 @@ export default function RecOrder() {
             </Field>
           </div>
           {preview && (
-            <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--slate-500)' }}>
+            <div style={{ marginTop: 10, fontSize: 15, color: 'var(--slate-500)' }}>
               A×B check · ₹{fmtNumber(preview.obligation, 2)} — net = obligation − GST − fees − GST on fees
             </div>
           )}
@@ -247,9 +247,9 @@ export default function RecOrder() {
             </Field>
           </div>
 
-          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 14 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginTop: 14 }}>{error}</div>}
           {success && (
-            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 14 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginTop: 14 }}>
               REC order <strong>{success.id}</strong> saved for trade date {success.trade_date}.
             </div>
           )}

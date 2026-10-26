@@ -187,7 +187,7 @@ export default function RECObligationLedger() {
             />
           </Field>
         </div>
-        <p className="muted" style={{ marginTop: 12, fontSize: 13.5 }}>
+        <p className="muted" style={{ marginTop: 12, fontSize: 15 }}>
           The file is read by column name, not by position. Nothing is saved until you have seen
           what it was read as. Uploading the same file twice is refused; a corrected report updates
           the trades it restates.
@@ -230,7 +230,7 @@ export default function RECObligationLedger() {
         />
       </Card>
       {(ledger?.lines || []).some((l) => l.derived_fields?.length) && (
-        <p className="muted" style={{ fontSize: 13.5, marginTop: 8 }}>
+        <p className="muted" style={{ fontSize: 15, marginTop: 8 }}>
           * computed here from quantity, rate and the exchange&apos;s charges — the report did not carry that figure.
         </p>
       )}
@@ -270,7 +270,7 @@ export default function RECObligationLedger() {
           width={900}
         >
           <div style={{ display: 'grid', gap: 18 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 14.5 }}>
               <div><strong>Sheet:</strong> {preview.sheet}</div>
               <div><strong>Exchange:</strong> {preview.platform}</div>
               <div><strong>Sessions:</strong> {fmtDate(preview.session_from)} – {fmtDate(preview.session_to)}</div>
@@ -296,7 +296,7 @@ export default function RECObligationLedger() {
 
             <div>
               <h4 style={{ margin: '0 0 8px' }}>Columns read</h4>
-              <div style={{ fontSize: 13 }}>
+              <div style={{ fontSize: 14.5 }}>
                 {(preview.columns_mapped || []).map((c) => (
                   <div key={c.column}>
                     <code>{c.column}</code> → {c.field.replace(/_/g, ' ')}
@@ -304,7 +304,7 @@ export default function RECObligationLedger() {
                 ))}
               </div>
               {(preview.columns_ignored || []).length > 0 && (
-                <p className="muted" style={{ fontSize: 13.5, marginTop: 8 }}>
+                <p className="muted" style={{ fontSize: 15, marginTop: 8 }}>
                   Ignored: {preview.columns_ignored.join(', ')}. If one of these holds a figure that
                   matters, it needs to be added to the parser before it can be relied on.
                 </p>
@@ -329,7 +329,7 @@ export default function RECObligationLedger() {
             {(preview.reconciliation || []).length > 0 && (
               <div>
                 <h4 style={{ margin: '0 0 8px' }}>Against the REC ledger</h4>
-                <ul style={{ fontSize: 13, paddingLeft: 18 }}>
+                <ul style={{ fontSize: 14.5, paddingLeft: 18 }}>
                   {preview.reconciliation.map((d, i) => (
                     <li key={`${d.kind}-${d.trade_date}-${i}`} style={{ marginBottom: 6 }}>
                       <Badge type={DIFF_TONE[d.kind] || 'warning'}>{DIFF_LABEL[d.kind] || d.kind}</Badge>
@@ -355,7 +355,7 @@ export default function RECObligationLedger() {
       {viewingUpload && (
         <Modal open onClose={() => setViewingUpload(null)} title={viewingUpload.file_name} width={900}>
           <div style={{ display: 'grid', gap: 18 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 14.5 }}>
               <div><strong>Exchange:</strong> {viewingUpload.platform}</div>
               <div><strong>Sheet:</strong> {viewingUpload.sheet_name || '—'}</div>
               <div><strong>Trades:</strong> {fmtNumber(viewingUpload.line_count, 0)}</div>
@@ -367,7 +367,7 @@ export default function RECObligationLedger() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>
+              <p className="muted" style={{ fontSize: 15, margin: 0 }}>
                 Withdrawing removes only the trades this report is still the source of — anything a
                 later report has since restated stays.
               </p>

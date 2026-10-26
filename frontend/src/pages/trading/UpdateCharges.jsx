@@ -154,17 +154,17 @@ export default function UpdateCharges() {
     background: '#33598d',
     color: '#fff',
     padding: '8px 6px',
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: 600,
     textAlign: 'center',
     border: '1px solid #2a4a75',
   };
-  const td = { padding: '4px', border: '1px solid var(--slate-200)', fontSize: 13.5 };
-  const inputStyle = { width: '100%', padding: '4px 6px', fontSize: 13.5, boxSizing: 'border-box' };
+  const td = { padding: '4px', border: '1px solid var(--slate-200)', fontSize: 15 };
+  const inputStyle = { width: '100%', padding: '4px 6px', fontSize: 15, boxSizing: 'border-box' };
 
   function MetaLabel({ label, value }) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 8, padding: '4px 0', fontSize: 13 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 8, padding: '4px 0', fontSize: 14.5 }}>
         <span style={{ color: 'var(--slate-600)', fontWeight: 600 }}>{label}</span>
         <span>{value || '—'}</span>
       </div>
@@ -262,8 +262,8 @@ export default function UpdateCharges() {
             </table>
           </div>
 
-          {error && <div style={{ marginTop: 12, color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
-          {message && <div style={{ marginTop: 12, color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{message}</div>}
+          {error && <div style={{ marginTop: 12, color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>{error}</div>}
+          {message && <div style={{ marginTop: 12, color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>{message}</div>}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
             <WriteOnly><button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save Charges'}</button></WriteOnly>

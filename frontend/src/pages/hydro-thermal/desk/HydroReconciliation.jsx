@@ -191,7 +191,7 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
               columns={[
                 { key: 'doc_date', header: 'Date', render: (l) => fmtDate(l.doc_date) },
                 { key: 'doc_no', header: 'Document' },
-                { key: 'info', header: 'Particulars', render: (l) => <span style={{ fontSize: 13.5 }}>{l.info || l.kind}</span> },
+                { key: 'info', header: 'Particulars', render: (l) => <span style={{ fontSize: 15 }}>{l.info || l.kind}</span> },
                 { key: 'debit', header: 'Debit', render: (l) => (l.debit ? fmtCurrency(l.debit) : '') },
                 { key: 'credit', header: 'Credit', render: (l) => (l.credit ? fmtCurrency(l.credit) : '') },
                 { key: 'balance', header: 'Balance', render: (l) => fmtCurrency(l.balance) },

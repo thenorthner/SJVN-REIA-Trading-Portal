@@ -38,7 +38,7 @@ const partColumns = [
 ];
 
 const docColumns = [
-  { key: 'doc_no', header: 'Document', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.doc_no}</span> },
+  { key: 'doc_no', header: 'Document', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15 }}>{r.doc_no}</span> },
   { key: 'doc_kind', header: 'Kind', render: (r) => <Badge label={r.doc_kind} /> },
   { key: 'contract_no', header: 'Contract' },
   { key: 'counterparty', header: 'Counterparty' },
@@ -47,7 +47,9 @@ const docColumns = [
 
 export default function ReiaFinance() {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  // Phase B.2: the maker prepares a posting; the checker posts, withdraws or reverses it.
+  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+  const canPost = ROLE_GROUPS.REIA_CHECK.includes(user?.role);
 
   const [month, setMonth] = useState(lastMonth());
   const [category, setCategory] = useState('SALE');
@@ -124,7 +126,7 @@ export default function ReiaFinance() {
   }
 
   const columns = [
-    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.posting_no}</span> },
+    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15 }}>{r.posting_no}</span> },
     { key: 'period_month', header: 'Month' },
     { key: 'category', header: 'Category', render: (r) => <Badge label={r.category} /> },
     { key: 'docs_count', header: 'Docs' },
@@ -136,7 +138,7 @@ export default function ReiaFinance() {
         <span>
           <Badge status={r.status} label={r.status} />
           {r.fi_document_no && (
-            <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
+            <span style={{ display: 'block', fontSize: 14.5, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
           )}
         </span>
       ),
@@ -150,15 +152,15 @@ export default function ReiaFinance() {
             View
           </button>
           {/* Whoever prepared a batch does not also book it. */}
-          {canWrite && r.status === 'PREPARED' && r.created_by !== user?.id && (
+          {canPost && r.status === 'PREPARED' && r.created_by !== user?.id && (
             <button type="button" className="btn-link" onClick={() => { setPosting(r); setVoucher(''); }}>
               Post
             </button>
           )}
           {canWrite && r.status === 'PREPARED' && r.created_by === user?.id && (
-            <span className="audit-muted">prepared by you — another officer posts it</span>
+            <span className="audit-muted">prepared by you — the checker posts it</span>
           )}
-          {canWrite && r.status !== 'REVERSED' && !r.reverses_posting_id && (
+          {canPost && r.status !== 'REVERSED' && !r.reverses_posting_id && (
             <button type="button" className="btn-link" onClick={() => { setReversing(r); setReason(''); }}>
               {r.status === 'PREPARED' ? 'Withdraw' : 'Reverse'}
             </button>
@@ -184,7 +186,7 @@ export default function ReiaFinance() {
           <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
             {checklist.items.filter((i) => !i.clear).map((i) => <li key={i.key}>{i.label} — {i.count}{i.amount != null ? `, ₹${Math.abs(i.amount).toLocaleString('en-IN')}` : ''}</li>)}
           </ul>
-          <div style={{ fontSize: 13, marginTop: 4 }}>Posting is not stopped; the Month-Close Board has the detail.</div>
+          <div style={{ fontSize: 14.5, marginTop: 4 }}>Posting is not stopped; the Month-Close Board has the detail.</div>
         </div>
       )}
       <Card title="Prepare a month">
@@ -231,14 +233,14 @@ export default function ReiaFinance() {
       <Modal open={!!open} onClose={() => setOpen(null)} title={open ? open.posting_no : ''} width={980}>
         {open && (
           <div>
-            <div style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+            <div style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 14.5 }}>
               <Badge status={open.status} label={open.status} /> · {open.category_label} · {open.period_month}
               {open.fi_document_no && <> · Finance voucher {open.fi_document_no}</>}
               {open.reverses_posting_no && <> · reverses {open.reverses_posting_no}</>}
               {open.reversal_reason && <div style={{ marginTop: 4 }}>{open.reversal_reason}</div>}
             </div>
             <Table columns={docColumns} rows={open.lines || []} />
-            <p style={{ color: 'var(--text-light)', fontSize: 13.5, marginTop: 10 }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 15, marginTop: 10 }}>
               These are the amounts as they were booked. A later change to any of these documents
               does not change them, because what Finance holds is not ours to restate.
             </p>
@@ -248,7 +250,7 @@ export default function ReiaFinance() {
 
       <Modal open={!!posting} onClose={() => setPosting(null)} title={`Post ${posting?.posting_no || ''} to Finance`}>
         <form onSubmit={doPost}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             Booking {fmtCurrency(posting?.total_amount)} across {posting?.docs_count} document(s). Record
             the voucher number Finance returns, so the entry can be found from either side.
           </p>
@@ -264,7 +266,7 @@ export default function ReiaFinance() {
 
       <Modal open={!!reversing} onClose={() => setReversing(null)} title={`${reversing?.status === 'PREPARED' ? 'Withdraw' : 'Reverse'} ${reversing?.posting_no || ''}`}>
         <form onSubmit={doReverse}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             {reversing?.status === 'PREPARED'
               ? 'This batch was never booked, so it is withdrawn without a counter-entry. Its documents are free to be prepared again.'
               : 'The posting is not deleted: a counter-entry is written beside it and both stay visible. Its documents are then free to be prepared and posted again.'}

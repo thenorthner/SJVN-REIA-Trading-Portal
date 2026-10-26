@@ -136,7 +136,7 @@ export default function BilateralContractsSummary() {
     color: '#fff',
     padding: '10px 12px',
     fontWeight: 600,
-    fontSize: 13,
+    fontSize: 14.5,
     cursor: 'pointer',
     userSelect: 'none',
     whiteSpace: 'nowrap',
@@ -169,7 +169,7 @@ export default function BilateralContractsSummary() {
             <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportExcel}>Excel</button>
             <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportPdf}>PDF</button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
             Search:
             <input
               type="search"
@@ -187,7 +187,7 @@ export default function BilateralContractsSummary() {
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                 <thead>
                   <tr>
                     {[
@@ -228,7 +228,7 @@ export default function BilateralContractsSummary() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
+            <div style={{ marginTop: 12, fontSize: 15, color: 'var(--slate-500)' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
               {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
             </div>

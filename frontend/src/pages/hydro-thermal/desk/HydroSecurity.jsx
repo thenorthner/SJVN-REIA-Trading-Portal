@@ -178,7 +178,7 @@ export default function HydroSecurity({ vertical = 'HYDRO' }) {
             <Table
               onRowClick={openInstrumentDetail}
               columns={[
-                { key: 'instrument_no', header: 'Instrument', render: (i) => <><strong>{i.instrument_type}</strong> {i.instrument_no}<div style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>{i.issuing_bank}</div></> },
+                { key: 'instrument_no', header: 'Instrument', render: (i) => <><strong>{i.instrument_type}</strong> {i.instrument_no}<div style={{ fontSize: 15, color: 'var(--text-muted)' }}>{i.issuing_bank}</div></> },
                 { key: 'beneficiary_name', header: 'Beneficiary' },
                 { key: 'amount', header: 'Amount', render: (i) => fmtCurrency(i.amount) },
                 { key: 'available', header: 'Available', render: (i) => fmtCurrency(i.available) },
@@ -215,7 +215,7 @@ export default function HydroSecurity({ vertical = 'HYDRO' }) {
             </tbody></table>
 
             <h4 style={{ margin: '18px 0 8px' }}>Event trail</h4>
-            {events.length === 0 && <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>No events recorded.</p>}
+            {events.length === 0 && <p style={{ fontSize: 15, color: 'var(--text-muted)' }}>No events recorded.</p>}
             <Table
               columns={[
                 { key: 'created_at', header: 'When', render: (e) => fmtDateTime(e.created_at) },
@@ -269,7 +269,7 @@ export default function HydroSecurity({ vertical = 'HYDRO' }) {
           <form onSubmit={act}>
             {action.kind === 'invoke' && (
               <>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
+                <p style={{ fontSize: 14.5, color: 'var(--text-muted)', marginTop: 0 }}>
                   Up to {fmtCurrency(action.instrument.available)} can be invoked, against {action.instrument.beneficiary_name}'s overdue bills only. The amount is posted to its account and clears them oldest first.
                 </p>
                 <Field label="Amount to invoke (₹)" required><input required type="number" min="1" value={action.amount} onChange={(e) => setAction({ ...action, amount: e.target.value })} /></Field>
@@ -283,7 +283,7 @@ export default function HydroSecurity({ vertical = 'HYDRO' }) {
               </div>
             )}
             {action.kind === 'release' && (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
+              <p style={{ fontSize: 14.5, color: 'var(--text-muted)', marginTop: 0 }}>
                 Releasing this instrument removes it from {action.instrument.beneficiary_name}'s live cover. Ensure there are no outstanding dues or open disputes before releasing.
               </p>
             )}

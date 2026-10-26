@@ -207,7 +207,7 @@ export default function NOARApiReconciliation() {
             <input type="date" className="input" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
           </Field>
           <Field label="Rejected applications">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
               <input type="checkbox" checked={includeRejected} onChange={(e) => setIncludeRejected(e.target.checked)} />
               Ask for them too (NOAR returns them only on a second call)
             </label>
@@ -216,7 +216,7 @@ export default function NOARApiReconciliation() {
             {syncing ? 'Pulling…' : 'Pull from NOAR'}
           </button></WriteOnly>
         </div>
-        <p className="muted" style={{ marginTop: 12, fontSize: 13.5 }}>
+        <p className="muted" style={{ marginTop: 12, fontSize: 15 }}>
           Read-only against NOAR. Nothing here changes a transaction&apos;s open-access status —
           it reports what the registry says so the desk can correct whichever side is wrong.
         </p>
@@ -248,7 +248,7 @@ export default function NOARApiReconciliation() {
           <div style={{ display: 'grid', gap: 20 }}>
             <div>
               <h4 style={{ margin: '0 0 12px' }}>As NOAR holds it</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 14.5 }}>
                 <div><strong>Applicant:</strong> {viewing.applicant_name || '—'}</div>
                 <div><strong>Approval No.:</strong> {viewing.approval_no || 'None yet'}</div>
                 <div><strong>Seller:</strong> {viewing.seller_name || '—'}</div>
@@ -260,7 +260,7 @@ export default function NOARApiReconciliation() {
                 <div><strong>Scheduled:</strong> {fmtNumber(viewing.scheduled_mwh)} MWh</div>
                 <div><strong>Revision:</strong> {viewing.revision_no}</div>
               </div>
-              <p className="muted" style={{ marginTop: 10, fontSize: 13.5 }}>
+              <p className="muted" style={{ marginTop: 10, fontSize: 15 }}>
                 NOAR also returns Status {viewing.status_code ?? '—'}, Bid {viewing.bid_status ?? '—'},
                 Congestion {viewing.congestion_status ?? '—'} and Payment {viewing.payment_status ?? '—'}
                 as bare numbers. The trader API guide defines no meaning for them, so they are shown
@@ -271,21 +271,21 @@ export default function NOARApiReconciliation() {
             <div>
               <h4 style={{ margin: '0 0 12px' }}>Against our record</h4>
               {detail?.transaction ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 14.5 }}>
                   <div><strong>Transaction:</strong> {detail.transaction.id}</div>
                   <div><strong>Counterparty:</strong> {detail.transaction.counterparty}</div>
                   <div><strong>Our status:</strong> {detail.transaction.noar_status}</div>
                   <div><strong>Our approval No.:</strong> {detail.transaction.noar_contract_no || 'Not recorded'}</div>
                 </div>
               ) : (
-                <p className="muted" style={{ fontSize: 13 }}>
+                <p className="muted" style={{ fontSize: 14.5 }}>
                   No bilateral transaction carries this application number. Either it was filed
                   outside the platform, or the number was never recorded against the deal.
                 </p>
               )}
 
               {(detail?.differences || []).length > 0 && (
-                <ul style={{ marginTop: 12, fontSize: 13 }}>
+                <ul style={{ marginTop: 12, fontSize: 14.5 }}>
                   {detail.differences.map((d) => (
                     <li key={d.kind} style={{ marginBottom: 6 }}>
                       <Badge type={KIND_TONE[d.kind] || 'warning'}>{KIND_LABEL[d.kind] || d.kind}</Badge>
@@ -311,7 +311,7 @@ export default function NOARApiReconciliation() {
                   data={(viewing.approved_summary?.length ? viewing.approved_summary : viewing.applied_summary).map((s, i) => ({ id: `blk-${i}`, ...s }))}
                   emptyMessage="No block-wise summary was returned."
                 />
-                <p className="muted" style={{ marginTop: 8, fontSize: 13.5 }}>
+                <p className="muted" style={{ marginTop: 8, fontSize: 15 }}>
                   {viewing.approved_summary?.length ? 'Approved' : 'Applied'} quantum, as returned by NOAR.
                 </p>
               </div>

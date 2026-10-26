@@ -8,7 +8,8 @@ import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 import { RouteSkeleton } from './ui.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
-import { Lock } from 'lucide-react';
+import { Lock, Search } from 'lucide-react';
+import { openPortalSearch } from './PortalSearchModal.jsx';
 import GovStrip, { SkipLink } from '../gigw/GovStrip.jsx';
 import GigwFooter from '../gigw/GigwFooter.jsx';
 import IdleTimeout from '../gigw/IdleTimeout.jsx';
@@ -65,7 +66,7 @@ class RouteErrorBoundary extends React.Component {
       return (
         <div style={{ padding: 28, maxWidth: 640 }}>
           <h2 style={{ marginTop: 0, fontSize: 18 }}>This screen failed to load</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.5 }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 15.5, lineHeight: 1.5 }}>
             {stale
               ? 'The application was updated while this tab was open, so this screen’s code is no longer on the server. Reloading picks up the new version.'
               : this.state.error.message || 'An unexpected error occurred.'}
@@ -155,7 +156,7 @@ const NAV_INTERNAL = [
       // the Power Trading section — without this entry the only roles allowed to
       // create these bills had no way to reach it. Scoped to the REIA-only roles
       // so nobody sees the same link twice.
-      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_MAKER', 'REIA_CHECKER'] },
+      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER'] },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
       { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
     ],
@@ -251,6 +252,7 @@ const NAV_INTERNAL = [
       // SJVN's own officers on the platform; an administrator's page.
       { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'] },
       { to: '/admin/project-assignments', label: 'Project Assignments', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR'] },
+      { to: '/admin/circulars', label: 'Public Circulars', roles: ROLE_GROUPS.CIRCULARS_WRITE },
       { to: '/settings/delegations', label: 'Additional Charge & Break-glass', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR'] },
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
@@ -364,7 +366,7 @@ const NavSubGroup = ({ group, user }) => {
               {/* A screen that is only planned says so in the menu, so nobody
                   opens it expecting data and files a bug when there is none. */}
               {l.pending && (
-                <span style={{ marginLeft: 6, fontSize: 12.5, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
+                <span style={{ marginLeft: 6, fontSize: 14, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
               )}
             </NavLink>
           ))}
@@ -669,23 +671,28 @@ export default function Layout() {
               ) : logoSrc ? (
                 <img className="topbar-logo" src={logoSrc} alt={entity.name} style={{ height: 32, width: 'auto', marginRight: 10, flexShrink: 0 }} />
               ) : (
-                <div className="brand-mark" style={{ width: 32, height: 32, fontSize: 11, marginRight: 10, flexShrink: 0 }}>{entity?.name?.[0] ?? '?'}</div>
+                <div className="brand-mark" style={{ width: 32, height: 32, fontSize: 12.5, marginRight: 10, flexShrink: 0 }}>{entity?.name?.[0] ?? '?'}</div>
               )
             )}
 
             {/* Clean, dynamic breadcrumb instead of repetitive truncated slogan */}
             <div className="topbar-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+              {/* When the bar is tight the desk name gives way first; the page
+                  the officer is on keeps enough room to be read. */}
               <span style={{ 
-                fontSize: 13, 
+                fontSize: 14.5, 
                 fontWeight: 600, 
                 color: 'var(--text-muted)', 
-                whiteSpace: 'nowrap'
-              }}>
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }} title={pageCtx.desk}>
                 {pageCtx.desk}
               </span>
-              <span style={{ color: 'var(--slate-400)', fontSize: 11, userSelect: 'none' }}>/</span>
+              <span style={{ color: 'var(--slate-400)', fontSize: 12.5, userSelect: 'none', flexShrink: 0 }}>/</span>
               <span style={{ 
-                fontSize: 12.5, 
+                fontSize: 14, 
                 fontWeight: 700, 
                 background: 'var(--primary-light)', 
                 color: 'var(--primary)', 
@@ -693,18 +700,36 @@ export default function Layout() {
                 borderRadius: 6,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                textOverflow: 'ellipsis',
+                flexShrink: 0,
+                maxWidth: 220
               }}>
                 {pageCtx.page}
               </span>
             </div>
           </div>
+
+          {/* Spotlight Universal Command Palette Launcher (⌘K / Ctrl+K) */}
+          <div className="topbar-search-wrapper">
+            <button
+              type="button"
+              className="topbar-search-trigger"
+              onClick={openPortalSearch}
+              title="Open Spotlight Command Palette (⌘K or Ctrl+K)"
+              aria-label="Search portal or type a command"
+            >
+              <Search size={14} className="topbar-search-icon" />
+              <span className="topbar-search-text">Search desks, stations or commands...</span>
+              <kbd className="topbar-search-kbd">⌘K</kbd>
+            </button>
+          </div>
+
           <div className="topbar-actions">
             <NavLink
               to="/home"
               className="link-btn"
               style={{
-                fontSize: 12.5,
+                fontSize: 14,
                 fontWeight: 600,
                 color: 'var(--text-muted)',
                 padding: '4px 8px',
@@ -804,19 +829,19 @@ export default function Layout() {
                             style={{
                               color: isAlert ? 'var(--on-red)' : 'var(--primary, #003366)',
                               fontWeight: 700,
-                              fontSize: 13,
+                              fontSize: 14.5,
                               letterSpacing: '.02em',
                             }}
                           >
                             {n.type?.replace(/_/g, ' ')}
                           </span>
                           {n.created_at && (
-                            <span style={{ fontSize: 12.5, color: 'var(--slate-400)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 14, color: 'var(--slate-400)', whiteSpace: 'nowrap' }}>
                               {formatTimeAgo(n.created_at)}
                             </span>
                           )}
                         </div>
-                        <div style={{ color: 'var(--slate-700)', fontSize: 13.5, lineHeight: 1.45, marginBottom: 5 }}>
+                        <div style={{ color: 'var(--slate-700)', fontSize: 15, lineHeight: 1.45, marginBottom: 5 }}>
                           {n.message}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -824,7 +849,7 @@ export default function Layout() {
                             <button
                               type="button"
                               className="link-btn"
-                              style={{ fontSize: 12, color: 'var(--slate-500)', padding: 0 }}
+                              style={{ fontSize: 13.5, color: 'var(--slate-500)', padding: 0 }}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 api.notifications.markRead(n.id).catch(() => {});
@@ -836,7 +861,7 @@ export default function Layout() {
                           ) : <span />}
                           <span
                             style={{
-                              fontSize: 13,
+                              fontSize: 14.5,
                               fontWeight: 600,
                               color: 'var(--on-blue)',
                               display: 'inline-flex',
@@ -857,7 +882,7 @@ export default function Layout() {
                     <button
                       type="button"
                       className="link-btn"
-                      style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 600 }}
+                      style={{ fontSize: 14.5, color: 'var(--slate-600)', fontWeight: 600 }}
                       onClick={() => { setShowNotif(false); navigate('/notification-board'); }}
                     >
                       Open Notification Board →

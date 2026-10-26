@@ -8,9 +8,14 @@ import ContractBulkLoad from './ContractBulkLoad.jsx';
 import { PowerRoutingTree3D, routingPosition, shareMwOf } from '../../components/PowerRoutingTree3D.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { paymentTermsText, rebateText, lpsText, SECURITY_TYPES, paymentSecurityText } from '../../lib/contractRules.js';
+import { showAlert } from '../../lib/dialogs.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
-const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
+// Phase B.2: the maker creates, maps and amends a contract and carries a draft
+// through negotiation; signing, activating, ending or closing it is the checker's.
+const CAN_MAKE = ROLE_GROUPS.REIA_MAKE;
+const CAN_CHECK = ROLE_GROUPS.REIA_CHECK;
+const DRAFTING = ['DRAFT', 'UNDER_NEGOTIATION'];
 
 // Must stay in lockstep with backend CONTRACT_TRANSITIONS. A draft is not yet
 // signed or regulator-cleared, so ACTIVE is not a legal next hop from DRAFT.
@@ -80,7 +85,7 @@ function renderTariffStructure(selected) {
           display = '';
         }
         return (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, var(--slate-100))', padding: '2px 8px', borderRadius: 4, fontSize: 13 }}>
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, var(--slate-100))', padding: '2px 8px', borderRadius: 4, fontSize: 14.5 }}>
             <span style={{ color: 'var(--slate-600, #475569)', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
             <span style={{ fontWeight: 600 }}>{display}</span>
           </div>
@@ -156,6 +161,10 @@ const fmtTariff = (v) => (v == null || v === '' ? '—' : Number(v).toLocaleStri
 
 export default function Contracts() {
   const { user } = useAuth();
+  // The next stages this officer may move a contract to (routes/contracts.js /status).
+  const stagesFor = (current) => allowedNextStatuses(current).filter((next) => (
+    DRAFTING.includes(current) && DRAFTING.includes(next) ? CAN_MAKE : CAN_CHECK
+  ).includes(user?.role));
   const [rows, setRows] = useState([]);
   const [allContracts, setAllContracts] = useState([]);
   const [allocSubmitting, setAllocSubmitting] = useState(false);
@@ -281,7 +290,7 @@ export default function Contracts() {
       setShowAddProjectType(false);
       setNewProjectTypeLabel('');
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to add project type');
+      showAlert(err.response?.data?.error || err.message || 'Failed to add project type');
     } finally {
       setNewProjectTypeSaving(false);
     }
@@ -696,27 +705,27 @@ export default function Contracts() {
 
   const columns = [
     { key: 'contract_no', header: 'Contract No.', render: (r) => (
-      <span>{r.contract_no}{r.version > 1 && ' '}{r.version > 1 && <span style={{ marginLeft: 2, fontSize: 12.5, fontWeight: 700, color: 'var(--slate-500)' }}>v{r.version}</span>}</span>
+      <span>{r.contract_no}{r.version > 1 && ' '}{r.version > 1 && <span style={{ marginLeft: 2, fontSize: 14, fontWeight: 700, color: 'var(--slate-500)' }}>v{r.version}</span>}</span>
     ) },
     { key: 'contract_type', header: 'Type', render: (r) => <Badge status={r.contract_type} /> },
     { key: 'party', header: 'Counterparty', render: (r) => r.seller_name || r.buyer_name || '-' },
     { key: 'capacity_mw', header: 'Capacity', render: (r) => (
       <div>
         <div style={{fontWeight: 600}}>{fmtNumber(r.capacity_mw)} MW</div>
-        {r.contract_type === 'PPA' && r.commissioned_capacity_mw > 0 && r.cod_date && <div style={{fontSize: 13, color:'#22c55e'}}>{fmtNumber(r.commissioned_capacity_mw)} MW COD</div>}
+        {r.contract_type === 'PPA' && r.commissioned_capacity_mw > 0 && r.cod_date && <div style={{fontSize: 14.5, color:'#22c55e'}}>{fmtNumber(r.commissioned_capacity_mw)} MW COD</div>}
       </div>
     )},
     { key: 'tariff', header: 'Tariff', render: (r) => (
       <div>
         <div>₹{fmtTariff(r.tariff_per_unit)}/u</div>
-        <div style={{fontSize: 13, color: 'var(--slate-500)'}}>{r.tariff_type}</div>
+        <div style={{fontSize: 14.5, color: 'var(--slate-500)'}}>{r.tariff_type}</div>
       </div>
     )},
     {
       key: 'next', header: 'Next milestone', render: (r) => {
         const n = attention[r.id]?.next_milestone;
         if (!n) return <span style={{ color: 'var(--slate-500)' }}>—</span>;
-        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? 'var(--red-deep)' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
+        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 15, color: n.status === 'DELAYED' ? 'var(--red-deep)' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
       },
     },
     {
@@ -754,7 +763,7 @@ export default function Contracts() {
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadContractPdf}>
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_WRITE.includes(user?.role) && (
+            {CAN_MAKE.includes(user?.role) && (
               <>
                 <button className="btn btn-secondary" onClick={() => setShowBulk(true)}>Load from Spreadsheet</button>
                 <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ New Contract</button>
@@ -773,7 +782,7 @@ export default function Contracts() {
             ...pending.milestones_delayed.map((m) => ({ key: `d${m.id}`, tone: 'red', flag: `Milestone ${m.delay_days} day(s) late`, text: `${m.label} — was due ${m.due_date}`, tab: 'MILESTONES', ...m })),
           ].map((x) => (
             <div key={x.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 13.5, minWidth: 0 }}>
+              <div style={{ fontSize: 15, minWidth: 0 }}>
                 <span className={`cw-flag ${x.tone}`}>{x.flag}</span>
                 <strong>{x.contract_no}</strong>{x.counterparty ? ` · ${x.counterparty}` : ''} — {x.text}
               </div>
@@ -844,7 +853,7 @@ export default function Contracts() {
                     <button
                       type="button"
                       className="btn btn-xs btn-outline"
-                      style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                      style={{ padding: '1px 8px', fontSize: 12.5, fontWeight: 600 }}
                       onClick={() => setShowAddProjectType((prev) => !prev)}
                     >
                       {showAddProjectType ? 'Cancel' : '+ Add New'}
@@ -869,7 +878,7 @@ export default function Contracts() {
                 </select>
                 {showAddProjectType && (
                   <div style={{ marginTop: 8, padding: 12, background: 'var(--slate-50)', borderRadius: 6, border: '1px solid var(--slate-300)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>
                       Add New Project Type to Master
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -1020,7 +1029,7 @@ export default function Contracts() {
                 </Field>
               )}
             </div>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               CUF is assessed over the contract year. If the year's CUF (from energy data, deemed generation counted) is below this threshold, the year-end true-up charges shortfall MWh × tariff × the compensation % above.
             </p>
             <h4 style={{ margin: '16px 0 12px 0', color: 'var(--on-blue)' }}>4c. Peak Availability Obligation</h4>
@@ -1038,7 +1047,7 @@ export default function Contracts() {
                 <input type="number" step="0.01" min="0" placeholder="Blank = master rate, else tariff" value={form.peak_penalty_per_mwh || ''} onChange={(e) => setForm({ ...form, peak_penalty_per_mwh: e.target.value })} />
               </Field>
             </div>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               A peak-power or FDRE PSA buys energy when the system needs it. Leave the minimum blank and this contract
               carries no peak obligation — nothing is charged on it. With one set, a month whose reported peak-window
               availability falls short is billed shortfall % × capacity × peak hours × rate.
@@ -1053,7 +1062,7 @@ export default function Contracts() {
                 <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickContractFile(e.target.files[0])} />
               </Field>
             </div>
-            <p style={{ fontSize: 13.5, color: uploadFile ? 'var(--on-green-2)' : 'var(--slate-500)', margin: '4px 0 0' }}>
+            <p style={{ fontSize: 15, color: uploadFile ? 'var(--on-green-2)' : 'var(--slate-500)', margin: '4px 0 0' }}>
               {uploadFile
                 ? `Selected: ${uploadFile.name} (${(uploadFile.size / 1048576).toFixed(2)} MB)`
                 : 'Mandatory. A contract cannot be created — or later marked SIGNED / ACTIVE — without its agreement PDF on file.'}
@@ -1145,7 +1154,7 @@ export default function Contracts() {
           <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Projects Mapped</h4>
           {selected.projects?.length > 0 ? (
             <Table columns={[{key:'name', header:'Project SPV'}, {key:'capacity', header:'Allocated (MW)', render: r=>r.allocated_capacity_mw}]} rows={selected.projects} />
-          ) : <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No projects mapped.</div>}
+          ) : <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No projects mapped.</div>}
 
           {(() => {
             const isPpa = selected.contract_type === 'PPA';
@@ -1155,7 +1164,7 @@ export default function Contracts() {
             const sourceList = allContracts.length > 0 ? allContracts : rows;
             const ENDED = ['CLOSED', 'TERMINATED', 'EXPIRED', 'AMENDED'];
             const candidates = sourceList.filter((r) => r && r.contract_type === (isPpa ? 'PSA' : 'PPA') && !linked.has(r.id) && !ENDED.includes(r.status));
-            const canMap = CAN_WRITE.includes(user?.role) && !ENDED.includes(selected.status);
+            const canMap = CAN_MAKE.includes(user?.role) && !ENDED.includes(selected.status);
             const otherKey = isPpa ? 'psa_id' : 'ppa_id';
             // What is mapped now (shares not yet ended), and so what is left.
             const position = routingPosition(selected, allocations);
@@ -1191,7 +1200,7 @@ export default function Contracts() {
                   const upcoming = [...new Set(allocations.map((a) => a.effective_from).filter((d) => d && d > position.asOf))].sort();
                   if (!upcoming.length) return null;
                   return (
-                    <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--slate-600)' }}>
+                    <div style={{ marginTop: 10, fontSize: 15, color: 'var(--slate-600)' }}>
                       {upcoming.map((d) => {
                         const at = allocations.filter((a) => a.effective_from <= d && (!a.effective_to || a.effective_to >= d));
                         const pct = Math.round(at.reduce((t, a) => t + Number(a.allocation_percent || 0), 0) * 100) / 100;
@@ -1226,7 +1235,7 @@ export default function Contracts() {
                         <input required type="date" value={allocationForm.effective_from} onChange={(e) => setAllocationForm({ ...allocationForm, effective_from: e.target.value })} />
                       </Field>
                     </div>
-                    <div style={{ fontSize: 13.5, margin: '8px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap', color: 'var(--slate-600)' }}>
+                    <div style={{ fontSize: 15, margin: '8px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap', color: 'var(--slate-600)' }}>
                       {isPpa && <span>Already mapped <strong>{usedPct}%</strong> · left <strong>{headroomPct}%</strong> ({fmtNumber(Math.round(headroomPct * Number(selected.capacity_mw)) / 100)} MW)</span>}
                       {!isPpa && <span>Supplied on {formPos.asOf} <strong>{fmtNumber(formPos.coveredMw)} MW</strong>{formPos.live.length ? ` from ${formPos.live.map((a) => a.ppa_no).join(', ')}` : ''} · left <strong>{fmtNumber(Math.max(0, formPos.openMw))} MW</strong></span>}
                       {shareMw != null && <span>This share: <strong>{fmtNumber(shareMw)} MW</strong>{psaRec ? ` of ${psaRec.contract_no}'s ${fmtNumber(psaRec.capacity_mw)} MW` : ''}</span>}
@@ -1240,20 +1249,20 @@ export default function Contracts() {
                       )}
                     </div>
                     {!isPpa && (
-                      <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '4px 0 0' }}>
+                      <p style={{ fontSize: 15, color: 'var(--slate-500)', margin: '4px 0 0' }}>
                         The percentage is the share of the chosen PPA’s energy that goes to this PSA. A PSA can draw from several PPAs; its bill adds up the energy from each. A PPA cannot be allocated beyond 100% across all its PSAs.
                       </p>
                     )}
                     {allocationForm.need_reason && (
                       <div style={{ marginTop: 10 }}>
-                        <p style={{ fontSize: 13.5, color: 'var(--red-deep)', margin: '0 0 6px' }}>{allocationForm.spread_message}</p>
+                        <p style={{ fontSize: 15, color: 'var(--red-deep)', margin: '0 0 6px' }}>{allocationForm.spread_message}</p>
                         <Field label="Reason for mapping below cost (order / VGF reference)" required>
                           <input value={allocationForm.negative_spread_reason || ''} onChange={(e) => setAllocationForm({ ...allocationForm, negative_spread_reason: e.target.value })} />
                         </Field>
                       </div>
                     )}
                     {candidates.length === 0 && (
-                      <p style={{ fontSize: 13.5, color: 'var(--amber-strong)', margin: '4px 0 0' }}>
+                      <p style={{ fontSize: 15, color: 'var(--amber-strong)', margin: '4px 0 0' }}>
                         {isPpa ? 'There is no PSA left to map. Create the PSA first.' : 'There is no PPA left to map. Create the PPA first.'}
                       </p>
                     )}
@@ -1277,7 +1286,7 @@ export default function Contracts() {
                   return (
                     <form onSubmit={(e) => handleResplit(e)} noValidate style={{ marginTop: 16, padding: 16, border: '1px solid var(--slate-200)', borderRadius: 8 }}>
                       <h5 style={{ margin: '0 0 4px 0' }}>Change the split from a date</h5>
-                      <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '0 0 12px' }}>
+                      <p style={{ fontSize: 15, color: 'var(--slate-500)', margin: '0 0 12px' }}>
                         The complete split from the date below. Shares in force close the day before; a PSA you end keeps its share for every earlier month.
                       </p>
                       <div className="form-grid">
@@ -1301,7 +1310,7 @@ export default function Contracts() {
                               const was = (dayBeforeIso ? sharesOn(dayBeforeIso) : []).find((a) => a.psa_id === r.psa_id);
                               return (
                                 <tr key={r.psa_id}>
-                                  <td><strong>{info.contract_no}</strong>{!was && ' '}{!was && <span style={{ marginLeft: 6, fontSize: 12.5, color: 'var(--on-green-2)' }}>new</span>}{was && Number(was.allocation_percent) !== pct && <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>was {was.allocation_percent}%</div>}</td>
+                                  <td><strong>{info.contract_no}</strong>{!was && ' '}{!was && <span style={{ marginLeft: 6, fontSize: 14, color: 'var(--on-green-2)' }}>new</span>}{was && Number(was.allocation_percent) !== pct && <div style={{ fontSize: 14, color: 'var(--slate-500)' }}>was {was.allocation_percent}%</div>}</td>
                                   <td>{info.buyer_name || '—'}</td>
                                   <td><input type="number" step="0.01" min="0.01" max="100" aria-label={`Share % for ${info.contract_no}`} value={r.allocation_percent} onChange={(e) => setRow(i, e.target.value)} style={{ width: 90 }} /></td>
                                   <td style={{ color: over ? 'var(--red-deep)' : 'inherit', fontWeight: over ? 600 : 400 }}>{mw != null ? `${fmtNumber(mw)} of ${fmtNumber(info.capacity_mw)} MW` : '—'}</td>
@@ -1321,13 +1330,13 @@ export default function Contracts() {
                         </select>
                         <button type="button" className="btn btn-outline btn-sm" disabled={!resplit.add_psa_id} onClick={() => setResplit({ ...resplit, rows: [...resplit.rows, { psa_id: resplit.add_psa_id, allocation_percent: '' }], add_psa_id: '' })}>Add</button>
                       </div>
-                      <div style={{ fontSize: 13.5, margin: '10px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 15, margin: '10px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap' }}>
                         <span style={{ color: total > 100 ? 'var(--red-deep)' : 'var(--slate-600)', fontWeight: 600 }}>New total {total}% · {fmtNumber(Math.round(total * cap) / 100)} MW of {fmtNumber(cap)} MW</span>
                         {total <= 100 && <span style={{ color: 'var(--slate-600)' }}>Left unsold {Math.round((100 - total) * 100) / 100}%</span>}
                         {ending.length > 0 && <span style={{ color: 'var(--amber-strong)' }}>Ending on {dayBefore}: {ending.map((a) => a.psa_no).join(', ')}</span>}
                       </div>
                       {replaced.length > 0 && (
-                        <p style={{ fontSize: 13.5, color: 'var(--amber-strong)', margin: '8px 0 0' }}>
+                        <p style={{ fontSize: 15, color: 'var(--amber-strong)', margin: '8px 0 0' }}>
                           A split is already scheduled from {replaced.join(', ')}. Saving from {resplit.effective_from} replaces it — include every PSA that should keep a share after that date.
                         </p>
                       )}
@@ -1348,7 +1357,7 @@ export default function Contracts() {
                       <button className="btn btn-outline btn-sm" onClick={() => openResplit()}>Change split from a date</button>
                     )}
                     {!canMapMore && (
-                      <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+                      <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                         {isPpa ? 'This PPA is fully allocated — change the split from a date to give a share to another PSA.' : (() => { const srcs = [...new Set(live.map((a) => a.ppa_no))]; return `This PSA is fully supplied — ${srcs.join(', ') || 'its source PPAs'} ${srcs.length === 1 ? 'gives' : 'give'} it all ${fmtNumber(selected.capacity_mw)} MW it contracts for. To change a source, change that PPA's split from a date.`; })()}
                       </span>
                     )}
@@ -1363,11 +1372,11 @@ export default function Contracts() {
             <button className="btn btn-primary" onClick={() => setWorkFile({ contract: selected, tab: 'MILESTONES' })}>
               Documents, milestones, requests &amp; notices
             </button>
-            {CAN_WRITE.includes(user?.role) && selected.status !== 'CLOSED' && (
+            {selected.status !== 'CLOSED' && (
               <>
-                {allowedNextStatuses(selected.status).length > 0 && (
+                {stagesFor(selected.status).length > 0 && (
                   <button className="btn btn-outline" onClick={() => {
-                    const next = allowedNextStatuses(selected.status);
+                    const next = stagesFor(selected.status);
                     setStatusForm({
                       status: next[0] || selected.status,
                       remarks: '',
@@ -1377,7 +1386,7 @@ export default function Contracts() {
                     });
                   }}>Update Lifecycle Stage</button>
                 )}
-                {!['CLOSED', 'TERMINATED'].includes(selected.status) && (
+                {CAN_MAKE.includes(user?.role) && !['CLOSED', 'TERMINATED'].includes(selected.status) && (
                   <button className="btn btn-outline" onClick={() => setAmendForm({ ...selected, effective_from: '', amendment_reason: '' })}>
                     {['DRAFT', 'UNDER_NEGOTIATION'].includes(selected.status) ? 'Edit Draft' : 'Amend Contract'}
                   </button>
@@ -1392,21 +1401,21 @@ export default function Contracts() {
       {statusForm && (
         <Modal open={true} onClose={() => setStatusForm(null)} title="Update Contract Lifecycle Stage">
           <form onSubmit={handleStatusChange} noValidate>
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--slate-600)' }}>
+            <p style={{ margin: '0 0 12px', fontSize: 14.5, color: 'var(--slate-600)' }}>
               Current stage: <strong>{selected?.status}</strong>
             </p>
             {lifecycleHint(selected?.status) && (
-              <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.45, color: 'var(--slate-500)' }}>
+              <p style={{ margin: '0 0 14px', fontSize: 15, lineHeight: 1.45, color: 'var(--slate-500)' }}>
                 {lifecycleHint(selected?.status)}
               </p>
             )}
             <Field label="New Status">
               <select
-                value={allowedNextStatuses(selected?.status).includes(statusForm.status) ? statusForm.status : (allowedNextStatuses(selected?.status)[0] || '')}
+                value={stagesFor(selected?.status).includes(statusForm.status) ? statusForm.status : (stagesFor(selected?.status)[0] || '')}
                 onChange={e => setStatusForm({...statusForm, status: e.target.value})}
-                disabled={!allowedNextStatuses(selected?.status).length}
+                disabled={!stagesFor(selected?.status).length}
               >
-                {allowedNextStatuses(selected?.status).map(s => <option key={s} value={s}>{s}</option>)}
+                {stagesFor(selected?.status).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
             {statusForm.status === 'TERMINATED' && (
@@ -1431,7 +1440,7 @@ export default function Contracts() {
             </Field>
             <div className="form-actions" style={{marginTop: 20}}>
               <button type="button" className="btn btn-ghost" onClick={() => setStatusForm(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={submitting || !allowedNextStatuses(selected?.status).length}>
+              <button type="submit" className="btn btn-primary" disabled={submitting || !stagesFor(selected?.status).length}>
                 {submitting ? 'Updating...' : 'Update Status'}
               </button>
             </div>
@@ -1446,7 +1455,7 @@ export default function Contracts() {
 
             {/* Mandatory Amendment Metadata */}
             <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: 13.5, color: 'var(--on-blue)' }}>{['DRAFT', 'UNDER_NEGOTIATION'].includes(amendForm.status) ? 'Correcting an unsigned draft — no new version is created' : 'Amendment Application'}</h4>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: 15, color: 'var(--on-blue)' }}>{['DRAFT', 'UNDER_NEGOTIATION'].includes(amendForm.status) ? 'Correcting an unsigned draft — no new version is created' : 'Amendment Application'}</h4>
               <div className="form-grid">
                 {!['DRAFT', 'UNDER_NEGOTIATION'].includes(amendForm.status) && <Field label="Effective From" required>
                   <input
@@ -1458,7 +1467,7 @@ export default function Contracts() {
                     onChange={(e) => setAmendForm({ ...amendForm, effective_from: e.target.value })}
                   />
                   {(amendForm.tenure_start || amendForm.tenure_end) && (
-                    <span style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+                    <span style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
                       Date the revised terms apply from — within tenure {amendForm.tenure_start || '…'} to {amendForm.tenure_end || '…'}
                     </span>
                   )}
@@ -1476,7 +1485,7 @@ export default function Contracts() {
 
             {/* 1. Capacity & Milestone Dates */}
             <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>1. Capacity & Milestone Dates</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 15 }}>1. Capacity & Milestone Dates</h4>
               <div className="form-grid">
                 <Field label="Contracted Capacity (MW)">
                   <input type="number" step="0.01" value={amendForm.capacity_mw ?? ''} onChange={(e) => setAmendForm({ ...amendForm, capacity_mw: e.target.value })} />
@@ -1495,7 +1504,7 @@ export default function Contracts() {
 
             {/* 2. Tariff & Commercial Terms */}
             <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>2. Tariff & Commercial Structure</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 15 }}>2. Tariff & Commercial Structure</h4>
               <div className="form-grid">
                 <Field label="Tariff Type">
                   <select value={amendForm.tariff_type || 'FLAT'} onChange={(e) => setAmendForm({ ...amendForm, tariff_type: e.target.value })}>
@@ -1530,7 +1539,7 @@ export default function Contracts() {
 
             {/* 3. Billing & Regulatory Rules (CERC) */}
             <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>3. Billing & Regulatory Rules (CERC)</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 15 }}>3. Billing & Regulatory Rules (CERC)</h4>
               
               <div className="rule-block">
                 <div className="rule-block-label">Payment Terms</div>
@@ -1584,7 +1593,7 @@ export default function Contracts() {
 
             {/* 4. Payment Security & Guarantees */}
             <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>4. Performance Security & Guarantee</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 15 }}>4. Performance Security & Guarantee</h4>
               <div className="form-grid">
                 <Field label="PBG / Security Amount (₹)">
                   <input type="number" value={amendForm.pbg_amount ?? ''} onChange={(e) => setAmendForm({ ...amendForm, pbg_amount: e.target.value })} />
@@ -1604,7 +1613,7 @@ export default function Contracts() {
             {/* 5. Performance / Technology Specific Parameters */}
             {['Solar', 'Wind', 'Hybrid', 'FDRE'].includes(amendForm.project_type) && (
               <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5, color: 'var(--on-blue)' }}>5. CUF Performance Threshold</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: 15, color: 'var(--on-blue)' }}>5. CUF Performance Threshold</h4>
                 <div className="form-grid">
                   <Field label="Min / Guaranteed CUF (%)">
                     <input type="number" step="0.01" min="0" max="100" value={amendForm.min_cuf_percent ?? ''} onChange={(e) => setAmendForm({ ...amendForm, min_cuf_percent: e.target.value })} />

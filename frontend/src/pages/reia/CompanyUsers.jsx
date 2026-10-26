@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../api/client.js';
+import { functionalConsented } from '../../gigw/CookieConsent.jsx';
 import { PageHeader, Card, Badge } from '../../components/ui.jsx';
 import Team from '../shared/Team.jsx';
 import { Search, X, Building2, Users, Check, ArrowRight, Clock, RotateCcw } from 'lucide-react';
@@ -16,6 +17,8 @@ function getStoredRecentIds() {
 }
 
 function saveStoredRecentId(id) {
+  // Kept only with functionality consent (DBIM v3 s.7.6.3.2).
+  if (!functionalConsented()) return getStoredRecentIds();
   try {
     const prev = getStoredRecentIds().filter((x) => x !== id);
     const next = [id, ...prev].slice(0, 10);
@@ -233,7 +236,7 @@ export default function CompanyUsers() {
                   {selectedCompany.name}
                 </span>
                 <span style={{
-                  fontSize: 13,
+                  fontSize: 14.5,
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -244,7 +247,7 @@ export default function CompanyUsers() {
                   {selectedCompany.entity_type === 'SELLER' ? 'Seller' : 'Buyer'}
                 </span>
               </div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2, display: 'flex', gap: 12 }}>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 2, display: 'flex', gap: 12 }}>
                 <span>{selectedCompany.active_users} active user{selectedCompany.active_users === 1 ? '' : 's'}</span>
                 <span>•</span>
                 <span>ID: {selectedCompany.id}</span>
@@ -283,7 +286,7 @@ export default function CompanyUsers() {
         <div ref={containerRef} style={{ position: 'relative', marginBottom: 24 }}>
           {/* Quick Filter Chips */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-500)' }}>Filter:</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--slate-500)' }}>Filter:</span>
             {[
               { key: 'ALL', label: `All (${(companies || []).length})` },
               { key: 'SELLER', label: `Sellers (${sellersCount})` },
@@ -294,7 +297,7 @@ export default function CompanyUsers() {
                 type="button"
                 className={`nb-chip ${filterType === f.key ? 'active' : ''}`}
                 onClick={() => setFilterType(f.key)}
-                style={{ padding: '3px 10px', fontSize: 13.5 }}
+                style={{ padding: '3px 10px', fontSize: 15 }}
               >
                 {f.label}
               </button>
@@ -304,7 +307,7 @@ export default function CompanyUsers() {
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => setIsSwitching(false)}
-                style={{ marginLeft: 'auto', fontSize: 13.5 }}
+                style={{ marginLeft: 'auto', fontSize: 15 }}
               >
                 Cancel switch
               </button>
@@ -340,7 +343,7 @@ export default function CompanyUsers() {
                 border: 'none',
                 outline: 'none',
                 width: '100%',
-                fontSize: 14.5,
+                fontSize: 15.5,
                 fontWeight: 500,
                 color: 'var(--slate-900)',
                 background: 'transparent',
@@ -386,7 +389,7 @@ export default function CompanyUsers() {
             }}>
               <div style={{
                 padding: '8px 14px',
-                fontSize: 13,
+                fontSize: 14.5,
                 fontWeight: 600,
                 color: 'var(--slate-400)',
                 background: 'var(--slate-50, var(--slate-50))',
@@ -403,7 +406,7 @@ export default function CompanyUsers() {
               </div>
 
               {filteredCompanies.length === 0 ? (
-                <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--slate-500)', fontSize: 13.5 }}>
+                <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--slate-500)', fontSize: 15 }}>
                   No companies found matching "<strong>{searchQuery}</strong>". Try a different name or clear the filter.
                 </div>
               ) : (
@@ -458,17 +461,17 @@ export default function CompanyUsers() {
                             display: c.logo_url ? 'none' : 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: 13,
+                            fontSize: 14.5,
                             fontWeight: 700,
                             flexShrink: 0,
                           }}>
                             {c.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-900)' }}>
+                            <div style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--slate-900)' }}>
                               {c.name}
                             </div>
-                            <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+                            <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                               {c.id}
                             </div>
                           </div>
@@ -477,7 +480,7 @@ export default function CompanyUsers() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {recentIds.includes(c.id) && (
                             <span style={{
-                              fontSize: 12.5,
+                              fontSize: 14,
                               fontWeight: 600,
                               padding: '1px 6px',
                               borderRadius: 4,
@@ -492,7 +495,7 @@ export default function CompanyUsers() {
                             </span>
                           )}
                           <span style={{
-                            fontSize: 13,
+                            fontSize: 14.5,
                             fontWeight: 600,
                             padding: '2px 8px',
                             borderRadius: 999,
@@ -501,7 +504,7 @@ export default function CompanyUsers() {
                           }}>
                             {c.entity_type === 'SELLER' ? 'Seller' : 'Buyer'}
                           </span>
-                          <span style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 500 }}>
+                          <span style={{ fontSize: 15, color: 'var(--slate-500)', fontWeight: 500 }}>
                             {c.active_users} active
                           </span>
                           {isSelected && <Check size={16} color="#059669" />}
@@ -532,12 +535,12 @@ export default function CompanyUsers() {
             }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--slate-900)', margin: 0 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--slate-900)', margin: 0 }}>
                     {recentCompanies.length > 0 ? 'Recently accessed & quick select' : 'Quick select a stakeholder'}
                   </h3>
                   {recentCompanies.length > 0 && (
                     <span style={{
-                      fontSize: 13,
+                      fontSize: 14.5,
                       fontWeight: 600,
                       padding: '2px 8px',
                       borderRadius: 999,
@@ -552,7 +555,7 @@ export default function CompanyUsers() {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: '4px 0 0' }}>
+                <p style={{ fontSize: 14.5, color: 'var(--slate-500)', margin: '4px 0 0' }}>
                   {recentCompanies.length > 0
                     ? 'Updated automatically based on your recent searches. Click any company or use search above.'
                     : 'Click any company below or use the search box above to instantly inspect users, levels, and credentials.'}
@@ -565,7 +568,7 @@ export default function CompanyUsers() {
                   className="btn btn-outline btn-xs"
                   onClick={handleClearRecent}
                   style={{
-                    fontSize: 13,
+                    fontSize: 14.5,
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 5,
@@ -643,7 +646,7 @@ export default function CompanyUsers() {
                         display: c.logo_url ? 'none' : 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 13,
+                        fontSize: 14.5,
                         fontWeight: 700,
                         flexShrink: 0,
                       }}>
@@ -651,7 +654,7 @@ export default function CompanyUsers() {
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{
-                          fontSize: 13.5,
+                          fontSize: 15,
                           fontWeight: 600,
                           color: 'var(--slate-900)',
                           overflow: 'hidden',
@@ -661,7 +664,7 @@ export default function CompanyUsers() {
                           {c.name}
                         </div>
                         <div style={{
-                          fontSize: 13,
+                          fontSize: 14.5,
                           color: 'var(--slate-500)',
                           display: 'flex',
                           alignItems: 'center',
@@ -674,7 +677,7 @@ export default function CompanyUsers() {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 3,
-                              fontSize: 12.5,
+                              fontSize: 14,
                               color: 'var(--on-blue)',
                               fontWeight: 600,
                               background: 'var(--t-blue-50)',

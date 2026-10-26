@@ -92,8 +92,8 @@ export default function HydroReceivables({ vertical = 'HYDRO' }) {
             <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
               {stations.map((s) => <option key={s.id} value={s.id}>{s.station_name || s.contract_no}</option>)}
             </select>
-            {data && <span style={{ alignSelf: 'center', fontSize: 13, color: 'var(--text-muted)' }}>As of {fmtDate(data.as_of)}</span>}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            {data && <span style={{ alignSelf: 'center', fontSize: 14.5, color: 'var(--text-muted)' }}>As of {fmtDate(data.as_of)}</span>}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5 }}>
               <input type="checkbox" checked={onlyOverdue} onChange={(e) => setOnlyOverdue(e.target.checked)} />
               Overdue only
             </label>

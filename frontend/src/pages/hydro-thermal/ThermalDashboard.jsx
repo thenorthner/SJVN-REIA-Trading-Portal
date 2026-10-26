@@ -27,7 +27,7 @@ const crore = (v) => `₹${fmtNumber(v || 0, 2)} Cr`;
 function Pill({ to, label, value, tone }) {
   return (
     <Link to={to} className="card" style={{ padding: '12px 14px', display: 'block', textDecoration: 'none', color: 'var(--text)' }}>
-      <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{label}</div>
+      <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: tone ? `var(--${tone})` : 'var(--text)' }}>{value}</div>
     </Link>
   );
@@ -109,8 +109,8 @@ export default function ThermalDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={data?.monthlyBillingTrend || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#94a3b833" />
-                <XAxis dataKey="billing_period" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <XAxis dataKey="billing_period" tick={{ fontSize: 13.5 }} />
+                <YAxis tick={{ fontSize: 13.5 }} />
                 <Tooltip formatter={(v, n) => [`₹${Number(v).toFixed(2)} Cr`, { capacity_charges: 'Capacity charge', energy_charges: 'Energy charge', collected_amount: 'Collected' }[n] || n]} />
                 <Legend formatter={(n) => ({ capacity_charges: 'Capacity charge', energy_charges: 'Energy charge', collected_amount: 'Collected' }[n] || n)} />
                 <Bar dataKey="capacity_charges" stackId="a" fill="#3b82f6" />
@@ -126,8 +126,8 @@ export default function ThermalDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ageingRows}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#94a3b833" />
-                <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <XAxis dataKey="bucket" tick={{ fontSize: 13.5 }} />
+                <YAxis tick={{ fontSize: 13.5 }} />
                 <Tooltip formatter={(v) => [`₹${Number(v).toFixed(2)} Cr`, 'Outstanding']} />
                 <Bar dataKey="crore" radius={[4, 4, 0, 0]}>
                   {ageingRows.map((r, i) => <Cell key={r.bucket} fill={['#10b981', '#f59e0b', '#f97316', '#ef4444', '#b91c1c'][i]} />)}
@@ -144,11 +144,11 @@ export default function ThermalDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data?.pafmTrend || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#94a3b833" />
-                <XAxis dataKey="period" tick={{ fontSize: 12 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
+                <XAxis dataKey="period" tick={{ fontSize: 13.5 }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 13.5 }} tickFormatter={(v) => `${v}%`} />
                 <Tooltip formatter={(v, n) => [v == null ? 'not billed' : `${v}%`, n]} />
                 <Legend />
-                {napaf != null && <ReferenceLine y={napaf} stroke="#ef4444" strokeDasharray="4 4" label={{ value: `NAPAF ${napaf}%`, fill: '#ef4444', fontSize: 12 }} />}
+                {napaf != null && <ReferenceLine y={napaf} stroke="#ef4444" strokeDasharray="4 4" label={{ value: `NAPAF ${napaf}%`, fill: '#ef4444', fontSize: 13.5 }} />}
                 {stations.map((s, i) => <Line key={s.id} type="monotone" dataKey={s.code} name={s.station_name} stroke={LINE_COLORS[i % LINE_COLORS.length]} strokeWidth={2.5} connectNulls dot={{ r: 3 }} />)}
               </LineChart>
             </ResponsiveContainer>
@@ -160,12 +160,12 @@ export default function ThermalDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={data?.thermalTrend || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#94a3b833" />
-                <XAxis dataKey="period" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="plf" domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
-                <YAxis yAxisId="ecr" orientation="right" tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
+                <XAxis dataKey="period" tick={{ fontSize: 13.5 }} />
+                <YAxis yAxisId="plf" domain={[0, 100]} tick={{ fontSize: 13.5 }} tickFormatter={(v) => `${v}%`} />
+                <YAxis yAxisId="ecr" orientation="right" tick={{ fontSize: 13.5 }} tickFormatter={(v) => `₹${v}`} />
                 <Tooltip formatter={(v, n) => [v == null ? '—' : (n === 'PLF' ? `${v}%` : `₹${v}/kWh`), n]} />
                 <Legend />
-                <ReferenceLine yAxisId="plf" y={85} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'PLF incentive 85%', fill: '#10b981', fontSize: 12 }} />
+                <ReferenceLine yAxisId="plf" y={85} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'PLF incentive 85%', fill: '#10b981', fontSize: 13.5 }} />
                 <Bar yAxisId="plf" dataKey="plf" name="PLF" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 <Line yAxisId="ecr" type="monotone" dataKey="ecr" name="ECR" stroke="#f59e0b" strokeWidth={2.5} connectNulls dot={{ r: 3 }} />
               </ComposedChart>
@@ -224,10 +224,10 @@ export default function ThermalDashboard() {
         <Card title="Stations">
           <Table
             columns={[
-              { key: 'station_name', header: 'Station', render: (s) => <span>{s.station_name}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{s.contract_no} · {fmtNumber(s.capacity_mw, 0)} MW</div></span> },
-              { key: 'afc', header: 'AFC', render: (s) => <span>{fmtCurrency(s.annual_afc)}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{s.afc_source}</div></span> },
-              { key: 'latest', header: 'Latest month', render: (s) => (s.latest_month ? <span>{s.latest_month}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{crore(s.latest_billed_cr)} billed · {crore(s.latest_collected_cr)} in</div></span> : '—') },
-              { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge type="success">Ready</Badge> : <span style={{ fontSize: 13, color: 'var(--amber-strong)' }}>Missing: {(s.missing || []).join(', ')}</span>) },
+              { key: 'station_name', header: 'Station', render: (s) => <span>{s.station_name}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{s.contract_no} · {fmtNumber(s.capacity_mw, 0)} MW</div></span> },
+              { key: 'afc', header: 'AFC', render: (s) => <span>{fmtCurrency(s.annual_afc)}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{s.afc_source}</div></span> },
+              { key: 'latest', header: 'Latest month', render: (s) => (s.latest_month ? <span>{s.latest_month}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{crore(s.latest_billed_cr)} billed · {crore(s.latest_collected_cr)} in</div></span> : '—') },
+              { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge type="success">Ready</Badge> : <span style={{ fontSize: 14.5, color: 'var(--amber-strong)' }}>Missing: {(s.missing || []).join(', ')}</span>) },
             ]}
             rows={stations}
             emptyMessage={loading ? 'Loading…' : 'No thermal station yet — set one up under Stations & Tariff.'}
@@ -242,7 +242,7 @@ export default function ThermalDashboard() {
           </div>
           <Table
             columns={[
-              { key: 'bill_no', header: 'Bill', render: (b) => <span>{b.bill_no}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{b.billing_month} · {String(b.bill_kind).toLowerCase()}</div></span> },
+              { key: 'bill_no', header: 'Bill', render: (b) => <span>{b.bill_no}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{b.billing_month} · {String(b.bill_kind).toLowerCase()}</div></span> },
               { key: 'total_charges', header: 'Amount', render: (b) => fmtCurrency(b.total_charges) },
               { key: 'status', header: 'Status', render: (b) => <Badge status={b.status} /> },
             ]}

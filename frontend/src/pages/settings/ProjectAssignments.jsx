@@ -98,7 +98,7 @@ export default function ProjectAssignments() {
           caption="REIA officers and their projects"
           emptyMessage="No active REIA makers, checkers or approvers."
           columns={[
-            { key: 'name', header: 'Officer', render: (o) => <><strong>{o.name}</strong><div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{o.email}</div></> },
+            { key: 'name', header: 'Officer', render: (o) => <><strong>{o.name}</strong><div style={{ fontSize: 14, color: 'var(--text-muted)' }}>{o.email}</div></> },
             { key: 'role', header: 'Tier', render: (o) => TIER[o.role] || o.role },
             { key: 'scope', header: 'Works on', render: (o) => (o.project_scope === 'SELECTED' ? <Badge status="PENDING" label={`${o.projects.length} selected`} /> : <Badge status="ACTIVE" label="All projects" />) },
             { key: 'projects', header: 'Projects', render: (o) => (o.project_scope === 'SELECTED' ? o.projects.map((p) => p.contract_no).join(', ') : '—') },
@@ -152,7 +152,7 @@ export default function ProjectAssignments() {
                       />
                       <span>
                         <strong>{p.contract_no}</strong> — {p.seller_name || p.buyer_name || 'counterparty not set'}
-                        <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-muted)' }}>
+                        <span style={{ display: 'block', fontSize: 14, color: 'var(--text-muted)' }}>
                           {p.contract_type} · {p.project_type}{p.capacity_mw ? ` · ${p.capacity_mw} MW` : ''} · {String(p.status).replaceAll('_', ' ').toLowerCase()}
                         </span>
                       </span>

@@ -61,7 +61,7 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
       key: 'contract_no',
       header: 'Contract No.',
       render: (r) => (r.version > 1 || rows.some((o) => o.id !== r.id && o.contract_no === r.contract_no)
-        ? <span>{r.contract_no} <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>v{r.version}</span></span>
+        ? <span>{r.contract_no} <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>v{r.version}</span></span>
         : r.contract_no),
     },
     { key: 'project_type', header: sourceLabel },
@@ -75,7 +75,7 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
       render: (r) => {
         const n = summary[r.id]?.next_milestone;
         if (!n) return <span style={{ color: 'var(--slate-500)' }}>—</span>;
-        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? 'var(--red-deep)' : 'var(--slate-500)' }}>{fmtDate(n.due_date)}</div> : null}</span>;
+        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 15, color: n.status === 'DELAYED' ? 'var(--red-deep)' : 'var(--slate-500)' }}>{fmtDate(n.due_date)}</div> : null}</span>;
       },
     },
     {
@@ -99,7 +99,7 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
         <Card title="Needs your attention" style={{ marginBottom: 16 }}>
           {attention.map((f) => (
             <div key={`${f.row.id}-${f.text}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 13.5 }}>
+              <div style={{ fontSize: 15 }}>
                 <span className={`cw-flag ${f.tone}`}>{f.text}</span>
                 <strong>{f.row.contract_no}</strong>
               </div>

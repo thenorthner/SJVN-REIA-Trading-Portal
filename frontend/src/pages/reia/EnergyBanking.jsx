@@ -41,14 +41,16 @@ function CycleWindow({ endsOn, available }) {
   return (
     <span style={{ color: tone, fontWeight: urgent ? 600 : 400 }}>
       {endsOn}
-      <span style={{ fontSize: 13, marginLeft: 6, color: 'var(--text-light)' }}>{note}</span>
+      <span style={{ fontSize: 14.5, marginLeft: 6, color: 'var(--text-light)' }}>{note}</span>
     </span>
   );
 }
 
 export default function EnergyBanking() {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  // Phase B.2: the maker banks and draws energy; settling closed cycles is the checker's.
+  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+  const canSettle = ROLE_GROUPS.REIA_CHECK.includes(user?.role);
   const [contracts, setContracts] = useState([]);
   const [contractId, setContractId] = useState('');
   const [rows, setRows] = useState([]);
@@ -189,7 +191,7 @@ export default function EnergyBanking() {
         return (
           <span>
             {fmtCurrency(r.settled_amount)}
-            <span style={{ fontSize: 13, color: 'var(--text-light)', marginLeft: 6 }}>{fmtNumber(r.settled_mwh, 3)} MWh lapsed</span>
+            <span style={{ fontSize: 14.5, color: 'var(--text-light)', marginLeft: 6 }}>{fmtNumber(r.settled_mwh, 3)} MWh lapsed</span>
             {r.settlement_invoice_no && <div className="audit-muted">Billed on {r.settlement_invoice_no}</div>}
           </span>
         );
@@ -223,7 +225,7 @@ export default function EnergyBanking() {
                 a.click(); URL.revokeObjectURL(url);
               } catch { setError('Could not prepare the banking statement.'); }
             }}>Banking Statement (PDF)</button>
-            {canWrite && <button className="btn btn-ghost" onClick={runSweep}>Settle Closed Cycles</button>}
+            {canSettle && <button className="btn btn-ghost" onClick={runSweep}>Settle Closed Cycles</button>}
             {canWrite && <button className="btn btn-primary" disabled={!contractId} onClick={() => { setError(''); setBankForm({ ...EMPTY_BANK }); }}>+ Bank Energy</button>}
           </div>
         )}
@@ -247,7 +249,7 @@ export default function EnergyBanking() {
 
       {sweep && (
         <Card>
-          <div style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 14.5 }}>
             Checked <strong>{sweep.checked}</strong> closed {sweep.checked === 1 ? 'cycle' : 'cycles'} as of {sweep.as_of};
             {' '}<strong>{sweep.settled}</strong> settled in cash.
             {sweep.items?.length > 0 && (
@@ -304,10 +306,10 @@ export default function EnergyBanking() {
               the month&apos;s bills (the generator&apos;s and the buyers&apos;) leave banked energy out; a draw is billed by the generator at the full tariff
               and to each buyer for its share; what lapses is billed by the generator at the settlement rate and passed on to each buyer for its share at the same rate of its tariff.
             </p>
-            <div style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
+            <div style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 14.5 }}>
               Drawn back within the cycle: <strong>{fmtCurrency(fullValue)}</strong> of energy.
               {'  ·  '}Left to lapse: <strong style={{ color: 'var(--amber, #b7791f)' }}>{fmtCurrency(lapseValue)}</strong>
-              <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>
+              <div style={{ fontSize: 14.5, color: 'var(--text-light)', marginTop: 2 }}>
                 Unused energy settles at 75% of tariff by default, so drawing it back is worth {fmtCurrency(fullValue - lapseValue)} more than letting the cycle close on it.
               </div>
             </div>
@@ -327,7 +329,7 @@ export default function EnergyBanking() {
             <Field label="Draw (MWh)">
               <input required type="number" step="0.001" min="0.001" value={drawForm.draw_mwh} onChange={(e) => setDrawForm({ ...drawForm, draw_mwh: e.target.value })} />
             </Field>
-            <div style={{ fontSize: 13.5, color: 'var(--text-light)', margin: '4px 0 8px' }}>
+            <div style={{ fontSize: 15, color: 'var(--text-light)', margin: '4px 0 8px' }}>
               Available in this cycle: <strong>{fmtNumber(rows.find((r) => r.cycle === drawForm.cycle)?.available_mwh || 0, 3)} MWh</strong>. Oldest energy is drawn first, so what expires soonest is used up first.
             </div>
             <div className="form-actions">

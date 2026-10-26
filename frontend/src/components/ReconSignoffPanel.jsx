@@ -3,6 +3,7 @@ import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Field, Modal, AlertPopup, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
+import { triggerUrjaCelebration } from './UrjaCelebration.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
 // What surrounds the signatures of a reconciliation statement: the balance
@@ -43,7 +44,7 @@ export function RollForward({ rf }) {
   );
   return (
     <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
         <tbody>
           {line('', 'Opening balance — bills of earlier periods still open', rf.opening)}
           {line('+', `Billed in ${rf.window.label}`, rf.billed)}
@@ -62,7 +63,7 @@ export function RollForward({ rf }) {
         </p>
       )}
       {rf.carried_forward.length > 0 && (
-        <details style={{ marginTop: 8, fontSize: 13 }}>
+        <details style={{ marginTop: 8, fontSize: 14.5 }}>
           <summary style={{ cursor: 'pointer', color: 'var(--primary)', fontWeight: 600 }}>
             {rf.carried_forward.length} bill{rf.carried_forward.length === 1 ? '' : 's'} carried into the period
           </summary>
@@ -107,7 +108,13 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
           auditor_name: cert.auditor_name, firm_reg_no: cert.firm_reg_no, udin: cert.udin,
         };
       }
-      onSigned(await api.reconSignoff.sign(recon.id, body));
+      const signed = await api.reconSignoff.sign(recon.id, body);
+      onSigned(signed);
+      triggerUrjaCelebration({
+        title: 'Signature recorded',
+        message: `Your signature on ${recon.recon_no} is recorded.`,
+        badge: 'Reconciliation',
+      });
     } catch (err) {
       setError(errText(err));
     } finally {
@@ -119,7 +126,7 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
     <Modal open onClose={() => !busy && onClose()} title={partial ? 'Agree with exceptions' : 'Agree and sign off'} width={640}>
       <form onSubmit={submit}>
         <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
-        <div style={{ background: 'var(--t-green-50)', border: '1px solid var(--t-green-100)', borderRadius: 8, padding: 12, marginBottom: 14, color: 'var(--on-green)', fontSize: 13 }}>
+        <div style={{ background: 'var(--t-green-50)', border: '1px solid var(--t-green-100)', borderRadius: 8, padding: 12, marginBottom: 14, color: 'var(--on-green)', fontSize: 14.5 }}>
           <div><strong>Statement:</strong> {recon.recon_no} · {recon.period} ({recon.data_basis})</div>
           <div><strong>Contract:</strong> {recon.contract_no}</div>
           <div><strong>Signing:</strong> {signatory}</div>
@@ -149,7 +156,7 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRows([...rows, { item_id: '', label: '', amount: '', reason: '' }])}>+ Another exception</button>
-              <span style={{ fontSize: 13 }}>
+              <span style={{ fontSize: 14.5 }}>
                 Not agreed: <strong style={{ color: 'var(--red-deep)' }}>{fmtCurrency(total)}</strong>
                 {billed > 0 && <> · Agreed: <strong style={{ color: 'var(--on-green-2)' }}>{fmtCurrency(Math.max(0, billed - total))}</strong> of {fmtCurrency(billed)} billed</>}
               </span>
@@ -174,7 +181,7 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
           </div>
         )}
 
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontSize: 13, cursor: 'pointer', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, fontSize: 14.5, cursor: 'pointer', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
             I have reviewed this statement for <strong>{recon.period}</strong> and {partial ? 'agree with it except for the amounts named above' : 'agree with it'}.
@@ -236,9 +243,15 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
     form.append('signed_on', offline.signed_on);
     setBusy('offline');
     try {
-      setD(await api.reconSignoff.attachClientSignedCopy(reconId, form));
+      const updated = await api.reconSignoff.attachClientSignedCopy(reconId, form);
+      setD(updated);
       setOffline({ file: null, signatory_name: '', signatory_designation: '', signed_on: '' });
       onChanged?.();
+      triggerUrjaCelebration({
+        title: 'Client-signed copy attached',
+        message: `${updated?.recon_no || 'The statement'} now carries the client's signed copy.`,
+        badge: 'Reconciliation',
+      });
     } catch (err) {
       setError(errText(err));
     } finally {
@@ -267,7 +280,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
   const both = !!(s.sjvn && s.counterparty);
   const sideKey = d.side === 'SJVN' ? 'sjvn' : 'counterparty';
   const sigLine = (label, x) => (
-    <div style={{ padding: 10, border: `1px solid ${x ? 'var(--t-green-100)' : 'var(--border)'}`, background: x ? 'var(--t-green-50)' : 'var(--surface)', borderRadius: 6, fontSize: 13.5 }}>
+    <div style={{ padding: 10, border: `1px solid ${x ? 'var(--t-green-100)' : 'var(--border)'}`, background: x ? 'var(--t-green-50)' : 'var(--surface)', borderRadius: 6, fontSize: 15 }}>
       <div style={{ fontWeight: 700, color: x ? 'var(--on-green)' : 'var(--text-muted)' }}>{label}</div>
       {x ? (
         <>
@@ -279,13 +292,13 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
             </div>
           )}
           <div>{fmtDateTime(x.at)}{x.decision === 'AGREE_WITH_EXCEPTIONS' ? ' · with exceptions' : ''}</div>
-          <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--slate-500)' }} title={x.fingerprint}>Fingerprint {x.fingerprint.slice(0, 16)}…</div>
+          <div style={{ fontFamily: 'monospace', fontSize: 14.5, color: 'var(--slate-500)' }} title={x.fingerprint}>Fingerprint {x.fingerprint.slice(0, 16)}…</div>
         </>
       ) : <div style={{ color: 'var(--slate-500)' }}>Not signed in this way yet</div>}
     </div>
   );
   const copyLine = (label, c) => c && (
-    <div style={{ fontSize: 13.5, marginTop: 4 }}>
+    <div style={{ fontSize: 15, marginTop: 4 }}>
       {label}: <button type="button" className="btn-link" onClick={() => setPreview(c)}>{c.file_name}</button>{' '}
       <span style={{ fontWeight: 600, color: c.signed ? 'var(--on-green-2)' : 'var(--red-deep)' }}>
         {c.signed ? `✓ digital signature present${c.signer ? ` — ${c.signer}` : ''}${c.signed_on ? `, ${c.signed_on}` : ''}` : '✗ no digital signature found in the file'}
@@ -327,7 +340,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
         <>
           <div className="section-title" style={{ marginTop: 18 }}>Exceptions — not agreed by the counterparty</div>
           {d.agreed_amount != null && d.excepted_amount > 0 && (
-            <div className="alert alert-success" style={{ fontSize: 13 }}>
+            <div className="alert alert-success" style={{ fontSize: 14.5 }}>
               Agreed and payable now: <strong>{fmtCurrency(d.agreed_amount)}</strong> of {fmtCurrency(d.rollforward.billed)} billed. Held under exception: <strong>{fmtCurrency(d.excepted_amount)}</strong>.
             </div>
           )}
@@ -337,12 +350,12 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
                 <strong>{x.label} — {fmtCurrency(x.amount)}</strong>
                 <Badge status={x.status === 'OPEN' ? 'PENDING' : x.status === 'ACCEPTED' ? 'ACTIVE' : 'REJECTED'} label={x.status === 'OPEN' ? 'Open' : x.status === 'ACCEPTED' ? 'Accepted by SJVN' : 'Not accepted'} />
               </div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>{x.reason}</div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>Raised by {x.raised_by_name} · {fmtDateTime(x.created_at)}</div>
-              {x.status !== 'OPEN' && <div style={{ fontSize: 13, marginTop: 6 }}><strong>{x.resolved_by}:</strong> {x.resolution_note}</div>}
+              <div style={{ fontSize: 14.5, marginTop: 4 }}>{x.reason}</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 2 }}>Raised by {x.raised_by_name} · {fmtDateTime(x.created_at)}</div>
+              {x.status !== 'OPEN' && <div style={{ fontSize: 14.5, marginTop: 6 }}><strong>{x.resolved_by}:</strong> {x.resolution_note}</div>}
               {x.status === 'ACCEPTED' && d.can_resolve && (
                 // R4: an accepted exception becomes its note — drafted with the decision, or here.
-                x.note_id ? <div style={{ fontSize: 13, marginTop: 4, color: 'var(--on-green-2)' }}>Note drafted for Finance's approval.</div> : (
+                x.note_id ? <div style={{ fontSize: 14.5, marginTop: 4, color: 'var(--on-green-2)' }}>Note drafted for Finance's approval.</div> : (
                   <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} disabled={!!busy} onClick={async () => {
                     setBusy('note');
                     try { await api.notes.fromException({ kind: 'RECON_EXCEPTION', exception_id: x.id }); await load(); onChanged?.(); } catch (e) { setError(errText(e)); } finally { setBusy(''); }
@@ -384,7 +397,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
             {sigLine('Counterparty', s.counterparty)}
           </div>
           {d.same_content === true && <p className="inline-note" style={{ marginTop: 6 }}>Both parties signed the same figures — the fingerprints match.</p>}
-          {d.same_content === false && <div className="alert alert-error" style={{ marginTop: 6, fontSize: 13 }}>The figures changed between the two signatures — the fingerprints differ.</div>}
+          {d.same_content === false && <div className="alert alert-error" style={{ marginTop: 6, fontSize: 14.5 }}>The figures changed between the two signatures — the fingerprints differ.</div>}
           <p className="inline-note" style={{ marginTop: 6 }}>
             A signature here is an electronic acknowledgement: the signatory, the time and a fingerprint of the figures. It is not a certificate-based digital signature (DSC / Aadhaar e-Sign). For one of those, download the statement, sign it with your certificate, and attach the signed copy below.
           </p>
@@ -392,7 +405,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
       )}
 
       {d.certificate && (
-        <div style={{ fontSize: 13, marginTop: 10 }}>
+        <div style={{ fontSize: 14.5, marginTop: 10 }}>
           <strong>Auditor's certificate:</strong>{' '}
           <button type="button" className="btn-link" onClick={() => setPreview(d.certificate)}>{d.certificate.file_name}</button>
           {d.certificate.auditor_name ? ` · ${d.certificate.auditor_name}` : ''}{d.certificate.firm_reg_no ? ` · FRN ${d.certificate.firm_reg_no}` : ''}{d.certificate.udin ? ` · UDIN ${d.certificate.udin}` : ''}
@@ -404,7 +417,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
           <div className="section-title">Copies signed with a digital signature certificate</div>
           {copyLine('SJVN', d.signed_copies.sjvn)}
           {copyLine('Counterparty', d.signed_copies.counterparty)}
-          {!d.signed_copies.sjvn && !d.signed_copies.counterparty && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>None attached yet.</div>}
+          {!d.signed_copies.sjvn && !d.signed_copies.counterparty && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>None attached yet.</div>}
           {s[sideKey] && (
             <form onSubmit={attachCopy} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
               <input key={d.signed_copies[sideKey]?.version_id || 'none'} type="file" accept=".pdf,application/pdf" onChange={(e) => setCopy(e.target.files[0])} aria-label="Signed statement PDF" />

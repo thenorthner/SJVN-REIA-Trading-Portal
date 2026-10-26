@@ -1,18 +1,20 @@
-# GIGW 3.0 / WCAG 2.1 AA audit
+# GIGW 3.0 / DBIM v3 / WCAG 2.1 AA audit
 
-Run 2026-10-20T11:00:23.214Z against http://localhost:4000.
+Run 2026-10-22T12:48:03.400Z against http://localhost:5173.
 
-**Score: 98.6%** — 284 of 288 checks pass.
+**Score: 98.6%** — 555 of 563 checks pass.
 
 ## Failing checks
 | Area | Page | Check | Detail |
 |---|---|---|---|
+| Security | / | Header content-security-policy | absent |
+| Security | / | Header strict-transport-security | absent |
+| Security | / | Header x-content-type-options | absent |
+| Security | / | Header x-frame-options | absent |
+| Security | / | Header referrer-policy | absent |
 | Policies | /contact-us | Web Information Manager named (name, designation, e-mail) | {} |
 | Policies | /grievance-redressal | Grievance Officer named | {} |
 | Policies | /grievance-redressal | Data Protection Officer named | {} |
-| WCAG 2.1 AA | /cookie-policy | axe-core: no serious or critical violations | color-contrast(serious,1) |
 
 ## axe-core findings by rule
-| Rule | Impact | What | Pages (nodes) | First node |
-|---|---|---|---|---|
-| color-contrast | serious | Elements must meet minimum color contrast ratio thresholds | /cookie-policy (1) | `article > div > p` |
+_None._

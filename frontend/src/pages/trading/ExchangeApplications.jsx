@@ -104,7 +104,7 @@ export default function ExchangeApplications() {
     background: '#1e4b7a',
     color: '#fff',
     padding: '10px 12px',
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: 600,
     whiteSpace: 'nowrap',
     cursor: 'pointer',
@@ -117,7 +117,7 @@ export default function ExchangeApplications() {
     border: 'none',
     padding: 0,
     cursor: 'pointer',
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: 600,
     textDecoration: 'underline',
   };
@@ -130,7 +130,7 @@ export default function ExchangeApplications() {
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
             Search:
             <input
               className="input"
@@ -143,7 +143,7 @@ export default function ExchangeApplications() {
         </div>
 
         {message && (
-          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--on-blue)', background: 'var(--t-blue-50)', padding: '8px 12px', borderRadius: 4 }}>
+          <div style={{ marginBottom: 12, fontSize: 14.5, color: 'var(--on-blue)', background: 'var(--t-blue-50)', padding: '8px 12px', borderRadius: 4 }}>
             {message}
           </div>
         )}
@@ -152,7 +152,7 @@ export default function ExchangeApplications() {
           <div className="page-loading">Loading applications…</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
               <thead>
                 <tr>
                   {COLUMNS.map((c) => (
@@ -200,16 +200,16 @@ export default function ExchangeApplications() {
                         Action
                       </button></WriteOnly>
                       {r.approval_status !== 'PENDING' && (
-                        <div style={{ fontSize: 13, marginTop: 4, color: r.approval_status === 'APPROVED' ? 'var(--on-green)' : 'var(--on-red)' }}>
+                        <div style={{ fontSize: 14.5, marginTop: 4, color: r.approval_status === 'APPROVED' ? 'var(--on-green)' : 'var(--on-red)' }}>
                           {r.approval_status}
                         </div>
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       {(r.bids || []).length === 0 ? (
-                        <span style={{ color: '#94a3b8', fontSize: 13.5 }}>—</span>
+                        <span style={{ color: '#94a3b8', fontSize: 15 }}>—</span>
                       ) : r.bids.map((b) => (
-                        <div key={b.id} style={{ fontSize: 13.5, marginBottom: 2 }}>
+                        <div key={b.id} style={{ fontSize: 15, marginBottom: 2 }}>
                           <span style={{ fontFamily: 'ui-monospace, monospace' }}>{b.id}</span>
                           {' '}
                           <Badge type={b.status === 'CLEARED' ? 'success' : b.status === 'REJECTED' ? 'danger' : 'warning'}>
@@ -218,7 +218,7 @@ export default function ExchangeApplications() {
                         </div>
                       ))}
                       {r.contract_label && (
-                        <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 2 }}>{r.contract_label}</div>
+                        <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 2 }}>{r.contract_label}</div>
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
@@ -252,7 +252,7 @@ export default function ExchangeApplications() {
       {actionRow && (
         <Modal open onClose={() => setActionRow(null)} title={`Approve / Reject — ${actionRow.application_id}`} width={480}>
           <form onSubmit={submitDecision}>
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginTop: 0 }}>
               {actionRow.exchange} · {actionRow.product} · {actionRow.bid_type} · {actionRow.portfolio_id}
             </p>
             <Field label="Decision" required>

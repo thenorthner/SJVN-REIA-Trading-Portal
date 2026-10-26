@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, StatCard, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const GRADE_TONE = { A: 'success', B: 'primary', C: 'warning', D: 'danger' };
 
@@ -14,7 +15,7 @@ function ShortfallBar({ pct }) {
       <div style={{ flex: 1, height: 6, background: 'var(--slate-100, var(--slate-100))', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ width: `${width}%`, height: '100%', background: tone }} />
       </div>
-      <span style={{ fontSize: 13.5, color: tone, minWidth: 44, textAlign: 'right' }}>{fmtNumber(pct, 2)}%</span>
+      <span style={{ fontSize: 15, color: tone, minWidth: 44, textAlign: 'right' }}>{fmtNumber(pct, 2)}%</span>
     </div>
   );
 }
@@ -41,7 +42,7 @@ export default function DeviationRegister() {
       ]);
       setSummary(s); setScorecard(sc); setIncidents(inc); setRegister(reg);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to load deviation register');
+      showAlert(err.response?.data?.error || err.message || 'Failed to load deviation register');
     } finally {
       setLoading(false);
     }
@@ -51,7 +52,7 @@ export default function DeviationRegister() {
 
   const scoreColumns = [
     { key: 'counterparty', label: 'Counterparty' },
-    { key: 'contract_ref', label: 'Contract', render: r => <span style={{ fontSize: 13.5 }}>{r.contract_ref}</span> },
+    { key: 'contract_ref', label: 'Contract', render: r => <span style={{ fontSize: 15 }}>{r.contract_ref}</span> },
     { key: 'days', label: 'Days' },
     { key: 'requested_mwh', label: 'Requested (MWh)', render: r => fmtNumber(r.requested_mwh, 2) },
     { key: 'scheduled_mwh', label: 'Delivered (MWh)', render: r => fmtNumber(r.scheduled_mwh, 2) },
@@ -112,15 +113,15 @@ export default function DeviationRegister() {
       <Card title="Period">
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>From</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>From</label>
             <input type="date" className="input" value={filters.from} onChange={e => setFilters({ ...filters, from: e.target.value })} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>To</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>To</label>
             <input type="date" className="input" value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })} />
           </div>
           <button className="btn btn-ghost" onClick={() => setFilters({ from: '', to: '', only_deviations: filters.only_deviations })}>Clear</button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginLeft: 'auto' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, marginLeft: 'auto' }}>
             <input
               type="checkbox"
               checked={filters.only_deviations}
@@ -153,7 +154,7 @@ export default function DeviationRegister() {
 
       <Card title="Counterparty scorecard">
         <Table columns={scoreColumns} rows={scorecard} loading={loading} emptyMessage="No schedule data for this period." />
-        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
           Grade is on delivered share of requested energy — A at 99.5% and above, B at 98%, C at 95%, D below that.
         </p>
       </Card>

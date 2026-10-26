@@ -31,7 +31,7 @@ export function ThermalBillSummary({ bill, lines }) {
         <tr><td>Fuel for the month</td><td>GCV as received {t.fuel?.gcv_kcal_per_kg} kCal/kg{t.fuel?.cvpf_kcal_per_kg != null ? ` (CVPF ${t.fuel.cvpf_kcal_per_kg} after ${t.fuel.gcv_storage_loss_kcal} storage loss)` : ''} · coal {fmtCurrency(t.fuel?.coal_rs_per_tonne)}/t · oil {fmtCurrency(t.fuel?.oil_rs_per_kl)}/kL</td></tr>
         <tr><td>Energy charge rate</td><td><strong>₹{bill.a12_ecr}/kWh</strong></td></tr>
         <tr><td>Capacity charge</td><td>{t.capacity_formula}</td></tr>
-        {t.not_modelled && <tr><td>Note</td><td style={{ fontSize: 13.5 }}>{t.not_modelled}</td></tr>}
+        {t.not_modelled && <tr><td>Note</td><td style={{ fontSize: 15 }}>{t.not_modelled}</td></tr>}
       </tbody></table>
       <Table
         columns={[

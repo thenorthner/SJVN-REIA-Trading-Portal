@@ -66,13 +66,13 @@ export default function StationAdvances({ vertical = 'HYDRO' }) {
             <option value="">All stations</option>
             {stations.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5 }}>
             <input type="checkbox" checked={onlyApplicable} onChange={(e) => setOnlyApplicable(e.target.checked)} /> Only those beside open bills
           </label>
         </div>
         <Table
           columns={[
-            { key: 'doc_no', header: 'Receipt', render: (r) => <span>{r.doc_no}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{fmtDate(r.doc_date)}{r.mode ? ` · ${r.mode}` : ''}{r.reference ? ` · ${r.reference}` : ''}</div></span> },
+            { key: 'doc_no', header: 'Receipt', render: (r) => <span>{r.doc_no}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{fmtDate(r.doc_date)}{r.mode ? ` · ${r.mode}` : ''}{r.reference ? ` · ${r.reference}` : ''}</div></span> },
             { key: 'beneficiary_name', header: 'Beneficiary', render: (r) => <Link to={`${pathFor(vertical, 'ledger')}?beneficiary=${encodeURIComponent(r.beneficiary_name)}`}>{r.beneficiary_name}</Link> },
             { key: 'station_name', header: 'Station' },
             { key: 'amount', header: 'Received', render: (r) => fmtCurrency(r.amount) },

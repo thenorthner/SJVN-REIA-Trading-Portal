@@ -117,7 +117,7 @@ export default function HydroBeneficiaryWaterfall3D({
                 background: 'rgba(5, 150, 105, 0.15)',
                 color: '#34d399',
                 border: '1px solid rgba(5, 150, 105, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -126,7 +126,7 @@ export default function HydroBeneficiaryWaterfall3D({
                 NRPC TABLE D2 CERTIFIED
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               Central Station Busbar Injection → Northern Regional Grid Wheeling → 8 State Off-Take Settlement
             </div>
           </div>
@@ -135,14 +135,14 @@ export default function HydroBeneficiaryWaterfall3D({
         {/* Aggregate Stats */}
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Total Allocated</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Total Allocated</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#38bdf8' }}>
               {fmtNumber(totalSaleableMwh, 1)} MWh
             </div>
           </div>
           <div style={{ height: 28, width: 1, background: 'rgba(255,255,255,0.1)' }} />
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Billed Value</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Billed Value</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#34d399' }}>
               {fmtCurrency(totalBilledVal)}
             </div>
@@ -167,7 +167,7 @@ export default function HydroBeneficiaryWaterfall3D({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{
-            fontSize: 12,
+            fontSize: 13.5,
             fontWeight: 700,
             background: 'rgba(56, 189, 248, 0.2)',
             color: '#38bdf8',
@@ -176,12 +176,12 @@ export default function HydroBeneficiaryWaterfall3D({
           }}>
             ORIGIN
           </span>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#f8fafc' }}>
+          <span style={{ fontSize: 15.5, fontWeight: 600, color: '#f8fafc' }}>
             {stationName}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94a3b8', fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94a3b8', fontSize: 14.5 }}>
           <span>Northern Regional Load Despatch Centre (NRLDC 400 kV Grid)</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
@@ -194,7 +194,7 @@ export default function HydroBeneficiaryWaterfall3D({
               key={r}
               type="button"
               className={`btn btn-xs ${filterRegion === r ? 'btn-primary' : 'btn-ghost'}`}
-              style={{ fontSize: 12, padding: '2px 8px' }}
+              style={{ fontSize: 13.5, padding: '2px 8px' }}
               onClick={() => setFilterRegion(r)}
             >
               {r}
@@ -234,15 +234,15 @@ export default function HydroBeneficiaryWaterfall3D({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <div>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: '#f8fafc' }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, color: '#f8fafc' }}>
                     {b.name}
                   </div>
-                  <div style={{ fontSize: 12.5, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 14, color: '#94a3b8' }}>
                     {b.state}
                   </div>
                 </div>
                 <span style={{
-                  fontSize: 12.5,
+                  fontSize: 14,
                   fontWeight: 700,
                   background: 'rgba(56, 189, 248, 0.15)',
                   color: '#38bdf8',
@@ -260,7 +260,7 @@ export default function HydroBeneficiaryWaterfall3D({
                 padding: '8px 10px',
                 borderRadius: 6,
                 marginTop: 10,
-                fontSize: 12.5,
+                fontSize: 14,
                 border: '1px solid rgba(255, 255, 255, 0.05)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -282,13 +282,13 @@ export default function HydroBeneficiaryWaterfall3D({
               </div>
 
               {/* Status Footer */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 13.5 }}>
                 <span style={{ color: 'var(--slate-500)' }}>{b.bill_no}</span>
                 <span style={{
                   padding: '1px 6px',
                   borderRadius: 4,
                   fontWeight: 600,
-                  fontSize: 11.5,
+                  fontSize: 13,
                   background: b.bill_status === 'ISSUED' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
                   color: b.bill_status === 'ISSUED' ? '#4ade80' : '#facc15',
                 }}>
@@ -317,10 +317,10 @@ export default function HydroBeneficiaryWaterfall3D({
           zIndex: 2,
         }}>
           <div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+            <span style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff' }}>
               Selected: {selectedDiscom.name} ({selectedDiscom.state})
             </span>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               Certified Proportion: <strong>{selectedDiscom.share_pct}%</strong> | Total Amount: <strong>{fmtCurrency(selectedDiscom.cap_charge + selectedDiscom.energy_charge)}</strong>
             </div>
           </div>

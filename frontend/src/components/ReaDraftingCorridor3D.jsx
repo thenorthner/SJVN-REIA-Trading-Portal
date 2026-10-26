@@ -179,14 +179,14 @@ export default function ReaDraftingCorridor3D({
             <Sparkles size={20} color="#ffffff" />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: '#93c5fd', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: '12.5px', fontWeight: 700, letterSpacing: '0.08em', color: '#93c5fd', textTransform: 'uppercase' }}>
               CERC Hydro Settlement Pipeline
             </div>
             <div style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span>REA Document-to-Draft-Bill Corridor</span>
               {mode === 'UPLOAD' && (
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: '12.5px',
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: '4px',
@@ -199,7 +199,7 @@ export default function ReaDraftingCorridor3D({
               )}
             </div>
             {fileName && (
-              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+              <div style={{ fontSize: '13.5px', color: '#94a3b8', marginTop: '2px' }}>
                 File: <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{fileName}</span>
               </div>
             )}
@@ -213,7 +213,7 @@ export default function ReaDraftingCorridor3D({
             gap: '6px',
             padding: '5px 12px',
             borderRadius: '20px',
-            fontSize: '12px',
+            fontSize: '13.5px',
             fontWeight: 700,
             background: running ? 'rgba(59, 130, 246, 0.2)' : result ? 'rgba(34, 197, 94, 0.2)' : error ? 'rgba(239, 68, 68, 0.2)' : 'rgba(148, 163, 184, 0.2)',
             color: running ? '#60a5fa' : result ? '#4ade80' : error ? '#fca5a5' : '#cbd5e1',
@@ -235,7 +235,7 @@ export default function ReaDraftingCorridor3D({
                 color: '#e2e8f0',
                 padding: '4px 10px',
                 borderRadius: '6px',
-                fontSize: '12px',
+                fontSize: '13.5px',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -260,7 +260,7 @@ export default function ReaDraftingCorridor3D({
           color: '#fca5a5',
         }}>
           <AlertCircle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: '13px' }}>
+          <div style={{ flex: 1, fontSize: '14.5px' }}>
             <div style={{ fontWeight: 700, color: '#f87171' }}>Processing Interrupted</div>
             <div>{error}</div>
           </div>
@@ -274,7 +274,7 @@ export default function ReaDraftingCorridor3D({
                 color: '#ffffff',
                 padding: '4px 10px',
                 borderRadius: '6px',
-                fontSize: '11px',
+                fontSize: '12.5px',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -304,10 +304,10 @@ export default function ReaDraftingCorridor3D({
               <Check size={16} color="#ffffff" strokeWidth={3} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, color: '#34d399', fontSize: '13px' }}>
+              <div style={{ fontWeight: 700, color: '#34d399', fontSize: '14.5px' }}>
                 REA Ingestion & Draft Generation Complete
               </div>
-              <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+              <div style={{ fontSize: '13.5px', color: '#cbd5e1' }}>
                 {billsCreated.length} Draft Bills Generated
                 {billsCreated.length > 0 && ` (${billsCreated.map(b => b.bill_no || b).join(', ')})`}
               </div>
@@ -323,7 +323,7 @@ export default function ReaDraftingCorridor3D({
                 color: '#ffffff',
                 padding: '6px 14px',
                 borderRadius: '6px',
-                fontSize: '12px',
+                fontSize: '13.5px',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -336,7 +336,7 @@ export default function ReaDraftingCorridor3D({
 
       {/* Dynamic Progress Indicator Bar */}
       <div style={{ marginBottom: '22px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#cbd5e1', marginBottom: '8px', fontWeight: 600 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px', color: '#cbd5e1', marginBottom: '8px', fontWeight: 600 }}>
           <span>Execution Progress ({progressPercent}%)</span>
           <span style={{ color: '#93c5fd' }}>
             {progressText || (result ? 'All 5 calculation and billing stages finalized' : `Stage ${currentStage} of 5 Active`)}
@@ -422,7 +422,7 @@ export default function ReaDraftingCorridor3D({
                 </div>
 
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: '12.5px',
                   fontWeight: 700,
                   color: isActive ? '#38bdf8' : isDone ? '#34d399' : 'var(--slate-500)',
                 }}>
@@ -432,7 +432,7 @@ export default function ReaDraftingCorridor3D({
 
               {/* Title & Desc */}
               <div style={{
-                fontSize: '13px',
+                fontSize: '14.5px',
                 fontWeight: 700,
                 color: isActive ? '#ffffff' : isDone ? '#e2e8f0' : '#94a3b8',
                 marginBottom: '4px',
@@ -442,7 +442,7 @@ export default function ReaDraftingCorridor3D({
               </div>
 
               <div style={{
-                fontSize: '11.5px',
+                fontSize: '13px',
                 color: isActive ? '#cbd5e1' : 'var(--slate-500)',
                 lineHeight: 1.35,
                 marginBottom: '8px',
@@ -452,7 +452,7 @@ export default function ReaDraftingCorridor3D({
 
               {/* Small Detail Tag */}
               <div style={{
-                fontSize: '10.5px',
+                fontSize: '12px',
                 color: isDone ? '#6ee7b7' : isActive ? '#93c5fd' : 'var(--slate-600)',
                 borderTop: '1px solid rgba(255, 255, 255, 0.06)',
                 paddingTop: '6px',
@@ -471,9 +471,9 @@ export default function ReaDraftingCorridor3D({
         borderRadius: '10px',
         padding: '12px 14px',
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-        fontSize: '12px',
+        fontSize: '13.5px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', color: '#94a3b8', fontSize: '11px', fontWeight: 600, letterSpacing: '0.05em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', color: '#94a3b8', fontSize: '12.5px', fontWeight: 600, letterSpacing: '0.05em' }}>
           <span>LIVE EXECUTION TELEMETRY LOG</span>
           <span>{running ? 'STREAMING ACTIVE' : result ? 'EXECUTION COMPLETED' : 'IDLE'}</span>
         </div>
@@ -481,7 +481,7 @@ export default function ReaDraftingCorridor3D({
           {logs.length > 0 ? (
             logs.map((log, i) => (
               <div key={i} style={{ color: i === 0 && running ? '#38bdf8' : i === 0 && result ? '#34d399' : '#94a3b8', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                <span style={{ color: '#38bdf8', fontSize: '10px' }}>&gt;</span>
+                <span style={{ color: '#38bdf8', fontSize: '11.5px' }}>&gt;</span>
                 <span>{log}</span>
               </div>
             ))

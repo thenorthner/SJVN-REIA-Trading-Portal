@@ -114,17 +114,17 @@ export default function StationRegulatory({ vertical = 'HYDRO' }) {
       >
         <Table
           columns={[
-            { key: 'title', header: 'Item', render: (i) => <span><strong>{i.title}</strong><div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{i.type_label}{i.petition_no ? ` · ${i.petition_no}` : ''}{i.control_period ? ` · ${i.control_period}` : ''}</div></span> },
+            { key: 'title', header: 'Item', render: (i) => <span><strong>{i.title}</strong><div style={{ fontSize: 14, color: 'var(--text-light)' }}>{i.type_label}{i.petition_no ? ` · ${i.petition_no}` : ''}{i.control_period ? ` · ${i.control_period}` : ''}</div></span> },
             { key: 'station', header: 'Station', render: (i) => i.station_name || 'All stations' },
             { key: 'status', header: 'Standing', render: (i) => (
               <span><Badge type={STATUS_TONE[i.status]}>{STATUS_LABEL[i.status]}</Badge>
-                {i.overdue && <div style={{ fontSize: 12.5, color: 'var(--red-deep)' }}>{-i.days_to_due} days past due</div>}
-                {i.due_soon && <div style={{ fontSize: 12.5, color: 'var(--amber-strong)' }}>Due in {i.days_to_due} days</div>}
-                {i.to_implement && <div style={{ fontSize: 12.5, color: 'var(--red-deep)' }}>Tariff not yet updated</div>}
+                {i.overdue && <div style={{ fontSize: 14, color: 'var(--red-deep)' }}>{-i.days_to_due} days past due</div>}
+                {i.due_soon && <div style={{ fontSize: 14, color: 'var(--amber-strong)' }}>Due in {i.days_to_due} days</div>}
+                {i.to_implement && <div style={{ fontSize: 14, color: 'var(--red-deep)' }}>Tariff not yet updated</div>}
               </span>
             ) },
             { key: 'dates', header: 'Dates', render: (i) => (
-              <span style={{ fontSize: 13 }}>
+              <span style={{ fontSize: 14.5 }}>
                 {i.due_date && <div>Due {fmtDate(i.due_date)}</div>}
                 {i.filed_on && <div>Filed {fmtDate(i.filed_on)}</div>}
                 {i.next_hearing && <div style={{ color: i.hearing_soon ? 'var(--amber-strong)' : undefined }}>Hearing {fmtDate(i.next_hearing)}</div>}
@@ -181,7 +181,7 @@ export default function StationRegulatory({ vertical = 'HYDRO' }) {
             </div>
             {PETITIONS.includes(form.values.item_type) && (
               <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
-                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13.5 }}>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 15 }}>
                   <input type="checkbox" checked={!!form.values.tariff_impact} onChange={set('tariff_impact')} /> The order changes the tariff
                 </label>
                 {form.values.tariff_impact && form.values.status === 'ORDER_ISSUED' && (

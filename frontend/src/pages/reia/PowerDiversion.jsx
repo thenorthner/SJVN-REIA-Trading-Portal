@@ -18,7 +18,8 @@ function Signed({ v }) {
 
 export default function PowerDiversion() {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  // Phase B.2: recording a diversion, its recovery and the deficit bill is the maker's.
+  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [summary, setSummary] = useState({});
@@ -206,9 +207,9 @@ export default function PowerDiversion() {
             <Field label="Sale Rate (₹/MWh)"><input required type="number" min="0.01" max="20000" step="0.01" value={form.sale_rate_per_mwh} onChange={(e) => setForm({ ...form, sale_rate_per_mwh: e.target.value })} /></Field>
             <Field label="Expenses (₹)"><input type="number" min="0" step="0.01" value={form.expenses} placeholder="energy + transmission + incidental" onChange={(e) => setForm({ ...form, expenses: e.target.value })} /></Field>
           </div>
-          <div className="callout" style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
+          <div className="callout" style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 14.5 }}>
             Sale: <strong>{fmtCurrency(salePreview)}</strong>{'  ·  '}Net Gain: <Signed v={netPreview} />
-            <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>Positive gain reduces the buyer's dues; a deficit is made good by the buyer.</div>
+            <div style={{ fontSize: 14.5, color: 'var(--text-light)', marginTop: 2 }}>Positive gain reduces the buyer's dues; a deficit is made good by the buyer.</div>
           </div>
           <Field label={form.reason === 'NON_REQUISITION' ? 'What shows it was not requisitioned (schedule / SLDC record)' : 'Notes'} required={form.reason === 'NON_REQUISITION'}><input value={form.notes} required={form.reason === 'NON_REQUISITION'} minLength={form.reason === 'NON_REQUISITION' ? 15 : undefined} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
           <div className="form-actions">

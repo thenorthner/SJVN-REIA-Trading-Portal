@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 // Deviation (DSM) charge slabs.
 //
@@ -89,7 +90,7 @@ export default function DsmSlabMaster() {
       });
       setEditing(null); load();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to save slab');
+      showAlert(err.response?.data?.error || err.message || 'Failed to save slab');
     }
   }
 
@@ -108,7 +109,7 @@ export default function DsmSlabMaster() {
       await api.dsmSlabs.create(body);
       setShowNew(false); setNewSlab(EMPTY_SLAB); load();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to create slab');
+      showAlert(err.response?.data?.error || err.message || 'Failed to create slab');
     }
   }
 
@@ -183,7 +184,7 @@ export default function DsmSlabMaster() {
           </Field>
           <button className="btn btn-secondary" type="submit">Price it</button>
           {previewResult && (
-            <div style={{ marginLeft: 8, fontSize: 14 }}>
+            <div style={{ marginLeft: 8, fontSize: 15.5 }}>
               {previewResult.basis === 'CERC_SLAB'
                 ? <span><strong>₹{fmtNumber(previewResult.amount, 0)}</strong> at {fmtNumber(previewResult.rate_paise_per_kwh, 2)} p/kWh · {previewResult.slab_name}</span>
                 : <span style={{ color: 'var(--warning, #b45309)' }}>{previewResult.warning || 'Nothing to charge — the block met its schedule'}</span>}
@@ -207,7 +208,7 @@ export default function DsmSlabMaster() {
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.slab_name || 'Enter rate'}>
         <form onSubmit={submitEdit}>
-          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 14 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 14 }}>
             Enter the rate from the notified CERC / SERC deviation settlement slab. Until this band is
             marked verified, deviations falling in it are recorded but left unpriced.
           </p>
@@ -225,7 +226,7 @@ export default function DsmSlabMaster() {
             <input className="input" value={edit.source_note} onChange={e => setEdit({ ...edit, source_note: e.target.value })}
               placeholder="e.g. CERC DSM Regulations notification reference" />
           </Field>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 15.5 }}>
             <input type="checkbox" checked={Number(edit.is_verified) === 1}
               onChange={e => setEdit({ ...edit, is_verified: e.target.checked ? 1 : 0 })} />
             Verified against the notification — allow this band to price bills
@@ -239,7 +240,7 @@ export default function DsmSlabMaster() {
 
       <Modal open={showNew} onClose={() => setShowNew(false)} title="New slab" width={640}>
         <form onSubmit={submitNew}>
-          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 14 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 14 }}>
             A band covers [from, to) — a frequency exactly on a boundary belongs to the band above it.
             Leave an end blank to leave that side open.
           </p>

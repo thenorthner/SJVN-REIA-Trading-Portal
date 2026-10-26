@@ -7,6 +7,9 @@ export const ROLE_GROUPS = {
   // Target #2 Phase B: the SJVN / IT administrators read every desk and write on none.
   REIA_ALL: ['SJVN_ADMIN', 'REIA_CHECKER', 'IT_SUPER_ADMIN', 'REIA_MAKER', 'REIA_APPROVER', 'FINANCE_USER', 'MANAGEMENT'],
   REIA_WRITE: ['REIA_CHECKER', 'REIA_MAKER'],
+  // Phase B.2: the maker prepares, the checker decides (see middleware/auth.js).
+  REIA_MAKE: ['REIA_MAKER'],
+  REIA_CHECK: ['REIA_CHECKER'],
   REIA_APPROVE: ['REIA_APPROVER', 'MANAGEMENT'],
   COMMERCIAL_ALL: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
   COMMERCIAL_WRITE: ['COMMERCIAL_ADMIN', 'COMMERCIAL'],
@@ -54,6 +57,8 @@ export const ROLE_GROUPS = {
   // Masters are governance (Target #2 Phase B): the administrators write them, the desks read them.
   MASTERS_WRITE: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'],
   MASTERS_READ: ['SJVN_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
+  // Publishing to the public /circulars page. Must stay in sync with CIRCULAR_ADMIN_ROLES in backend routes/circulars.js.
+  CIRCULARS_WRITE: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'TRADING_ADMIN', 'COMMERCIAL_ADMIN'],
 };
 
 export const isSellerRole = (role) => ROLE_GROUPS.SELLER_ALL.includes(role);
@@ -62,3 +67,21 @@ export const isCounterpartyRole = (role) => isSellerRole(role) || isBuyerRole(ro
 export const isTradingClientRole = (role) => ROLE_GROUPS.TRADING_CLIENT_ALL.includes(role);
 export const isCommercialRole = (role) => ['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role);
 export const isThermalRole = (role) => ['THERMAL_ADMIN', 'THERMAL_USER'].includes(role);
+
+// Who may open each protected area, mirroring the ProtectedRoute guards in App.jsx.
+// Longest prefix wins, so /trading/rtm is checked against the trading desk.
+const PATH_ROLES = [
+  ['/uploader/cea-excel', ROLE_GROUPS.TRADING_ALL],
+  ['/hydro-thermal', ROLE_GROUPS.HYDRO_THERMAL_ALL],
+  ['/thermal', ROLE_GROUPS.THERMAL_ALL],
+  ['/trading', ROLE_GROUPS.TRADING_ALL],
+  ['/reia', ROLE_GROUPS.REIA_ALL],
+  ['/seller', [...ROLE_GROUPS.SELLER_ALL, 'SJVN_ADMIN']],
+  ['/buyer', [...ROLE_GROUPS.BUYER_ALL, 'SJVN_ADMIN']],
+  ['/audit-logs', ROLE_GROUPS.AUDITOR],
+].sort((a, b) => b[0].length - a[0].length);
+
+export function canRoleOpenPath(role, path) {
+  const guard = PATH_ROLES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
+  return !guard || guard[1].includes(role);
+}

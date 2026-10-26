@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 // Relative contribution across deals, so the shape of the book is visible
 // without reading every number.
@@ -10,11 +11,11 @@ function ContributionBars({ rows }) {
     <div style={{ display: 'grid', gap: 8 }}>
       {rows.map(r => (
         <div key={r.bilateral_id} style={{ display: 'grid', gridTemplateColumns: '220px 1fr 120px', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.client}>{r.client}</span>
+          <span style={{ fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.client}>{r.client}</span>
           <div style={{ height: 14, background: 'var(--slate-100, var(--slate-100))', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ width: `${(r.contribution / max) * 100}%`, height: '100%', background: '#2563eb' }} />
           </div>
-          <span style={{ fontSize: 13, textAlign: 'right' }}>{fmtCurrency(r.contribution)}</span>
+          <span style={{ fontSize: 14.5, textAlign: 'right' }}>{fmtCurrency(r.contribution)}</span>
         </div>
       ))}
     </div>
@@ -37,7 +38,7 @@ export default function ContractPnl() {
       const [c, r] = await Promise.all([api.pnl.contracts(params), api.pnl.realised(params)]);
       setModelled(c); setRealised(r);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to load P&L');
+      showAlert(err.response?.data?.error || err.message || 'Failed to load P&L');
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ export default function ContractPnl() {
 
   const columns = [
     { key: 'client', label: 'Buyer' },
-    { key: 'counterparty', label: 'Seller', render: r => <span style={{ fontSize: 13.5 }}>{r.counterparty}</span> },
+    { key: 'counterparty', label: 'Seller', render: r => <span style={{ fontSize: 15 }}>{r.counterparty}</span> },
     {
       key: 'volume_basis',
       label: 'Volume from',
@@ -77,11 +78,11 @@ export default function ContractPnl() {
       <Card title="Period">
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>From</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>From</label>
             <input type="date" className="input" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>To</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>To</label>
             <input type="date" className="input" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} />
           </div>
           <button className="btn btn-ghost" onClick={() => setRange({ from: '', to: '' })}>Clear</button>
@@ -111,7 +112,7 @@ export default function ContractPnl() {
 
           <Card title="Per-deal detail">
             <Table columns={columns} rows={active} loading={loading} emptyMessage="No deals with volume in this period." />
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
               Volume is the buyer's own approved application energy where the day-wise schedule is held at contract level,
               so no single buyer is credited with the whole contract.
             </p>
@@ -142,7 +143,7 @@ export default function ContractPnl() {
                 </tr>
               </tbody>
             </table>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 12 }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 12 }}>
               TDS is shown separately because it is timing rather than cost — {fmtCurrency(realised.tds_withheld_by_buyer)} withheld
               by the buyer from SJVN, and {fmtCurrency(realised.tds_withheld_from_seller)} withheld by SJVN from the seller.
             </p>

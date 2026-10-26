@@ -6,6 +6,7 @@ import { PageHeader, Card, Badge, StatCard, Tabs, Tab, AlertPopup, fmtCurrency, 
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDateTime } from '../../datetime.js';
+import { ROLE_GROUPS } from '../../roles.js';
 
 // Every developer bill waiting to be verified, and what each one is waiting on.
 //
@@ -34,7 +35,9 @@ export default function VerificationQueue() {
   const [open, setOpen] = useState(null);
 
   const { user } = useAuth() || {};
-  const canWrite = ['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role);
+  // Phase B.2: the maker verifies a bill's checklist; sending it back is the checker's.
+  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+  const canSendBack = ROLE_GROUPS.REIA_CHECK.includes(user?.role);
   const [picked, setPicked] = useState([]);
   const [popup, setPopup] = useState(null);
   const [reload, setReload] = useState(0);
@@ -290,7 +293,7 @@ export default function VerificationQueue() {
                                   <p className="report-count">Verified by {r.verified_by} on {fmtDateTime(r.verified_at)}.</p>
                                 )}
                                 <Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(r.invoice_id)}`}>Open the bill to verify it</Link>
-                                {canWrite && OPEN_FOR_DESK.includes(r.status) && (r.failed_checks.length > 0) && (
+                                {canSendBack && OPEN_FOR_DESK.includes(r.status) && (r.failed_checks.length > 0) && (
                                   // V1: back to the developer with exactly what failed.
                                   <button type="button" className="btn btn-sm btn-danger" style={{ marginLeft: 8 }} onClick={() => sendBack(r)}>Send back to the developer</button>
                                 )}

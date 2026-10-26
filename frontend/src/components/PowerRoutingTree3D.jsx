@@ -111,11 +111,11 @@ export function PowerRoutingTree3D({
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h4 style={{ margin: 0, color: '#f8fafc', fontSize: 14, fontWeight: 700 }}>
+              <h4 style={{ margin: 0, color: '#f8fafc', fontSize: 15.5, fontWeight: 700 }}>
                 {isPpa ? 'Power Routing & Carve-Out Matrix' : 'Supplying PPA Sources & Allocation Split'}
               </h4>
               <span style={{
-                fontSize: 12.5,
+                fontSize: 14,
                 textTransform: 'uppercase',
                 background: tone.bg,
                 color: tone.c,
@@ -128,7 +128,7 @@ export function PowerRoutingTree3D({
                 {pos.label}
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               Contract: <strong style={{ color: '#38bdf8' }}>{contract?.contract_no}</strong> · Total Capacity: <strong style={{ color: '#10b981' }}>{fmtNumber(totalCapacity)} MW</strong>
             </div>
           </div>
@@ -153,7 +153,7 @@ export function PowerRoutingTree3D({
                 border: 'none',
                 padding: '5px 12px',
                 borderRadius: 6,
-                fontSize: 13,
+                fontSize: 14.5,
                 fontWeight: 600,
                 cursor: 'pointer',
                 display: 'flex',
@@ -173,7 +173,7 @@ export function PowerRoutingTree3D({
                 border: 'none',
                 padding: '5px 12px',
                 borderRadius: 6,
-                fontSize: 13,
+                fontSize: 14.5,
                 fontWeight: 600,
                 cursor: 'pointer',
                 display: 'flex',
@@ -299,7 +299,7 @@ function RoutingTreeCanvas({
         marginBottom: 20,
         paddingBottom: 12,
         borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
-        fontSize: 13.5,
+        fontSize: 15,
         flexWrap: 'wrap',
         gap: 12,
       }}>
@@ -316,7 +316,7 @@ function RoutingTreeCanvas({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            fontSize: 13,
+            fontSize: 14.5,
             color: tone.c,
             background: tone.bg,
             border: `1px solid ${tone.b}`,
@@ -354,7 +354,7 @@ function RoutingTreeCanvas({
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <span style={{
-                fontSize: 12.5,
+                fontSize: 14,
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
                 fontWeight: 700,
@@ -366,7 +366,7 @@ function RoutingTreeCanvas({
                 {isPpa ? '1. Power Generator (IPP)' : '1. Buying Utility (State DISCOM)'}
               </span>
               <span style={{
-                fontSize: 12.5,
+                fontSize: 14,
                 fontWeight: 700,
                 color: isPpa ? '#10b981' : '#38bdf8',
                 background: isPpa ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
@@ -377,10 +377,10 @@ function RoutingTreeCanvas({
               </span>
             </div>
 
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
               {isPpa ? (contract?.seller_name || 'Power Producer (IPP)') : (contract?.buyer_name || 'State Buying Utility')}
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginBottom: 12 }}>
               {contract?.contract_no}
             </div>
 
@@ -391,17 +391,17 @@ function RoutingTreeCanvas({
               border: '1px solid rgba(255, 255, 255, 0.05)',
               marginBottom: 8,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, color: '#94a3b8', marginBottom: 4 }}>
                 <span>{isPpa ? 'Contracted Capacity' : 'Contracted Demand'}</span>
-                <strong style={{ color: '#10b981', fontSize: 13 }}>{fmtNumber(totalCapacity)} MW</strong>
+                <strong style={{ color: '#10b981', fontSize: 14.5 }}>{fmtNumber(totalCapacity)} MW</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, color: '#94a3b8' }}>
                 <span>{isPpa ? 'Base PPA Tariff' : 'Off-Take PSA Tariff'}</span>
                 <strong style={{ color: '#f8fafc' }}>₹{baseTariff.toFixed(2)} / unit</strong>
               </div>
             </div>
 
-            <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>
+            <div style={{ fontSize: 14, color: 'var(--slate-500)' }}>
               Project: <strong>{contract?.project_type || 'Solar'}</strong> · {isPpa ? 'COD: ' : 'Tenure: '}<strong>{isPpa ? (contract?.cod_date || 'Not commissioned') : `${contract?.tenure_start || '—'} to ${contract?.tenure_end || '—'}`}</strong>
             </div>
           </div>
@@ -440,7 +440,7 @@ function RoutingTreeCanvas({
               border: '1px solid #1e293b',
               padding: '2px 6px',
               borderRadius: 6,
-              fontSize: 12.5,
+              fontSize: 14,
               color: '#38bdf8',
               fontWeight: 700,
               whiteSpace: 'nowrap',
@@ -448,7 +448,7 @@ function RoutingTreeCanvas({
               textAlign: 'center',
             }}>
               <div>{fmtNumber(totalCapacity)} MW</div>
-              <div style={{ color: '#10b981', fontSize: 12 }}>{isPpa ? 'PPA Pool' : 'PSA Demand'}</div>
+              <div style={{ color: '#10b981', fontSize: 13.5 }}>{isPpa ? 'PPA Pool' : 'PSA Demand'}</div>
             </div>
           </div>
 
@@ -464,7 +464,7 @@ function RoutingTreeCanvas({
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <span style={{
-                fontSize: 12.5,
+                fontSize: 14,
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
                 fontWeight: 800,
@@ -481,7 +481,7 @@ function RoutingTreeCanvas({
                 {isPpa ? '2. SJVN Allocator Hub' : '2. SJVN Pooling Hub'}
               </span>
               <span style={{
-                fontSize: 12.5,
+                fontSize: 14,
                 fontWeight: 700,
                 color: '#38bdf8',
                 background: 'rgba(56, 189, 248, 0.15)',
@@ -492,10 +492,10 @@ function RoutingTreeCanvas({
               </span>
             </div>
 
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc', marginBottom: 2 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 800, color: '#f8fafc', marginBottom: 2 }}>
               SJVN Limited (REIA)
             </div>
-            <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 10 }}>
+            <div style={{ fontSize: 14, color: '#94a3b8', marginBottom: 10 }}>
               Carve-Out & Trading Margin Engine
             </div>
 
@@ -506,17 +506,17 @@ function RoutingTreeCanvas({
               border: '1px solid rgba(56, 189, 248, 0.2)',
               marginBottom: 8,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8', marginBottom: 3 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8', marginBottom: 3 }}>
                 <span>Avg spread (PSA − PPA)</span>
                 <strong style={{ color: avgSpread != null && avgSpread < 0 ? 'var(--on-red)' : '#38bdf8' }}>{avgSpread == null ? '—' : `${avgSpread < 0 ? '−' : '+'}₹${Math.abs(avgSpread).toFixed(3)} / unit`}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94a3b8' }}>
                 <span>{isPpa ? 'Carve-Out Branches' : 'Source PPAs'}</span>
                 <strong style={{ color: '#10b981' }}>{liveCounterparties} {isPpa ? 'DISCOMs' : 'Generators'}</strong>
               </div>
             </div>
 
-            <div style={{ fontSize: 12.5, color: 'var(--slate-500)', textAlign: 'center' }}>
+            <div style={{ fontSize: 14, color: 'var(--slate-500)', textAlign: 'center' }}>
               Back-to-Back Pass-Through Routing
             </div>
           </div>
@@ -610,7 +610,7 @@ function RoutingTreeCanvas({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{
-                        fontSize: 12.5,
+                        fontSize: 14,
                         fontWeight: 800,
                         color: '#818cf8',
                         background: 'rgba(129, 140, 248, 0.15)',
@@ -619,12 +619,12 @@ function RoutingTreeCanvas({
                       }}>
                         {isPpa ? `Branch ${idx + 1}` : `Source ${idx + 1}`}
                       </span>
-                      <strong style={{ fontSize: 13, color: '#f8fafc' }}>
+                      <strong style={{ fontSize: 14.5, color: '#f8fafc' }}>
                         {isPpa ? (alloc.buyer_name || `DISCOM ${idx + 1}`) : (alloc.seller_name || `Generator ${idx + 1}`)}
                       </strong>
                     </div>
                     <span style={{
-                      fontSize: 12.5,
+                      fontSize: 14,
                       fontWeight: 700,
                       color: isPpa ? '#818cf8' : '#10b981',
                       background: isPpa ? 'rgba(129, 140, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)',
@@ -635,7 +635,7 @@ function RoutingTreeCanvas({
                     </span>
                   </div>
 
-                  <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, color: '#94a3b8', marginBottom: 8 }}>
                     {isPpa ? (alloc.psa_no || 'PSA Agreement') : (alloc.ppa_no || 'PPA Agreement')}
                   </div>
 
@@ -650,15 +650,15 @@ function RoutingTreeCanvas({
                         background: 'rgba(0, 0, 0, 0.3)',
                         padding: '6px 8px',
                         borderRadius: 6,
-                        fontSize: 13,
+                        fontSize: 14.5,
                         border: '1px solid rgba(255, 255, 255, 0.05)',
                       }}>
                         <div>
-                          <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Share: </span>
+                          <span style={{ color: '#94a3b8', fontSize: 14 }}>Share: </span>
                           <strong style={{ color: '#38bdf8' }}>{alloc.allocation_percent}% ({fmtNumber(allocatedShareMw)} MW)</strong>
                         </div>
                         <div>
-                          <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Tariff: </span>
+                          <span style={{ color: '#94a3b8', fontSize: 14 }}>Tariff: </span>
                           <strong style={{ color: sp != null && sp < 0 ? 'var(--on-red)' : '#10b981' }}>{Number.isFinite(nodeTariff) ? `₹${nodeTariff.toFixed(2)}` : '—'}{sp != null && sp < 0 ? ' · loss' : ''}</strong>
                         </div>
                       </div>
@@ -669,7 +669,7 @@ function RoutingTreeCanvas({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    fontSize: 12.5,
+                    fontSize: 14,
                     color: 'var(--slate-500)',
                     marginTop: 6,
                   }}>
@@ -705,11 +705,11 @@ function RoutingTreeCanvas({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #1e293b', paddingBottom: 8, flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: isLoss ? '#ef4444' : '#38bdf8' }} />
-                <strong style={{ color: '#f8fafc', fontSize: 14 }}>
+                <strong style={{ color: '#f8fafc', fontSize: 15.5 }}>
                   {isPpa ? `Carve-Out Deep Dive: ${alloc.buyer_name || 'Buyer DISCOM'}` : `Source Supply: ${alloc.seller_name || 'Generator IPP'}`} ({alloc.allocation_percent}% Allocation)
                 </strong>
                 {isLoss && (
-                  <span style={{ fontSize: 12, color: 'var(--on-red)', background: 'rgba(239, 68, 68, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                  <span style={{ fontSize: 13.5, color: 'var(--on-red)', background: 'rgba(239, 68, 68, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
                     Negative Spread Alert (PSA &lt; PPA Tariff)
                   </span>
                 )}
@@ -725,7 +725,7 @@ function RoutingTreeCanvas({
                       color: '#f87171',
                       borderRadius: 6,
                       padding: '4px 10px',
-                      fontSize: 12.5,
+                      fontSize: 14,
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
@@ -741,7 +741,7 @@ function RoutingTreeCanvas({
                     border: 'none',
                     color: '#94a3b8',
                     cursor: 'pointer',
-                    fontSize: 13,
+                    fontSize: 14.5,
                     fontWeight: 600,
                   }}
                 >
@@ -750,37 +750,37 @@ function RoutingTreeCanvas({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, fontSize: 13.5 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, fontSize: 15 }}>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>Allocated Capacity Share</div>
-                <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: 15, marginTop: 2 }}>
+                <div style={{ color: '#94a3b8', fontSize: 14.5 }}>Allocated Capacity Share</div>
+                <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: 16, marginTop: 2 }}>
                   {fmtNumber(allocatedShareMw)} MW
                 </div>
-                <div style={{ color: 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>{alloc.allocation_percent}% of {fmtNumber(totalCapacity)} MW {isPpa ? 'PPA Pool' : 'PSA Requirement'}</div>
+                <div style={{ color: 'var(--slate-500)', fontSize: 14, marginTop: 2 }}>{alloc.allocation_percent}% of {fmtNumber(totalCapacity)} MW {isPpa ? 'PPA Pool' : 'PSA Requirement'}</div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>Off-Take Tariff & Spread</div>
-                <div style={{ fontWeight: 700, color: isLoss ? 'var(--on-red)' : '#10b981', fontSize: 15, marginTop: 2 }}>
+                <div style={{ color: '#94a3b8', fontSize: 14.5 }}>Off-Take Tariff & Spread</div>
+                <div style={{ fontWeight: 700, color: isLoss ? 'var(--on-red)' : '#10b981', fontSize: 16, marginTop: 2 }}>
                   ₹{psaTariff.toFixed(2)} / kWh
                 </div>
-                <div style={{ color: isLoss ? '#f87171' : 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>
+                <div style={{ color: isLoss ? '#f87171' : 'var(--slate-500)', fontSize: 14, marginTop: 2 }}>
                   {isLoss ? `Deficit: -₹${Math.abs(marginSpread).toFixed(3)}/unit` : `Base ₹${ppaTariff.toFixed(2)} + Margin ₹${marginSpread.toFixed(3)}`}
                 </div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>{isPpa ? 'PSA Contract Number' : 'Source PPA Number'}</div>
+                <div style={{ color: '#94a3b8', fontSize: 14.5 }}>{isPpa ? 'PSA Contract Number' : 'Source PPA Number'}</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{(isPpa ? alloc.psa_no : alloc.ppa_no) || '—'}</div>
-                <div style={{ color: 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>Effective: {alloc.effective_from} → {alloc.effective_to || 'Active'}</div>
+                <div style={{ color: 'var(--slate-500)', fontSize: 14, marginTop: 2 }}>Effective: {alloc.effective_from} → {alloc.effective_to || 'Active'}</div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>{isLoss ? 'Monthly loss (est.)' : 'Monthly margin (est.)'}</div>
-                <div style={{ fontWeight: 700, color: isLoss ? 'var(--on-red)' : '#f59e0b', fontSize: 15, marginTop: 2 }}>
+                <div style={{ color: '#94a3b8', fontSize: 14.5 }}>{isLoss ? 'Monthly loss (est.)' : 'Monthly margin (est.)'}</div>
+                <div style={{ fontWeight: 700, color: isLoss ? 'var(--on-red)' : '#f59e0b', fontSize: 16, marginTop: 2 }}>
                   {isLoss ? '−' : ''}₹{Math.abs(allocatedShareMw * 1000 * marginSpread * 160).toLocaleString('en-IN', { maximumFractionDigits: 0 })} / mo
                 </div>
-                <div style={{ color: 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>{fmtNumber(allocatedShareMw)} MW × 160 h/month (≈22% CUF) × spread</div>
+                <div style={{ color: 'var(--slate-500)', fontSize: 14, marginTop: 2 }}>{fmtNumber(allocatedShareMw)} MW × 160 h/month (≈22% CUF) × spread</div>
               </div>
             </div>
           </div>

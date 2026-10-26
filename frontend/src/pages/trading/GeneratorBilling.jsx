@@ -3,13 +3,16 @@ import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { showAlert, askConfirm } from '../../lib/dialogs.js';
 
 export default function GeneratorBilling() {
   const { user } = useAuth();
   // Trading roles reach this page from the Power Trading sidebar, but raising
   // and settling a CERC generator bill stays with REIA — mirror the API guard
   // rather than showing buttons that come back 403.
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user.role);
+  // Phase B.2: the maker generates a bill; the checker moves its status on.
+  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user.role);
+  const canAdvance = ROLE_GROUPS.REIA_CHECK.includes(user.role);
   const [bills, setBills] = useState([]);
   const [entities, setEntities] = useState([]);
   const [showGenerate, setShowGenerate] = useState(false);
@@ -63,12 +66,12 @@ export default function GeneratorBilling() {
   async function handleAdvance(bill) {
     const next = NEXT_STATUS[bill.status];
     if (!next) return;
-    if (!window.confirm(`Move bill ${bill.bill_no} from ${bill.status} to ${next}?`)) return;
+    if (!(await askConfirm(`Move bill ${bill.bill_no} from ${bill.status} to ${next}?`))) return;
     try {
       await api.generatorBilling.updateStatus(bill.id, next);
       loadBills();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to update bill status.');
+      showAlert(err.response?.data?.error || 'Failed to update bill status.');
     }
   }
 
@@ -80,7 +83,7 @@ export default function GeneratorBilling() {
     { key: 'ecr', label: 'ECR (₹/kWh)', render: r => (
         <div>
           {Number(r.ecr).toFixed(4)}
-          <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>
+          <div style={{ fontSize: 14, color: 'var(--slate-500)' }}>
             {r.ecr_source === 'DERIVED_FROM_AFC' ? 'from AFC' : 'entered'}
           </div>
         </div>
@@ -90,8 +93,8 @@ export default function GeneratorBilling() {
     { key: 'total_amount', label: 'Total Amount (₹)', render: r => <span style={{fontWeight:'bold'}}>₹{fmtNumber(r.total_amount)}</span> },
     { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'PAID' ? 'success' : 'warning'}>{r.status}</Badge> },
     { key: 'actions', label: '', render: r => (
-        canWrite && NEXT_STATUS[r.status]
-          ? <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 13.5 }} onClick={() => handleAdvance(r)}>
+        canAdvance && NEXT_STATUS[r.status]
+          ? <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 15 }} onClick={() => handleAdvance(r)}>
               Mark {NEXT_STATUS[r.status]}
             </button>
           : null
@@ -115,7 +118,7 @@ export default function GeneratorBilling() {
         <Modal open={true} onClose={() => { setShowGenerate(false); setError(''); }} title="Generate Generator Bill" width={700}>
           <form onSubmit={handleGenerate} style={{ display: 'grid', gap: 15, gridTemplateColumns: '1fr 1fr' }}>
             {error && (
-              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
+              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 4, color: 'var(--red-deep)', fontSize: 14.5 }}>
                 {error}
               </div>
             )}
@@ -158,7 +161,7 @@ export default function GeneratorBilling() {
               {derivedEcr != null ? (
                 <div>
                   <input type="number" className="input" value={derivedEcr.toFixed(4)} readOnly disabled />
-                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
                     {(AFC_ENERGY_SHARE * 100).toFixed(0)}% of AFC ÷ design energy. Clear design energy to type a rate instead.
                   </div>
                 </div>

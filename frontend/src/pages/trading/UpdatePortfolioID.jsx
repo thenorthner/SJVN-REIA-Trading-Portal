@@ -127,7 +127,7 @@ export default function UpdatePortfolioID() {
           </div>
 
           {form.client_id && (
-            <p style={{ color: 'var(--text-light)', fontSize: 13, margin: '4px 0 12px' }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 14.5, margin: '4px 0 12px' }}>
               {current
                 ? <>On record: <strong>{current.portfolio_id}</strong> — {current.portfolio_name}, last updated {when(current.updated_at)}. Saving replaces it.</>
                 : <>No {labelOf(form.exchange)} portfolio is on record for this client yet.</>}
@@ -144,7 +144,7 @@ export default function UpdatePortfolioID() {
               </button>
             </div>
           ) : (
-            <p style={{ color: 'var(--text-light)', fontSize: 13 }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 14.5 }}>
               Read-only — changing a portfolio needs a trading desk role.
             </p>
           )}

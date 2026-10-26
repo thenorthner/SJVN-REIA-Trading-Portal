@@ -64,7 +64,7 @@ export function IntimationForm({ bill, modes, sections, maker, onDone, onCancel 
   return (
     <form className="cw-form" onSubmit={submit}>
       <strong>Tell SJVN about a payment</strong>
-      <p style={{ margin: '4px 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
+      <p style={{ margin: '4px 0 10px', fontSize: 15, color: 'var(--text-light)' }}>
         {fmtCurrency(bill.left)} is left on this bill{onWay > 0 ? `, of which ${fmtCurrency(onWay)} is already awaiting confirmation` : ''}.
         The bill is marked paid only after SJVN Finance matches this to its bank statement{maker ? ' — and, before that, your checker passes it on' : ''}.
       </p>
@@ -129,27 +129,27 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
         <div>
           <strong>{fmtCurrency(i.amount)}</strong>
           {sjvn && <> from <strong>{i.buyer_name}</strong></>} against <strong>{i.invoice_no}</strong> <span style={{ color: 'var(--text-light)' }}>({i.billing_period} · {i.contract_no})</span>
-          <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
+          <div style={{ fontSize: 15, color: 'var(--text-light)' }}>
             {i.mode} · UTR {i.reference} · paid {fmtDate(i.payment_date)}
             {i.tds_amount > 0 && <> · TDS {fmtCurrency(i.tds_amount)}{i.tds_section ? ` u/s ${i.tds_section}` : ''}</>}
             {i.other_deduction > 0 && <> · other deduction {fmtCurrency(i.other_deduction)} ({i.deduction_note})</>}
             {(i.tds_amount > 0 || i.other_deduction > 0) && <> · settles {fmtCurrency(i.gross_settled)}</>}
           </div>
-          <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
+          <div style={{ fontSize: 15, color: 'var(--text-light)' }}>
             Prepared by {i.prepared_by_name || '—'}, {fmtDateTime(i.created_at)}{i.approved_by_name && i.approved_by_name !== i.prepared_by_name ? ` · passed on by ${i.approved_by_name}` : ''}
             {i.remarks ? ` · “${i.remarks}”` : ''}
           </div>
           {sjvn && i.status === 'SUBMITTED' && (
-            <div style={{ fontSize: 13.5, marginTop: 2 }}>
+            <div style={{ fontSize: 15, marginTop: 2 }}>
               Left on the bill: <strong>{fmtCurrency(i.left_on_bill)}</strong> of {fmtCurrency(i.invoice_total)}
               {!!i.exceeds_balance && <span className="cw-flag amber" style={{ marginLeft: 6 }}>More than the bill has left</span>}
               {!i.proof && <span className="cw-flag amber" style={{ marginLeft: 6 }}>No bank advice attached</span>}
             </div>
           )}
-          {i.status === 'CONFIRMED' && <div style={{ fontSize: 13.5, color: 'var(--on-green-2)' }}>Confirmed by {i.decided_by_name} on {fmtDate(i.decided_at)}{i.confirmed_date !== i.payment_date ? ` with value date ${fmtDate(i.confirmed_date)}` : ''}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
-          {i.status === 'REJECTED' && <div style={{ fontSize: 13.5, color: 'var(--red-deep)' }}>Not confirmed by {i.decided_by_name}: {i.decision_note}</div>}
-          {i.status === 'RETURNED_BY_CHECKER' && <div style={{ fontSize: 13.5, color: 'var(--amber-strong)', fontWeight: 600 }}>Returned to maker by {i.decided_by_name || 'Checker'}{i.decided_at ? ` on ${fmtDate(i.decided_at)}` : ''}: {i.decision_note}</div>}
-          {i.status === 'WITHDRAWN' && <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>Withdrawn by {i.decided_by_name}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
+          {i.status === 'CONFIRMED' && <div style={{ fontSize: 15, color: 'var(--on-green-2)' }}>Confirmed by {i.decided_by_name} on {fmtDate(i.decided_at)}{i.confirmed_date !== i.payment_date ? ` with value date ${fmtDate(i.confirmed_date)}` : ''}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
+          {i.status === 'REJECTED' && <div style={{ fontSize: 15, color: 'var(--red-deep)' }}>Not confirmed by {i.decided_by_name}: {i.decision_note}</div>}
+          {i.status === 'RETURNED_BY_CHECKER' && <div style={{ fontSize: 15, color: 'var(--amber-strong)', fontWeight: 600 }}>Returned to maker by {i.decided_by_name || 'Checker'}{i.decided_at ? ` on ${fmtDate(i.decided_at)}` : ''}: {i.decision_note}</div>}
+          {i.status === 'WITHDRAWN' && <div style={{ fontSize: 15, color: 'var(--text-light)' }}>Withdrawn by {i.decided_by_name}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
           <IntimationBadge status={i.status} sjvn={sjvn} />
@@ -183,13 +183,13 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
       )}
       {mode === 'confirm' && (
         <form className="cw-form" onSubmit={(e) => { e.preventDefault(); run(() => api.buyerBills.confirm(i.id, { payment_date: valueDate, note, excess_to_advance: toAdvance || undefined })); }}>
-          <p style={{ margin: '0 0 8px', fontSize: 13.5 }}>Confirming records a payment of {fmtCurrency(i.amount)}{i.tds_amount + i.other_deduction > 0 ? ` (and ${fmtCurrency(i.tds_amount + i.other_deduction)} deducted)` : ''} on {i.invoice_no}. Surcharge is worked out to the value date.</p>
+          <p style={{ margin: '0 0 8px', fontSize: 15 }}>Confirming records a payment of {fmtCurrency(i.amount)}{i.tds_amount + i.other_deduction > 0 ? ` (and ${fmtCurrency(i.tds_amount + i.other_deduction)} deducted)` : ''} on {i.invoice_no}. Surcharge is worked out to the value date.</p>
           <div className="form-grid">
             <Field label="Value date in SJVN's bank" required><input required type="date" max={new Date().toISOString().slice(0, 10)} value={valueDate} onChange={(e) => setValueDate(e.target.value)} /></Field>
             <Field label={valueDate !== i.payment_date ? 'Why the date differs (required)' : 'Note'}><input value={note} required={valueDate !== i.payment_date} onChange={(e) => setNote(e.target.value)} placeholder="e.g. credited next working day" /></Field>
           </div>
           {!!i.exceeds_balance && (
-            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13.5, margin: '4px 0 8px' }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 15, margin: '4px 0 8px' }}>
               <input type="checkbox" checked={toAdvance} onChange={(e) => setToAdvance(e.target.checked)} />
               <span>This is more than the bill has left. Apply what the bill can take and hold the rest as the buyer&apos;s advance (Finance applies it to a later bill or refunds it).</span>
             </label>
@@ -221,10 +221,10 @@ export default function PaymentConfirmationDesk({ onChanged }) {
   useEffect(load, [load]);
 
   if (error && !d) return <div className="form-error">{error}</div>;
-  if (!d) return <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading…</div>;
+  if (!d) return <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>Loading…</div>;
   return (
     <div>
-      <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-light)' }}>
+      <p style={{ margin: '0 0 12px', fontSize: 14.5, color: 'var(--text-light)' }}>
         Payments buyers say they have made. Match each to the bank statement and confirm it — only then is it recorded on the bill.
         {!d.can_confirm && ' Finance confirms; you can read the queue.'}
       </p>

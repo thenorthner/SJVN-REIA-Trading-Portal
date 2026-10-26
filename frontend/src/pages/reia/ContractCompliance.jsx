@@ -38,6 +38,8 @@ export default function ContractCompliance({ embedded = false }) {
   const { user } = useAuth() || {};
   // The REIA desk acts here; the administrators read (Target #2 Phase B).
   const canDesk = ['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role);
+  // Asking a counterparty for papers is the maker's (Phase B.2); a hold is either's.
+  const canAsk = ['REIA_MAKER'].includes(user?.role);
   // Lifting a hold is the approver's: the REIA HOD or Management (ROLE_GROUPS.REIA_APPROVE).
   const canLift = ['MANAGEMENT', 'REIA_APPROVER'].includes(user?.role);
   const [holdForm, setHoldForm] = useState(null); // { contract, mode: HOLD|RELEASE|OVERRIDE, reason, valid_until }
@@ -215,7 +217,7 @@ export default function ContractCompliance({ embedded = false }) {
                                       <td style={{ width: 140 }}><Badge type={STATE_TONE[k.state]}>{STATE_LABEL[k.state]}</Badge></td>
                                       <td>
                                         {k.detail}
-                                        {canDesk && ['BREACH', 'DUE'].includes(k.state) && ['SECURITY', 'APPROVALS', 'TENURE'].includes(k.code) && (
+                                        {canAsk && ['BREACH', 'DUE'].includes(k.state) && ['SECURITY', 'APPROVALS', 'TENURE'].includes(k.code) && (
                                           // CC2: one click to ask the counterparty on the Document Desk.
                                           <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); act(() => api.contracts.complianceRequest(c.contract_id, k.code), 'Request sent to the counterparty'); }}>Ask the counterparty</button>
                                         )}

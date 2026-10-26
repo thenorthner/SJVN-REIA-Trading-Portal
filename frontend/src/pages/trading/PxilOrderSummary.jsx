@@ -190,7 +190,7 @@ export default function PxilOrderSummary() {
     color: '#fff',
     padding: '10px 12px',
     fontWeight: 600,
-    fontSize: 13,
+    fontSize: 14.5,
     cursor: 'pointer',
     userSelect: 'none',
     whiteSpace: 'nowrap',
@@ -230,7 +230,7 @@ export default function PxilOrderSummary() {
             <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportExcel}>Excel</button>
             <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportPdf}>PDF</button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
             Search:
             <input
               type="search"
@@ -243,15 +243,15 @@ export default function PxilOrderSummary() {
           </label>
         </div>
 
-        {error && <div role="alert" style={{ color: 'var(--red-deep)', fontSize: 13, marginBottom: 10 }}>{error}</div>}
-        {message && <div role="status" style={{ color: 'var(--on-green-2)', fontSize: 13, marginBottom: 10 }}>{message}</div>}
+        {error && <div role="alert" style={{ color: 'var(--red-deep)', fontSize: 14.5, marginBottom: 10 }}>{error}</div>}
+        {message && <div role="status" style={{ color: 'var(--on-green-2)', fontSize: 14.5, marginBottom: 10 }}>{message}</div>}
 
         {loading ? (
           <div className="page-loading">Loading PXIL orders…</div>
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                 <thead>
                   <tr>
                     {columns.map(([key, label]) => (
@@ -285,7 +285,7 @@ export default function PxilOrderSummary() {
                         <span style={{ color: 'var(--on-blue)', fontWeight: 500 }}>{r.reference_no}</span>
                       </td>
                       <td style={{ padding: '10px 12px' }}>{r.product_code}</td>
-                      <td style={{ padding: '10px 12px', fontSize: 13.5 }}>{r.contract_id || '—'}</td>
+                      <td style={{ padding: '10px 12px', fontSize: 15 }}>{r.contract_id || '—'}</td>
                       <td style={{ padding: '10px 12px' }}>{r.quantity}</td>
                       <td style={{ padding: '10px 12px' }}>{r.price}</td>
                       <td style={{ padding: '10px 12px' }}>{fmtDate(r.delivery_date_from)}</td>
@@ -294,7 +294,7 @@ export default function PxilOrderSummary() {
                       <td style={{ padding: '10px 12px' }}>{fmtTime(r.to_time)}</td>
                       <td style={{ padding: '10px 12px' }}>
                         {r.status === 'BID_PLACED' ? (
-                          <div style={{ color: 'var(--on-green-2)', fontSize: 13.5, fontWeight: 600 }}>
+                          <div style={{ color: 'var(--on-green-2)', fontSize: 15, fontWeight: 600 }}>
                             Bid Placed
                             {Array.isArray(r.bid_ids) && r.bid_ids.length > 0 && (
                               <div style={{ fontWeight: 400, color: 'var(--slate-600)' }}>{r.bid_ids.length} bid{r.bid_ids.length > 1 ? 's' : ''} linked</div>
@@ -317,7 +317,7 @@ export default function PxilOrderSummary() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
+            <div style={{ marginTop: 12, fontSize: 15, color: 'var(--slate-500)' }}>
               Showing 1 to {filtered.length} of {filtered.length} entries.
             </div>
           </>

@@ -64,7 +64,7 @@ export default function RecOrderReport() {
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>REC Order Report</h1>
-        <div style={{ display: 'flex', gap: 14, fontSize: 13 }}>
+        <div style={{ display: 'flex', gap: 14, fontSize: 14.5 }}>
           <Link to="/trading/rec" style={{ color: 'var(--on-blue)' }}>← REC Order</Link>
           <Link to="/trading/rec/bid-entry" style={{ color: 'var(--on-blue)' }}>Bid Entry →</Link>
         </div>
@@ -77,11 +77,11 @@ export default function RecOrderReport() {
       <Card>
         <form onSubmit={search} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>From Date</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>From Date</label>
             <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>To Date</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>To Date</label>
             <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Searching…' : 'Search'}</button>
@@ -93,9 +93,9 @@ export default function RecOrderReport() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 16 }}>
         {cards.map((c) => (
           <div key={c.label} style={{ background: 'var(--t-blue-100)', borderRadius: 6, padding: '16px 14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 13.5, color: 'var(--on-blue)', fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
+            <div style={{ fontSize: 15, color: 'var(--on-blue)', fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
             <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--slate-900)' }}>{c.value}</div>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-700)', marginTop: 4 }}>{c.unit}</div>
+            <div style={{ fontSize: 15, color: 'var(--slate-700)', marginTop: 4 }}>{c.unit}</div>
           </div>
         ))}
       </div>
@@ -118,11 +118,11 @@ export default function RecOrderReport() {
               background: selected === t.trade_date ? '#101a2e' : 'var(--t-blue-100)',
               color: selected === t.trade_date ? '#fff' : 'var(--slate-900)',
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: 15.5,
             }}
           >
             {formatTradeDate(t.trade_date)}
-            <span style={{ float: 'right', fontWeight: 500, opacity: 0.85, fontSize: 13.5 }}>
+            <span style={{ float: 'right', fontWeight: 500, opacity: 0.85, fontSize: 15 }}>
               {fmtNumber(t.total_recs_sold, 0)} RECs · ₹{fmtNumber(t.sale_value, 0)}
             </span>
           </button>
@@ -131,9 +131,9 @@ export default function RecOrderReport() {
 
       {selectedBlock && (
         <Card style={{ marginTop: 16 }}>
-          <strong style={{ fontSize: 14 }}>Orders on {formatTradeDate(selected)}</strong>
+          <strong style={{ fontSize: 15.5 }}>Orders on {formatTradeDate(selected)}</strong>
           <div style={{ overflowX: 'auto', marginTop: 10 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
               <thead>
                 <tr style={{ background: 'var(--slate-100)' }}>
                   {['Order', 'Buyer', 'Invoice', 'RECs Sold', 'Discovered ₹', 'Obligation', 'Net Revenue', 'Total Amt'].map((h) => (

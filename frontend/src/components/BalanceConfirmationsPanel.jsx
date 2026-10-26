@@ -30,7 +30,7 @@ export default function BalanceConfirmationsPanel({ canWrite }) {
     <Card title="Annual balance confirmation">
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <select value={fy} onChange={(e) => setFy(e.target.value)} aria-label="Financial year">{years.map((y) => <option key={y} value={y}>FY {y} (as on 31 Mar {Number(y.slice(0, 4)) + 1})</option>)}</select>
-        {data && <span style={{ fontSize: 13 }}>{data.totals.issued} issued · {data.totals.confirmed} confirmed · {data.totals.disputed} disputed · {data.totals.awaiting} awaiting</span>}
+        {data && <span style={{ fontSize: 14.5 }}>{data.totals.issued} issued · {data.totals.confirmed} confirmed · {data.totals.disputed} disputed · {data.totals.awaiting} awaiting</span>}
         {canWrite && <button type="button" className="btn btn-primary btn-sm" onClick={() => setIssue({ entity_id: '' })}>Issue confirmation letter</button>}
       </div>
       {!data ? <p>Loading…</p> : data.rows.length === 0 ? <p style={{ margin: 0 }}>No balance confirmation issued for FY {fy} yet.</p> : (
@@ -40,15 +40,15 @@ export default function BalanceConfirmationsPanel({ canWrite }) {
             <tbody>
               {data.rows.map((b) => (
                 <tr key={b.id}>
-                  <td>{b.confirmation_no}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>issued {fmtDate(b.issued_at)}</div></td>
-                  <td>{b.entity_name}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{b.party_side === 'BUYER' ? 'Buyer' : 'Seller'}</div></td>
+                  <td>{b.confirmation_no}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>issued {fmtDate(b.issued_at)}</div></td>
+                  <td>{b.entity_name}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{b.party_side === 'BUYER' ? 'Buyer' : 'Seller'}</div></td>
                   <td>{fmtCurrency(b.opening_balance)}</td>
                   <td>{fmtCurrency(b.billed)}</td>
                   <td>{fmtCurrency(b.settled)}</td>
                   <td><strong>{fmtCurrency(b.closing_balance)}</strong></td>
-                  <td>{b.confirmed_balance == null ? '—' : <>{fmtCurrency(b.confirmed_balance)}{b.difference ? <div style={{ fontSize: 12, color: 'var(--red-strong, #b91c1c)' }}>diff {fmtCurrency(b.difference)}</div> : null}</>}</td>
+                  <td>{b.confirmed_balance == null ? '—' : <>{fmtCurrency(b.confirmed_balance)}{b.difference ? <div style={{ fontSize: 13.5, color: 'var(--red-strong, #b91c1c)' }}>diff {fmtCurrency(b.difference)}</div> : null}</>}</td>
                   <td><Badge status={b.status === 'CONFIRMED' ? 'ACTIVE' : b.status === 'DISPUTED' ? 'DISPUTED' : 'PENDING'} label={b.status === 'ISSUED' ? 'Awaiting reply' : b.status === 'CONFIRMED' ? 'Confirmed' : 'Disputed'} />
-                    {b.remarks && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{b.remarks}</div>}</td>
+                    {b.remarks && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{b.remarks}</div>}</td>
                   <td>
                     <div className="cell-actions">
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => api.balanceConfirmations.letterPdf(b.id).then((blob) => save(blob, `balance-confirmation-${b.confirmation_no.replaceAll('/', '-')}.pdf`)).catch(err('Letter not ready'))}>Letter PDF</button>
@@ -79,7 +79,7 @@ export default function BalanceConfirmationsPanel({ canWrite }) {
             if (!issue.entity_id) { setPopup({ tone: 'error', title: 'Choose the counterparty' }); return; }
             api.balanceConfirmations.issue({ entity_id: issue.entity_id, financial_year: fy }).then(() => { setIssue(null); load(); }).catch(err('Letter not issued'));
           }}>
-            <p style={{ fontSize: 13, marginTop: 0 }}>The figures are taken from the counterparty ledger as on 31 March and frozen in the letter. A letter still awaiting a reply can be issued again with fresh figures.</p>
+            <p style={{ fontSize: 14.5, marginTop: 0 }}>The figures are taken from the counterparty ledger as on 31 March and frozen in the letter. A letter still awaiting a reply can be issued again with fresh figures.</p>
             <Field label="Counterparty" required>
               <select value={issue.entity_id} onChange={(e) => setIssue({ entity_id: e.target.value })}>
                 <option value="">Choose…</option>

@@ -4,7 +4,7 @@ import PublicShell from './PublicShell.jsx';
 import { useGigw } from '../../gigw/GigwContext.jsx';
 import { useSiteInfo } from '../../gigw/siteInfo.js';
 import { fmtDate } from '../../gigw/GigwFooter.jsx';
-import { POLICIES, POLICY_LINKS, HELP_LINKS, SCREEN_READERS, CONTACT_ROLES } from '../../gigw/policyContent.js';
+import { POLICIES, POLICY_LINKS, HELP_LINKS, SCREEN_READERS, CONTACT_ROLES, RELATED_LINKS } from '../../gigw/policyContent.js';
 import { openCookiePreferences } from '../../gigw/CookieConsent.jsx';
 
 const POLICY_DESCS = {
@@ -73,22 +73,23 @@ export default function PolicyPage({ slug }) {
             {s.type === 'screen-readers' && <ScreenReaderTable lang={lang} />}
             {s.list && <ul>{s.list.map((x, j) => <li key={j}>{L(x)}</li>)}</ul>}
             {s.p && s.p.map((x, j) => <p key={j}>{L(x)}</p>)}
+            {s.links && <ExternalList links={s.links === 'RELATED' ? RELATED_LINKS : s.links} lang={lang} />}
           </section>
         ))}
 
         {slug === 'cookie-policy' && (
           <div style={{ marginTop: '32px', padding: '18px 20px', background: 'var(--surface-raised, rgba(2, 132, 199, 0.05))', borderRadius: '8px', border: '1px solid var(--border)' }}>
             <h3 style={{ margin: '0 0 6px', fontSize: '16px' }}>{t('pub.policy.manageCookies')}</h3>
-            <p style={{ margin: '0 0 14px', fontSize: '13.5px', color: 'var(--text-muted)' }}>
+            <p style={{ margin: '0 0 14px', fontSize: '15px', color: 'var(--text-muted)' }}>
               {t('pub.policy.cookieConsent')}
             </p>
             <button
               type="button"
               className="btn btn-primary"
               onClick={openCookiePreferences}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 16px', fontWeight: 600, fontSize: '13.5px' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 16px', fontWeight: 600, fontSize: '15px' }}
             >
-              🍪 {t('cookie.manage')}
+              {t('cookie.manage')}
             </button>
           </div>
         )}
@@ -97,7 +98,25 @@ export default function PolicyPage({ slug }) {
   );
 }
 
+/** Outbound links: the address is shown, and the new tab is announced. */
+function ExternalList({ links, lang }) {
+  const { t } = useGigw();
+  return (
+    <ul className="gigw-related-list">
+      {links.map((l) => (
+        <li key={l.href}>
+          <a href={l.href} target="_blank" rel="noopener noreferrer">
+            {l[lang] ?? l.en}<span className="sr-only"> {t('ext.newTab')}</span>
+          </a>
+          <span className="gigw-related-host">{new URL(l.href).host.replace(/^www\./, '')}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Contacts({ roles, info, lang }) {
+  const { t } = useGigw();
   const contacts = info?.contacts || {};
   return (
     <div className="gigw-contacts">
@@ -122,6 +141,7 @@ function Contacts({ roles, info, lang }) {
 }
 
 function ScreenReaderTable({ lang }) {
+  const { t } = useGigw();
   return (
     <div className="table-wrap">
       <table className="data-table">
@@ -172,22 +192,24 @@ export function Sitemap() {
         <div className="sitemap-grid">
           {/* Section 1: Sovereign Portals & Core Gateway */}
           <div className="sitemap-card">
-            <h2>🏛️ {t('pub.sitemap.core')}</h2>
+            <h2>{t('pub.sitemap.core')}</h2>
             <ul>
               <li>
-                <Link to="/">🏠 {t('page.home')}</Link>
+                <Link to="/">{t('page.home')}</Link>
                 <span className="sitemap-desc">{t('pub.sitemap.coreHome')}</span>
               </li>
               <li>
-                <Link to="/login">🔐 {t('page.login')}</Link>
+                <Link to="/login">{t('page.login')}</Link>
                 <span className="sitemap-desc">{t('pub.sitemap.coreLogin')}</span>
               </li>
+              <li><Link to="/about-us">{t('page.about')}</Link></li>
+              <li><Link to="/circulars">{t('page.circulars')}</Link></li>
             </ul>
           </div>
 
           {/* Section 2: Statutory Website Policies */}
           <div className="sitemap-card">
-            <h2>📜 {t('footer.policies')}</h2>
+            <h2>{t('footer.policies')}</h2>
             <ul>
               {POLICY_LINKS.map((l) => (
                 <li key={l.to}>
@@ -200,7 +222,7 @@ export function Sitemap() {
 
           {/* Section 3: Help, Citizen Support & Governance */}
           <div className="sitemap-card">
-            <h2>🤝 {t('footer.help')}</h2>
+            <h2>{t('footer.help')}</h2>
             <ul>
               {HELP_LINKS.map((l) => (
                 <li key={l.to}>
@@ -213,9 +235,9 @@ export function Sitemap() {
                   type="button"
                   className="gigw-linkbtn"
                   onClick={openCookiePreferences}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', fontWeight: 500, fontSize: '13.5px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', fontWeight: 500, fontSize: '15px' }}
                 >
-                  🍪 {t('cookie.manage')} <span className="sitemap-badge">{t('pub.sitemap.interactive')}</span>
+                  {t('cookie.manage')} <span className="sitemap-badge">{t('pub.sitemap.interactive')}</span>
                 </button>
                 <span className="sitemap-desc">{t('pub.sitemap.cookieDesc')}</span>
               </li>
@@ -224,32 +246,32 @@ export function Sitemap() {
 
           {/* Section 4: Enterprise Operating Desks */}
           <div className="sitemap-card">
-            <h2>⚡ {t('pub.sitemap.desks')}</h2>
+            <h2>{t('pub.sitemap.desks')}</h2>
             <ul>
               <li>
                 <Link to="/reia">
-                  ☀️ {t('home.reia.title')}
+                  {t('home.reia.title')}
                   <span className="sitemap-badge">{t('pub.sitemap.restricted')}</span>
                 </Link>
                 <span className="sitemap-desc">{t('home.reia.body')}</span>
               </li>
               <li>
                 <Link to="/trading">
-                  📈 {t('home.trading.title')}
+                  {t('home.trading.title')}
                   <span className="sitemap-badge">{t('pub.sitemap.restricted')}</span>
                 </Link>
                 <span className="sitemap-desc">{t('home.trading.body')}</span>
               </li>
               <li>
                 <Link to="/hydro-thermal">
-                  🌊 {t('home.hydro.title')}
+                  {t('home.hydro.title')}
                   <span className="sitemap-badge">{t('pub.sitemap.restricted')}</span>
                 </Link>
                 <span className="sitemap-desc">{t('home.hydro.body')}</span>
               </li>
               <li>
                 <Link to="/thermal">
-                  🔥 {t('home.thermal.title')}
+                  {t('home.thermal.title')}
                   <span className="sitemap-badge">{t('pub.sitemap.restricted')}</span>
                 </Link>
                 <span className="sitemap-desc">{t('home.thermal.body')}</span>

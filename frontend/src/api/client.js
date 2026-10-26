@@ -64,6 +64,15 @@ export const api = {
     changePassword: (current_password, new_password) =>
       p('/auth/change-password', { current_password, new_password }),
   },
+  // Public circulars & statutory disclosures shown on the portal's /circulars page.
+  circulars: {
+    list: () => g('/circulars/admin'),
+    create: (formData) => client.post('/circulars/admin', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+    update: (id, formData) => client.put(`/circulars/admin/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+    togglePin: (id) => p(`/circulars/admin/${id}/pin`),
+    toggleActive: (id) => p(`/circulars/admin/${id}/toggle-active`),
+    remove: (id) => del(`/circulars/admin/${id}`),
+  },
   // Target #2 Phase C: which REIA projects each maker / checker / approver works on.
   // Target #2 Phase D: additional charge and break-glass.
   delegations: {
@@ -94,6 +103,8 @@ export const api = {
     allRequests: (params) => g('/privacy/admin/requests', params),
     updateRequest: (id, body) => patch(`/privacy/admin/requests/${id}`, body),
     declarations: (params) => g('/privacy/admin/declarations', params),
+    feedback: (params) => g('/privacy/admin/feedback', params),
+    updateFeedback: (id, body) => patch(`/privacy/admin/feedback/${id}`, body),
   },
   entities: {
     setOwnStation: (id, body) => p(`/entities/${id}/own-station`, body),
@@ -630,9 +641,12 @@ export const api = {
     updateDocumentType: (id, body) => put(`/masters/document-types/${id}`, body),
     lookups: (params) => g('/masters/lookups', params),
     createLookup: (body) => p('/masters/lookups', body),
-    updateLookup: (id, body) => put(`/masters/lookups/${id}`, body),
     projects: () => g('/masters/projects'),
     resolvedBilling: () => g('/masters/resolved-billing'),
+    generationAssets: (params) => g('/masters/generation-assets', params),
+    createGenerationAsset: (body) => p('/masters/generation-assets', body),
+    updateGenerationAsset: (id, body) => put(`/masters/generation-assets/${id}`, body),
+    deleteGenerationAsset: (id) => del(`/masters/generation-assets/${id}`),
   },
   preTrade: {
     availabilities: (params) => g('/pre-trade/availabilities', params),

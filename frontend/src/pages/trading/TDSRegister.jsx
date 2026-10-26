@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const SECTIONS = ['194C', '194Q', '194J', 'NONE'];
 const EMPTY_ENTRY = { vendor_name: '', section: '', rate: '', taxable_amount: '', reference_type: 'OA_APPLICATION', reference_no: '', period: '', deducted_date: '', note: '' };
@@ -37,7 +38,7 @@ export default function TDSRegister() {
       ]);
       setEntries(list); setVendors(v); setPending(p); setSummary(s); setPanGaps(pan);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to load TDS register');
+      showAlert(err.response?.data?.error || err.message || 'Failed to load TDS register');
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export default function TDSRegister() {
       await api.tds.record(body);
       setShowRecord(false); setEntry(EMPTY_ENTRY); load();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to record deduction');
+      showAlert(err.response?.data?.error || err.message || 'Failed to record deduction');
     }
   }
 
@@ -64,7 +65,7 @@ export default function TDSRegister() {
       await api.tds.challan(challanFor.id, challan);
       setChallanFor(null); setChallan(EMPTY_CHALLAN); load();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to record challan');
+      showAlert(err.response?.data?.error || err.message || 'Failed to record challan');
     }
   }
 
@@ -156,7 +157,7 @@ export default function TDSRegister() {
 
       {panGaps && (
         <Card title={`Section 194Q PAN compliance — ${panGaps.with_pan} of ${panGaps.buyers} buyer(s) on file`}>
-          <p style={{ fontSize: 13, color: 'var(--slate-600)', marginBottom: 12 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginBottom: 12 }}>
             194Q applies to the energy SJVN sells. Without the buyer's PAN the deduction falls under 206AA at 5%
             instead of 0.1% — a fifty-fold difference, so this is worth closing before the next bill is raised.
           </p>
@@ -191,7 +192,7 @@ export default function TDSRegister() {
               {vendors.map(v => <option key={v.id} value={v.name}>{v.name} — {v.pan}</option>)}
             </select>
           </Field>
-          <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '6px 0 14px' }}>
+          <p style={{ fontSize: 15, color: 'var(--slate-500)', margin: '6px 0 14px' }}>
             The vendor's PAN and default section fill in automatically. Override the section or rate only where the payment is taxed differently.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
@@ -234,7 +235,7 @@ export default function TDSRegister() {
       <Modal open={!!challanFor} onClose={() => setChallanFor(null)} title="Record challan">
         {challanFor && (
           <form onSubmit={submitChallan}>
-            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 14 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 14 }}>
               {fmtCurrency(challanFor.tds_amount)} withheld from {challanFor.vendor_name} under {challanFor.section}.
               Recording the challan marks it deposited.
             </p>

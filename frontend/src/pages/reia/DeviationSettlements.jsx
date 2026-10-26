@@ -46,7 +46,7 @@ function SignedAmount({ v }) {
  * Superseded an official row whose statement NRPC has since reissued.
  */
 function SourceBadge({ row }) {
-  const base = { fontSize: 13, fontWeight: 700, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' };
+  const base = { fontSize: 14.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' };
   if (row.status === 'DISPATCHED') {
     return (
       <span style={{ ...base, background: 'var(--blue-bg)', color: 'var(--blue)' }} title="A supplementary bill has been raised from this row">
@@ -81,12 +81,14 @@ function SourceBadge({ row }) {
 // Which stations a desk's DSM screen shows. REIA's screen shows every station,
 // as it always has; the Hydro and Thermal desks see their own.
 const VERTICAL_TYPES = { HYDRO: ['Hydro', 'PSP'], THERMAL: ['Thermal'] };
-const VERTICAL_WRITE = { REIA: ROLE_GROUPS.REIA_WRITE, HYDRO: ROLE_GROUPS.HYDRO_THERMAL_WRITE, THERMAL: ROLE_GROUPS.THERMAL_WRITE };
+// Phase B.2: on the REIA desk the maker raises, edits and dispatches a deviation
+// bill; the checker signs the supplementary invoice dispatching drafts.
+const VERTICAL_WRITE = { REIA: ROLE_GROUPS.REIA_MAKE, HYDRO: ROLE_GROUPS.HYDRO_THERMAL_WRITE, THERMAL: ROLE_GROUPS.THERMAL_WRITE };
 
 export default function DeviationSettlements({ vertical = 'REIA' }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const canWrite = (VERTICAL_WRITE[vertical] || ROLE_GROUPS.REIA_WRITE).includes(user?.role);
+  const canWrite = (VERTICAL_WRITE[vertical] || ROLE_GROUPS.REIA_MAKE).includes(user?.role);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [summary, setSummary] = useState({});
@@ -330,7 +332,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             <button
               type="button"
               className="btn btn-ghost"
-              style={{ padding: 0, fontSize: 13, textAlign: 'left', color: 'var(--primary)', fontWeight: 600 }}
+              style={{ padding: 0, fontSize: 14.5, textAlign: 'left', color: 'var(--primary)', fontWeight: 600 }}
               onClick={(e) => { e.stopPropagation(); navigate(r.invoice_id ? `/reia/invoices?id=${r.invoice_id}` : '/reia/invoices'); }}
               title={r.invoice_status ? `Invoice ${r.invoice_status}` : 'Open Invoices'}
             >
@@ -371,7 +373,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             {/* An estimate is priced off a rate, which is not how NRPC settles.
                 The server refuses to bill one; saying so here saves the trip. */}
             {!billed && !official && (
-              <span style={{ fontSize: 13, color: 'var(--text-light)', alignSelf: 'center' }} title="Import the NRPC statement for this week and raise the bill from that.">
+              <span style={{ fontSize: 14.5, color: 'var(--text-light)', alignSelf: 'center' }} title="Import the NRPC statement for this week and raise the bill from that.">
                 Estimate — not billable
               </span>
             )}
@@ -461,7 +463,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       </div>
 
       {filters.status && (
-        <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
+        <p style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--text-light)' }}>
           The cards count every week that is not cancelled, for the contract and month chosen. The Status filter narrows the table only.
         </p>
       )}
@@ -495,7 +497,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       >
         {!uploadResult ? (
           <form onSubmit={submitUpload}>
-            <p style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 0 }}>
+            <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 0 }}>
               NRPC publishes one statement a week covering every entity in the Northern Region.
               Upload it whole — every entity and every day is imported. SJVN&apos;s stations are
               then raised from it, a week at a time, with “Raise from NRPC statement”.
@@ -512,7 +514,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             </Field>
 
 
-            <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 8 }}>
+            <div style={{ fontSize: 15, color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 8 }}>
               Each entity&apos;s daily rows are added up and checked against the total the
               statement prints for it. A statement that does not reconcile against itself is
               refused rather than stored, so a half-read week never sits here looking like data.
@@ -531,10 +533,10 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
               padding: '14px 16px', borderRadius: 8, marginBottom: 14,
               background: 'var(--green-bg)', borderLeft: '3px solid var(--green)',
             }}>
-              <div style={{ fontWeight: 700, color: 'var(--green)', fontSize: 14 }}>
+              <div style={{ fontWeight: 700, color: 'var(--green)', fontSize: 15.5 }}>
                 Week {uploadResult.week_no} of {uploadResult.financial_year} imported
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 4, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 14.5, color: 'var(--text)', marginTop: 4, lineHeight: 1.6 }}>
                 {uploadResult.week_start} to {uploadResult.week_end} ·{' '}
                 {uploadResult.entities} entities · {uploadResult.days} daily rows
                 {uploadResult.superseded?.length
@@ -547,7 +549,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
               <div style={{
                 padding: '12px 16px', borderRadius: 8, marginBottom: 14,
                 background: 'var(--amber-bg)', borderLeft: '3px solid var(--amber)',
-                fontSize: 13, lineHeight: 1.6,
+                fontSize: 14.5, lineHeight: 1.6,
               }}>
                 <div style={{ fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>
                   Noted while reading it
@@ -557,13 +559,13 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             )}
 
             {!uploadResult.file_stored && (
-              <div style={{ fontSize: 13.5, color: 'var(--amber)', marginBottom: 12 }}>
+              <div style={{ fontSize: 15, color: 'var(--amber)', marginBottom: 12 }}>
                 The figures are stored, but the PDF itself could not be kept — &ldquo;View
                 source&rdquo; will not open for this week.
               </div>
             )}
 
-            <p style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)' }}>
               The statement is in. Nothing has been billed: use “Raise from NRPC statement” to
               record a station&apos;s week from it, review the figure, then generate the supplementary bill.
             </p>
@@ -578,7 +580,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
 
       <Modal open={showRaise} onClose={() => setShowRaise(false)} title="Raise a week from the NRPC statement" width={640}>
         <form onSubmit={submitRaise}>
-          <p style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 0 }}>
+          <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 0 }}>
             Pick the statement and the station&apos;s section in it. The week is recorded at the figure
             NRPC published — nothing is computed here — and nothing is billed until you generate the
             supplementary bill from it.
@@ -609,7 +611,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
           </Field>
 
           {chosenTotal && (
-            <div style={{ margin: '4px 0 14px', padding: '12px 14px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 13, lineHeight: 1.7 }}>
+            <div style={{ margin: '4px 0 14px', padding: '12px 14px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14.5, lineHeight: 1.7 }}>
               <div><strong>{chosenTotal.entity_name}</strong> · week {statement.week_no} of {statement.financial_year}{statement.issued_date ? ` · issued ${statement.issued_date}` : ''}</div>
               <div>Scheduled {fmtNumber(chosenTotal.schedule_mwh, 3)} MWh ({chosenTotal.schedule_lu} LU) · Actual {fmtNumber(chosenTotal.actual_mwh, 3)} MWh ({chosenTotal.actual_lu} LU)</div>
               <div>
@@ -649,7 +651,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       <Modal open={show} onClose={() => setShow(false)} title={editId ? 'Edit Deviation Week' : 'Add Deviation Week'} width={600}>
         <form onSubmit={save}>
           
-          <h4 style={{ fontSize: 14, color: 'var(--primary)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>1. Station & Time Details</h4>
+          <h4 style={{ fontSize: 15.5, color: 'var(--primary)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>1. Station & Time Details</h4>
           <Field label="Contract">
             <select required disabled={!!editId} value={form.contract_id} onChange={(e) => {
               const cid = e.target.value;
@@ -684,12 +686,12 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
-            <h4 style={{ fontSize: 14, color: 'var(--primary)', margin: 0 }}>2. Energy Delivery Details</h4>
-            <span style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
+            <h4 style={{ fontSize: 15.5, color: 'var(--primary)', margin: 0 }}>2. Energy Delivery Details</h4>
+            <span style={{ fontSize: 15, color: 'var(--text-light)' }}>
               manual entry — an estimate
             </span>
           </div>
-          <div style={{ fontSize: 13.5, color: 'var(--text-light)', marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 15, color: 'var(--text-light)', marginBottom: 12, lineHeight: 1.5 }}>
             NRPC publishes one weekly Deviation Settlement Account covering every entity
             in the region, not a per-plant feed. Importing that statement gives the
             published figure for this station; entering figures here gives an estimate
@@ -721,11 +723,11 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             margin: '16px 0', padding: '14px 16px', borderRadius: 8,
             background: 'var(--bg)', border: '1px solid var(--border)',
           }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 600 }}>
               Estimated deviation {devPreview > 0 ? '+' : ''}{fmtNumber(devPreview)} MWh
               {'  ·  '}<SignedAmount v={amtPreview} />
             </div>
-            <div style={{ fontSize: 13.5, color: 'var(--text-light)', marginTop: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 15, color: 'var(--text-light)', marginTop: 6, lineHeight: 1.5 }}>
               + recoverable from beneficiary · − payable by SJVN.
               {' '}This is {fmtNumber(Math.abs(devPreview))} MWh × ₹{Number(form.deviation_rate) || 0}/MWh,
               which is <strong>an estimate, not the settlement</strong>: NRPC prices each 15-minute
@@ -748,14 +750,14 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
           <form onSubmit={doDispatch}>
             <p className="inline-note">{dispatchRow.dsm_no} · Net <SignedAmount v={dispatchRow.deviation_amount} /></p>
             {dispatchRow.dsa_statement && (
-              <p style={{ fontSize: 13.5, color: 'var(--text-light)', margin: '0 0 10px', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 15, color: 'var(--text-light)', margin: '0 0 10px', lineHeight: 1.6 }}>
                 Per NRPC statement {dispatchRow.dsa_statement.week_code || `week ${dispatchRow.week_no}`}
                 {dispatchRow.dsa_statement.issued_date ? `, issued ${dispatchRow.dsa_statement.issued_date}` : ''}
                 {dispatchRow.dsa_entity_name ? ` · ${dispatchRow.dsa_entity_name}` : ''}.
                 {' '}This is the published figure, not a computed one.
               </p>
             )}
-            <p style={{ fontSize: 13, color: 'var(--text-light)', margin: '0 0 12px' }}>
+            <p style={{ fontSize: 14.5, color: 'var(--text-light)', margin: '0 0 12px' }}>
               Creates a Supplementary invoice linked to this row, as a Draft. It is then
               submitted and approved under Billing &amp; Invoicing like any other bill.
               Once raised, the row is frozen.

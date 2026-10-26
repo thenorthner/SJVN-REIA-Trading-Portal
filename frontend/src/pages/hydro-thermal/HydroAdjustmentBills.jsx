@@ -161,7 +161,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
 
       {view === 'arrear' && (
         <Card title="Arrear on a revised tariff">
-          <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 14.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {vertical === 'THERMAL'
               ? <li>Enter the revised AFC / norms for the financial year under <Link to="/thermal/stations">Station &amp; Tariff</Link> first. Each month is recomputed with the fuel it was billed on.</li>
               : <li>Enter the revised AFC (and any other revised figure) for the financial year in the <button type="button" className="btn-link" onClick={() => setView('tariff')}>Tariff by financial year</button> tab first.</li>}
@@ -272,7 +272,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
 
       {view === 'tariff' && (
         <Card title="Tariff on record, by financial year">
-          <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)' }}>
+          <p style={{ margin: '0 0 10px', fontSize: 14.5, color: 'var(--text-muted)' }}>
             A year's figures here override the contract's for bills of that year. When CERC revises a year's tariff after bills are out,
             enter the revised figures here, then raise the arrear on the months already billed.
           </p>
@@ -307,7 +307,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
       )}
 
       <Card title="Arrear and supplementary bills on this station" style={{ marginTop: 16 }}>
-        <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)' }}>
+        <p style={{ margin: '0 0 10px', fontSize: 14.5, color: 'var(--text-muted)' }}>
           Process these — send for approval, approve, issue, release, send — from <Link to={pathFor(vertical, 'billing')}>Monthly Bills &amp; Approval</Link>, where they are listed with every other bill of the station.
         </p>
         <Table
@@ -318,7 +318,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
             { key: 'total_charges', header: 'Amount', render: (b) => fmtCurrency(b.total_charges) },
             { key: 'status', header: 'Status', render: (b) => <Badge status={b.status} label={b.status} /> },
             { key: 'approval_status', header: 'Approval', render: (b) => (b.approval_status === 'IN_APPROVAL' ? `with ${b.pending_with || 'an approver'}` : b.approval_status.replaceAll('_', ' ').toLowerCase()) },
-            { key: 'reason', header: 'Reason', render: (b) => <span style={{ fontSize: 13.5 }}>{b.revision_reason}</span> },
+            { key: 'reason', header: 'Reason', render: (b) => <span style={{ fontSize: 15 }}>{b.revision_reason}</span> },
           ]}
           rows={bills}
           emptyMessage="No arrear or supplementary bill on this station yet."

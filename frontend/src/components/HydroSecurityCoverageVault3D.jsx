@@ -211,7 +211,7 @@ export default function HydroSecurityCoverageVault3D({
                 background: 'rgba(13, 148, 136, 0.2)',
                 color: '#2dd4bf',
                 border: '1px solid rgba(13, 148, 136, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -220,7 +220,7 @@ export default function HydroSecurityCoverageVault3D({
                 CERC {coverPct}% MANDATORY COLLATERAL
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               {vertical === 'THERMAL'
                 ? 'Thermal Monthly Billing Obligation &rarr; Nationalized Bank LC Vault &rarr; 3-Tier Default & Power Regulation Risk Monitor'
                 : 'Monthly Billing Obligation &rarr; Nationalized Bank LC Vault &rarr; 3-Tier Default & Power Regulation Risk Monitor'}
@@ -236,7 +236,7 @@ export default function HydroSecurityCoverageVault3D({
           padding: '6px 14px',
           textAlign: 'right',
         }}>
-          <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div style={{ fontSize: 13, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Portfolio Live Cover
           </div>
           <div style={{
@@ -265,11 +265,11 @@ export default function HydroSecurityCoverageVault3D({
           borderRadius: 10,
           padding: '12px 14px',
         }}>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Total Required Collateral</div>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Total Required Collateral</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>
             {fmtCurrency(totalRequired)}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>Based on {coverPct}% monthly billing</div>
+          <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>Based on {coverPct}% monthly billing</div>
         </div>
 
         <div style={{
@@ -278,11 +278,11 @@ export default function HydroSecurityCoverageVault3D({
           borderRadius: 10,
           padding: '12px 14px',
         }}>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Live LC Vault Strength</div>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Live LC Vault Strength</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#2dd4bf', marginTop: 2 }}>
             {fmtCurrency(totalLiveCover)}
           </div>
-          <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>Held across nationalized banks</div>
+          <div style={{ fontSize: 13.5, color: '#4ade80', marginTop: 2 }}>Held across nationalized banks</div>
         </div>
 
         <div style={{
@@ -291,11 +291,11 @@ export default function HydroSecurityCoverageVault3D({
           borderRadius: 10,
           padding: '12px 14px',
         }}>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Portfolio Shortfall</div>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Portfolio Shortfall</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: totalShortfall > 0 ? '#f87171' : '#4ade80', marginTop: 2 }}>
             {totalShortfall > 0 ? fmtCurrency(totalShortfall) : 'NIL (Fully Secured)'}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>
+          <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>
             {totalExpiringSoon > 0 ? `${totalExpiringSoon} LC expiring within 30 days` : 'All LCs healthy'}
           </div>
         </div>
@@ -333,15 +333,15 @@ export default function HydroSecurityCoverageVault3D({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, color: '#f8fafc' }}>
                     {d.name}
                   </div>
-                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 13.5, color: '#94a3b8' }}>
                     {d.issuing_bank}
                   </div>
                 </div>
                 <span style={{
-                  fontSize: 12,
+                  fontSize: 13.5,
                   fontWeight: 700,
                   padding: '2px 7px',
                   borderRadius: 6,
@@ -358,7 +358,7 @@ export default function HydroSecurityCoverageVault3D({
                 padding: '8px 10px',
                 borderRadius: 6,
                 marginTop: 8,
-                fontSize: 12.5,
+                fontSize: 14,
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                   <span style={{ color: '#94a3b8' }}>Required ({coverPct}%):</span>
@@ -376,7 +376,7 @@ export default function HydroSecurityCoverageVault3D({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 13.5 }}>
                 <span style={{ color: 'var(--slate-500)' }}>{d.lc_no}</span>
                 <span style={{ color: isWarning ? '#f87171' : '#2dd4bf', fontWeight: 600 }}>
                   {isWarning ? 'SHORTFALL' : isExpiring ? 'EXPIRING SOON' : 'VALID & ACTIVE'}
@@ -395,7 +395,7 @@ export default function HydroSecurityCoverageVault3D({
           border: '1px solid rgba(45, 212, 191, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           display: 'flex',
           justifyContent: 'space-between',

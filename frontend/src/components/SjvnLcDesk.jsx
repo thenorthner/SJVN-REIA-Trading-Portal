@@ -54,8 +54,8 @@ function OpenForm({ contracts, onDone, onCancel }) {
         <Field label="Issue date"><input type="date" value={f.issue_date} onChange={(e) => set({ issue_date: e.target.value })} /></Field>
         <Field label="Valid until" required><input required type="date" value={f.validity_end} onChange={(e) => set({ validity_end: e.target.value })} /></Field>
       </div>
-      {need?.lc_required > 0 && <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>Worked out from the average monthly bill, this PPA needs about {fmtCurrency(need.lc_required)}; {fmtCurrency(need.lc_open)} is open now.</p>}
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 10 }}>
+      {need?.lc_required > 0 && <p style={{ margin: '0 0 10px', fontSize: 15, color: 'var(--text-light)' }}>Worked out from the average monthly bill, this PPA needs about {fmtCurrency(need.lc_required)}; {fmtCurrency(need.lc_open)} is open now.</p>}
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14.5, marginBottom: 10 }}>
         <input type="checkbox" checked={f.is_revolving} onChange={(e) => set({ is_revolving: e.target.checked })} /> Revolving
       </label>
       <SfmsFields form={f} set={set} defaultType="MT700" optional />
@@ -69,7 +69,9 @@ function OpenForm({ contracts, onDone, onCancel }) {
   );
 }
 
-function LcDetail({ id, canManage, onChanged, onPreview }) {
+// Phase B.2: the maker (or Finance) records and amends an LC; the checker (or
+// Finance) draws on, reinstates and closes it.
+function LcDetail({ id, canMake, canCheck, onChanged, onPreview }) {
   const [lc, setLc] = useState(null);
   const [f, setF] = useState({});
   const [file, setFile] = useState(null);
@@ -128,7 +130,7 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
     }
   }
 
-  if (!lc) return error ? <div className="form-error">{error}</div> : <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading…</div>;
+  if (!lc) return error ? <div className="form-error">{error}</div> : <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>Loading…</div>;
   // Against everything open on the PPA, as the tab counts it — not this one letter alone.
   const short = Math.max(0, (lc.required_amount || 0) - (lc.open_on_contract ?? (lc.live ? lc.available_amount : 0)));
   return (
@@ -150,10 +152,10 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
       </div>
       <div className="cell-actions" style={{ marginTop: 12 }}>
         {lc.document && <button type="button" className="btn btn-secondary btn-sm" onClick={() => onPreview(lc.document)}>View LC</button>}
-        {canManage && lc.status === 'ACTIVE' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('amend'); setF({ amount: lc.amount, validity_end: lc.validity_end || '', sfms_message_type: 'MT707' }); }}>Amend / renew</button>}
-        {canManage && lc.status === 'ACTIVE' && lc.available_amount > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('draw'); setF({ draw_date: new Date().toISOString().slice(0, 10) }); }}>Record a draw</button>}
-        {canManage && lc.status === 'ACTIVE' && lc.is_revolving && lc.utilized_amount > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('reinstate'); setF({ amount: lc.utilized_amount, reinstated_on: new Date().toISOString().slice(0, 10) }); }}>Record reinstatement</button>}
-        {canManage && lc.status === 'ACTIVE' && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMode('close'); setF({}); }}>Close</button>}
+        {canMake && lc.status === 'ACTIVE' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('amend'); setF({ amount: lc.amount, validity_end: lc.validity_end || '', sfms_message_type: 'MT707' }); }}>Amend / renew</button>}
+        {canCheck && lc.status === 'ACTIVE' && lc.available_amount > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('draw'); setF({ draw_date: new Date().toISOString().slice(0, 10) }); }}>Record a draw</button>}
+        {canCheck && lc.status === 'ACTIVE' && lc.is_revolving && lc.utilized_amount > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('reinstate'); setF({ amount: lc.utilized_amount, reinstated_on: new Date().toISOString().slice(0, 10) }); }}>Record reinstatement</button>}
+        {canCheck && lc.status === 'ACTIVE' && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMode('close'); setF({}); }}>Close</button>}
       </div>
       {mode === 'amend' && (
         <form className="cw-form" onSubmit={amend}>
@@ -203,7 +205,7 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
               <div className="timeline-item" key={ev.id}>
                 <strong>{ev.event_type.charAt(0) + ev.event_type.slice(1).toLowerCase()}</strong> — {ev.actor_name}
                 {ev.details && (
-                  <div style={{ fontSize: 13.5 }}>
+                  <div style={{ fontSize: 15 }}>
                     {[ev.details.amount?.from != null && `amount ${fmtCurrency(ev.details.amount.from)} → ${fmtCurrency(ev.details.amount.to)}`,
                       typeof ev.details.amount === 'number' && fmtCurrency(ev.details.amount),
                       ev.details.validity_end?.from !== undefined && `validity ${ev.details.validity_end.from ? fmtDate(ev.details.validity_end.from) : '—'} → ${fmtDate(ev.details.validity_end.to)}`,
@@ -230,17 +232,17 @@ export default function SjvnLcDesk({ overview, onChanged }) {
   const [showOpen, setShowOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
   const [preview, setPreview] = useState(null);
-  if (!overview) return <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading…</div>;
+  if (!overview) return <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>Loading…</div>;
   const ppas = overview.contracts.filter((c) => c.contract_type === 'PPA');
   const short = ppas.filter((c) => c.lc_shortfall > 0);
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'start', marginBottom: 12 }}>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-light)', maxWidth: 720 }}>
+        <p style={{ margin: 0, fontSize: 14.5, color: 'var(--text-light)', maxWidth: 720 }}>
           Letters of credit SJVN has opened in sellers' favour as payment security under their PPAs. These are SJVN's obligations, not security SJVN holds, and are never counted in coverage.
         </p>
-        {overview.can_manage_lc && <button type="button" className="btn btn-primary" onClick={() => setShowOpen(true)}>+ Record an LC</button>}
+        {overview.can_make_lc && <button type="button" className="btn btn-primary" onClick={() => setShowOpen(true)}>+ Record an LC</button>}
       </div>
       {short.length > 0 && (
         <div className="ps-alert amber">
@@ -274,7 +276,7 @@ export default function SjvnLcDesk({ overview, onChanged }) {
         {showOpen && <OpenForm contracts={ppas} onCancel={() => setShowOpen(false)} onDone={() => { setShowOpen(false); onChanged(); }} />}
       </Modal>
       <Modal open={!!openId} onClose={() => setOpenId(null)} title={overview.lcs.find((l) => l.id === openId)?.lc_no || 'Letter of credit'} width={720}>
-        {openId && <LcDetail id={openId} canManage={overview.can_manage_lc} onChanged={onChanged} onPreview={setPreview} />}
+        {openId && <LcDetail id={openId} canMake={overview.can_make_lc} canCheck={overview.can_check_lc} onChanged={onChanged} onPreview={setPreview} />}
       </Modal>
       <PreviewModal open={!!preview} versionId={preview?.version_id} fileName={preview?.file_name} onClose={() => setPreview(null)} />
     </div>

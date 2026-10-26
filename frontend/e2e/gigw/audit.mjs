@@ -9,7 +9,12 @@
  * For each page: axe-core (wcag2a, wcag2aa, wcag21a, wcag21aa), then the GIGW
  * structural checks — national identity strip, skip link first in tab order,
  * main landmark, lang attribute, zoom not disabled, footer policy links — and,
- * once, the security headers and that every statutory page answers 200.
+ * once, the security headers and that every statutory page answers 200. Then
+ * the DBIM v3 (MeitY, Jan 2025) checklist F.1 items a browser can see: one
+ * primary colour group with the footer on its key colour, Noto Sans, header 3
+ * (search bar, menu, अ | A language control), footer elements and lineage,
+ * centred table headings, line height, image and logo sizes, and a cookie
+ * banner at the bottom offering accept, reject and customise.
  * Writes e2e/gigw/report.md and exits non-zero when the score is under 95.
  */
 import fs from 'fs';
@@ -27,9 +32,12 @@ const PUBLIC_PAGES = [
   '/', '/login', '/privacy-policy', '/terms-of-use', '/disclaimer', '/hyperlinking-policy',
   '/copyright-policy', '/cookie-policy', '/security-policy', '/accessibility-statement',
   '/screen-reader-access', '/grievance-redressal', '/contact-us', '/help', '/sitemap',
+  '/about-us', '/related-links', '/feedback', '/circulars',
 ];
 const SIGNED_IN_PAGES = ['/', '/reia', '/reia/invoices', '/trading', '/hydro-thermal', '/thermal', '/settings/user-profile'];
-const FOOTER_LINKS = ['Privacy Policy', 'Terms of Use', 'Disclaimer', 'Hyperlinking Policy', 'Copyright Policy', 'Accessibility Statement', 'Contact Us / Web Information Manager', 'Sitemap'];
+const FOOTER_LINKS = ['Privacy Policy', 'Terms of Use', 'Disclaimer', 'Hyperlinking Policy', 'Copyright Policy', 'Accessibility Statement', 'Contact Us / Web Information Manager', 'Sitemap', 'Help', 'Feedback', 'Related Links'];
+// DBIM v3 Figure 1: the darkest (key) shade of each primary colour group.
+const DBIM_KEY_COLOURS = { Burgundy: 'rgb(108, 19, 64)', Purple: 'rgb(41, 19, 108)', Blue: 'rgb(22, 47, 106)', Green: 'rgb(15, 87, 87)', 'Chrome Yellow': 'rgb(93, 62, 0)', 'Cinnamon Red': 'rgb(119, 29, 29)' };
 const HEADERS = {
   'content-security-policy': /default-src/,
   'strict-transport-security': /max-age=\d+/,
@@ -80,6 +88,71 @@ async function structural(page, url) {
   add('Policies', url, 'Footer carries the statutory policy links', missing.length === 0, missing.length ? `missing: ${missing.join(', ')}` : '');
 }
 
+// DBIM v3 checklist F.1, the parts visible in the rendered page.
+async function dbim(page, url, isPublic) {
+  const r = await page.evaluate(() => {
+    const footer = document.querySelector('footer.gigw-footer');
+    const header = document.querySelector('header[role="banner"], .gigw-public-header');
+    const p = document.querySelector('main p');
+    const pcs = p ? getComputedStyle(p) : null;
+    const ths = [...document.querySelectorAll('main table thead th')].slice(0, 20);
+    const imgs = performance.getEntriesByType('resource')
+      .filter((e) => e.initiatorType === 'img' || /\.(png|jpe?g|webp|avif|svg)(\?|$)/i.test(e.name))
+      .map((e) => ({ name: e.name.split('/').pop().split('?')[0], kb: Math.round((e.decodedBodySize || e.encodedBodySize || 0) / 1024) }));
+    return {
+      footerBg: footer ? getComputedStyle(footer).backgroundColor : null,
+      footerText: footer?.textContent || '',
+      font: getComputedStyle(document.body).fontFamily,
+      search: !!header?.querySelector('input[type="search"]'),
+      menu: header ? [...header.querySelectorAll('nav a')].length : 0,
+      langMark: !!document.querySelector('.gigw-strip') && /अ\s*\|\s*A/.test(document.querySelector('.gigw-strip').textContent),
+      lineHeight: pcs ? parseFloat(pcs.lineHeight) / parseFloat(pcs.fontSize) : null,
+      thLeft: ths.filter((th) => getComputedStyle(th).textAlign !== 'center').length,
+      thCount: ths.length,
+      imgs,
+    };
+  });
+  const group = Object.entries(DBIM_KEY_COLOURS).find(([, v]) => v === r.footerBg)?.[0];
+  add('DBIM', url, 'Footer on the key colour of a DBIM primary group (s.5.6)', !!group, `${r.footerBg}${group ? ` = ${group}` : ''}`);
+  add('DBIM', url, 'Typeface is Noto Sans (s.4.1)', /^"?Noto Sans/.test(r.font), r.font.slice(0, 40));
+  add('DBIM', url, 'Table headings centred (s.4.1.1)', r.thLeft === 0, `${r.thLeft} of ${r.thCount} not centred`);
+  if (r.lineHeight) add('DBIM', url, 'Body line height 1.2–1.5× (s.4.5)', r.lineHeight >= 1.19 && r.lineHeight <= 1.51, r.lineHeight.toFixed(2));
+  const big = r.imgs.filter((i) => i.kb > (/logo/i.test(i.name) ? 100 : 500));
+  add('DBIM', url, 'Logos ≤ 100 KB, banners and backgrounds ≤ 500 KB (s.5.5, s.6.1.1)', big.length === 0, big.map((i) => `${i.name} ${i.kb} KB`).join(', '));
+  if (!isPublic) return;
+  add('DBIM', url, 'Header 3: search bar in the header (s.5.4.3, s.9)', r.search);
+  add('DBIM', url, 'Header 3: global navigation menu (s.5.4.3)', r.menu >= 4, `${r.menu} links`);
+  add('DBIM', url, 'Language control marked अ | A (s.7.5.1)', r.langMark);
+  add('DBIM', url, 'Footer: Last Updated On (s.5.6)', /Last Updated On/.test(r.footerText));
+  add('DBIM', url, 'Footer: PSU lineage sentence (s.5.6)', /official Website of SJVN Limited.*Public Sector Undertaking of the Government of India under the Ministry of Power/.test(r.footerText));
+}
+
+async function cookieBanner(browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  const r = await page.evaluate(() => {
+    const c = document.querySelector('.gigw-cookie');
+    if (!c) return null;
+    const box = c.getBoundingClientRect();
+    return {
+      bottom: window.innerHeight - box.bottom < 40,
+      bg: getComputedStyle(c).backgroundColor,
+      buttons: [...c.querySelectorAll('button')].map((b) => b.textContent.trim()),
+      preTicked: [...c.querySelectorAll('input[type="checkbox"]:not(:disabled)')].some((i) => i.checked),
+    };
+  });
+  add('DBIM', '/', 'Cookie banner shown on a first visit (s.7.6.1)', !!r);
+  if (r) {
+    add('DBIM', '/', 'Cookie banner at the bottom, on Inclusive White', r.bottom && r.bg === 'rgb(255, 255, 255)', `${r.bg}`);
+    add('DBIM', '/', 'Cookie banner offers accept, reject and customise', ['Accept all', 'Reject optional', 'Customise'].every((b) => r.buttons.includes(b)), r.buttons.join(' / '));
+    await page.click('.gigw-cookie button:has-text("Customise")');
+    const pre = await page.evaluate(() => [...document.querySelectorAll('.gigw-cookie input[type="checkbox"]:not(:disabled)')].map((i) => i.checked));
+    add('DBIM', '/', 'No optional category pre-ticked (s.7.6.4)', pre.length > 0 && pre.every((v) => !v), JSON.stringify(pre));
+  }
+  await ctx.close();
+}
+
 async function runAxe(page, url) {
   const res = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -91,12 +164,13 @@ async function runAxe(page, url) {
     res.violations.map((v) => `${v.id}(${v.impact},${v.nodes.length})`).join(' '));
 }
 
-async function auditPage(page, url) {
+async function auditPage(page, url, isPublic = true) {
   await page.goto(BASE + url, { waitUntil: 'networkidle' });
   // Charts animate in for about 1.5 s; scanning mid-animation counts nodes that
   // are about to be replaced.
   await page.waitForTimeout(2000);
   await structural(page, url);
+  await dbim(page, url, isPublic && url !== '/login');
   await runAxe(page, url);
 }
 
@@ -125,6 +199,7 @@ async function main() {
     add('Policies', '/grievance-redressal', `${role === 'dpo' ? 'Data Protection Officer' : 'Grievance Officer'} named`, !!(c.name && c.email), JSON.stringify(c));
   }
 
+  await cookieBanner(browser);
   for (const p of PUBLIC_PAGES) await auditPage(page, p);
 
   // Signed-in shell.
@@ -132,7 +207,7 @@ async function main() {
   if (login.ok()) {
     const { token, user } = await login.json();
     await context.addInitScript(([t, u]) => { localStorage.setItem('sjvn_token', t); localStorage.setItem('sjvn_user', u); }, [token, JSON.stringify(user)]);
-    for (const p of SIGNED_IN_PAGES) await auditPage(page, p);
+    for (const p of SIGNED_IN_PAGES) await auditPage(page, p, false);
     await page.request.post(`${BASE}/api/auth/logout`, { headers: { Authorization: `Bearer ${token}` }, data: {} });
   } else {
     add('Session', '/login', `Sign in as ${EMAIL} for the signed-in pages`, false, `HTTP ${login.status()}`);
@@ -150,7 +225,7 @@ async function main() {
     byRule.set(k, e);
   }
   const md = [
-    `# GIGW 3.0 / WCAG 2.1 AA audit`,
+    `# GIGW 3.0 / DBIM v3 / WCAG 2.1 AA audit`,
     ``,
     `Run ${new Date().toISOString()} against ${BASE}.`,
     ``,

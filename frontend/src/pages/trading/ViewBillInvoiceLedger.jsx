@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Modal, Field, Card, fmtNumber } from '../../components/ui.jsx';
+import { askConfirm, askText } from '../../lib/dialogs.js';
 
 function fmtDisplayDate(iso) {
   if (!iso) return '';
@@ -220,12 +221,12 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
   }
 
   async function raiseNote(r) {
-    const note_type = window.prompt('Enter note type: DEBIT or CREDIT', 'DEBIT');
+    const note_type = (await askText('Enter note type: DEBIT or CREDIT', { defaultValue: 'DEBIT' }));
     if (!note_type || !['DEBIT', 'CREDIT'].includes(note_type.toUpperCase())) return;
-    const amount = Number(window.prompt('Enter note amount', '0'));
+    const amount = Number((await askText('Enter note amount', { defaultValue: '0' })));
     if (!Number.isFinite(amount) || amount <= 0) return;
-    const reason = window.prompt('Enter reason / remarks', '') || '';
-    const tax = Number(window.prompt('Tax on the note (0 if none)', '0') || 0);
+    const reason = (await askText('Enter reason / remarks', { defaultValue: '', required: false })) || '';
+    const tax = Number((await askText('Tax on the note (0 if none)', { defaultValue: '0' })) || 0);
     try {
       await api.tradingNotes.create({
         note_type: note_type.toUpperCase(),
@@ -248,7 +249,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
   }
 
   async function cancelNote(note) {
-    const reason = window.prompt('Cancellation reason', 'Superseded / entered by mistake');
+    const reason = (await askText('Cancellation reason', { defaultValue: 'Superseded / entered by mistake' }));
     if (!reason) return;
     try {
       await api.tradingNotes.cancel(note.id, { reason });
@@ -291,8 +292,8 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
   }
 
   async function cancelInv(r) {
-    if (!window.confirm(`Cancel invoice ${r.invoice_no}?`)) return;
-    const reason = window.prompt('Cancellation reason', '');
+    if (!(await askConfirm(`Cancel invoice ${r.invoice_no}?`))) return;
+    const reason = (await askText('Cancellation reason', { defaultValue: '' }));
     if (reason == null) return;
     setMessage('');
     try {
@@ -444,7 +445,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
 
       {viewRow && (
         <Modal open onClose={() => setViewRow(null)} title={viewRow.invoice_no} width={560}>
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+          <div style={{ fontSize: 14.5, lineHeight: 1.7 }}>
             <div><strong>Client:</strong> {viewRow.client_name}</div>
             <div><strong>Amount:</strong> ₹{fmtNumber(viewRow.invoice_amount, 2)}</div>
             <div><strong>Invoice Date:</strong> {fmtDisplayDate(viewRow.invoice_date)}</div>

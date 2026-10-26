@@ -14,9 +14,14 @@ import { fmtDate, fmtDateTime } from '../../datetime.js';
 // Who the API lets do what. One list used to stand for all of it, so Finance
 // was offered every button and refused on each, and REIA Admin — who may do
 // all of it — was offered none.
-const CAN_MANAGE = ROLE_GROUPS.REIA_WRITE;                          // record, draw, invoke, advance a demand
-const CAN_RELEASE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'];     // ask for and decide a release
-const CAN_RUN_ALERTS = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
+// Phase B.2: the maker records an instrument, starts a demand, attaches its
+// letter, tops a drawn instrument up and asks for a release; the checker draws,
+// moves a demand on and decides a release (with Finance).
+const CAN_MAKE = ROLE_GROUPS.REIA_MAKE;
+const CAN_CHECK = ROLE_GROUPS.REIA_CHECK;
+const CAN_ASK_RELEASE = [...ROLE_GROUPS.REIA_MAKE, 'FINANCE_USER'];
+const CAN_RELEASE = [...ROLE_GROUPS.REIA_CHECK, 'FINANCE_USER'];
+const CAN_RUN_ALERTS = [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE];
 // Management's call, for at most 90 days (decided 17-Oct-2026).
 // The approver's call (ROLE_GROUPS.REIA_APPROVE on the server).
 const CAN_OVERRIDE = ['MANAGEMENT', 'REIA_APPROVER'];
@@ -32,7 +37,7 @@ const MECHANISM_LABEL = {
   PAYMENT_SECURITY_FUND: 'Payment security fund', OTHER: 'Other',
 };
 const BG_LABEL = { EMD: 'EMD', PBG: 'PBG', OTHER_BG: 'Other guarantee' };
-const ACTION_LABEL = { utilize: 'Draw on this instrument', replenish: 'Record cover reinstated', release: 'Request release' };
+const ACTION_LABEL = { utilize: 'Draw on this instrument', replenish: 'Record cover reinstated', release: 'Request release', verify: "Record the bank's confirmation" };
 
 export const typeLabel = (r) => {
   if (r.mechanism_type === 'BANK_GUARANTEE') return `BG${r.bg_subtype ? ` · ${BG_LABEL[r.bg_subtype] || r.bg_subtype}` : ''}`;
@@ -56,9 +61,9 @@ function saveBlob(blob, name) {
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface-2, var(--t-blue-50))', borderRadius: 8, minWidth: 110 }}>
-      <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
+      <div style={{ fontSize: 14.5, textTransform: 'none', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 13.5, opacity: 0.65 }}>{sub}</div>}
+      {sub != null && <div style={{ fontSize: 15, opacity: 0.65 }}>{sub}</div>}
     </div>
   );
 }
@@ -66,8 +71,10 @@ function StatPill({ label, value, sub }) {
 export default function PaymentSecurity() {
   const [view, setView] = useState('instruments');
   const { user } = useAuth();
-  const canManage = CAN_MANAGE.includes(user?.role);
+  const canManage = CAN_MAKE.includes(user?.role);
+  const canCheck = CAN_CHECK.includes(user?.role);
   const canRelease = CAN_RELEASE.includes(user?.role);
+  const canAsk = CAN_ASK_RELEASE.includes(user?.role);
   const canOverride = CAN_OVERRIDE.includes(user?.role);
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState(null);
@@ -219,6 +226,9 @@ export default function PaymentSecurity() {
       } else if (action === 'replenish') {
         await api.paymentSecurity.replenish(detail.id, Number(actionValue), actionReason.trim() || undefined);
         setDetailNotice(`${fmtCurrency(Number(actionValue))} reinstated on ${detail.instrument_no}.`);
+      } else if (action === 'verify') {
+        await api.paymentSecurity.verify(detail.id, actionValue.trim());
+        setDetailNotice(`${detail.instrument_no} confirmed by the bank (${actionValue.trim()}).`);
       } else if (action === 'release') {
         await api.paymentSecurity.releaseRequest(detail.id, actionValue.trim() || 'Release requested');
         setDetailNotice(`Release of ${detail.instrument_no} requested. It is in the release queue for a decision.`);
@@ -390,9 +400,12 @@ export default function PaymentSecurity() {
   const pendingReleases = releases.filter((r) => r.status === 'PENDING');
   const invokeContract = contracts.find((c) => c.id === invokeForm.contract_id);
   const detailLive = detail && LIVE.includes(detail.status) && !lapsed(detail);
-  const canDraw = canManage && detailLive && detail.available_amount > 0;
+  const canDraw = canCheck && detailLive && detail.available_amount > 0;
   const canReinstate = canManage && detail && detail.utilized_amount > 0 && !['RELEASED', 'CLOSED', 'DRAFT'].includes(detail.status);
-  const canAskRelease = canRelease && detail && [...LIVE, 'EXPIRED'].includes(detail.status);
+  const canAskRelease = canAsk && detail && [...LIVE, 'EXPIRED'].includes(detail.status);
+  // The bank's own confirmation (SFMS message or advice) that the instrument is
+  // genuine; the checker records it on an instrument the desk took in.
+  const canVerify = canCheck && detail && !detail.verified_at && [...LIVE, 'DRAFT'].includes(detail.status);
 
   return (
     <div>
@@ -451,7 +464,7 @@ export default function PaymentSecurity() {
           {overrideFor && (
             <form className="cw-form" onSubmit={saveOverride}>
               <strong>Treat the security on {overrideFor.contract_no} as adequate</strong>
-              <p style={{ margin: '4px 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
+              <p style={{ margin: '4px 0 10px', fontSize: 15, color: 'var(--text-light)' }}>
                 Scheduling and bidding for this buyer are held while its cover falls short. An override lets them go ahead on Management's say-so, for at most 90 days. It is recorded against your name.
               </p>
               <div className="form-grid">
@@ -525,7 +538,7 @@ export default function PaymentSecurity() {
 
       {canManage && (
         <Card title="Start waterfall invocation" className="mt-3">
-          <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-light)' }}>
+          <p style={{ margin: '0 0 10px', fontSize: 14.5, color: 'var(--text-light)' }}>
             Draws on the contract's security in waterfall order — the counterparty's own instrument first, pooled funds last — and raises a demand notice.
             On a PSA that is the buyer's letter of credit, for what the buyer owes 30 days or more past due and not already demanded — leave the amount blank for all of it.
             On a PPA it is the seller's guarantee: enter the amount and what the seller defaulted on.
@@ -573,7 +586,7 @@ export default function PaymentSecurity() {
               }}>
                 {claimAsk.status === 'CLAIMED' ? (
                   <>
-                    <p style={{ fontSize: 13, marginTop: 0 }}>The bank has {claims?.response_days ?? 7} days from the claim to honour or refuse it; after that the claim is flagged as late.</p>
+                    <p style={{ fontSize: 14.5, marginTop: 0 }}>The bank has {claims?.response_days ?? 7} days from the claim to honour or refuse it; after that the claim is flagged as late.</p>
                     <Field label="Claim submitted to the bank on" required><input type="date" max={todayIso()} value={claimAsk.claim_submitted_on} onChange={(e) => setClaimAsk({ ...claimAsk, claim_submitted_on: e.target.value })} /></Field>
                     <Field label="Bank / claim reference"><input value={claimAsk.claim_reference} onChange={(e) => setClaimAsk({ ...claimAsk, claim_reference: e.target.value })} /></Field>
                   </>
@@ -597,7 +610,7 @@ export default function PaymentSecurity() {
               {
                 key: 'actions',
                 header: 'Advance',
-                render: (r) => (canManage && r.status !== 'FUNDS_RECEIVED' && r.status !== 'REJECTED' ? (
+                render: (r) => (canCheck && r.status !== 'FUNDS_RECEIVED' && r.status !== 'REJECTED' ? (
                   <div className="cell-actions" onClick={(e) => e.stopPropagation()}>
                     {r.status === 'ELIGIBLE' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => transitionInv(r, 'NOTICE_ISSUED')}>Notice</button>}
                     {r.status === 'NOTICE_ISSUED' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setClaimAsk({ row: r, status: 'CLAIMED', claim_submitted_on: todayIso(), claim_reference: '' })}>Claimed</button>}
@@ -610,7 +623,7 @@ export default function PaymentSecurity() {
                 key: 'bank',
                 header: 'Bank claim',
                 render: (r) => (r.claim_submitted_on ? (
-                  <div style={{ fontSize: 12.5 }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ fontSize: 14 }} onClick={(e) => e.stopPropagation()}>
                     Lodged {fmtDate(r.claim_submitted_on)}{r.claim_reference ? ` · ${r.claim_reference}` : ''}
                     <div>
                       {r.status === 'CLAIMED'
@@ -647,7 +660,7 @@ export default function PaymentSecurity() {
             ]}
             rows={invocations.slice(0, 12)}
           />
-          {invocations.length > 12 && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>Showing the latest 12 of {invocations.length}.</p>}
+          {invocations.length > 12 && <p style={{ margin: '8px 0 0', fontSize: 15, color: 'var(--text-light)' }}>Showing the latest 12 of {invocations.length}.</p>}
         </Card>
       )}
 
@@ -659,8 +672,8 @@ export default function PaymentSecurity() {
           <Card title="Release queue">
             <Table
               columns={[
-                { key: 'instrument_no', header: 'Instrument', render: (r) => <><strong>{r.instrument_no}</strong><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
-                { key: 'reason', header: 'Asked for', render: (r) => <>{r.reason}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.requested_by}, {fmtDate(r.created_at)}</div></> },
+                { key: 'instrument_no', header: 'Instrument', render: (r) => <><strong>{r.instrument_no}</strong><div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
+                { key: 'reason', header: 'Asked for', render: (r) => <>{r.reason}<div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{r.requested_by}, {fmtDate(r.created_at)}</div></> },
                 {
                   key: 'position',
                   header: 'Position today',
@@ -678,7 +691,7 @@ export default function PaymentSecurity() {
                   key: 'checklist',
                   header: 'Checklist',
                   render: (r) => (r.checklist ? (
-                    <div style={{ fontSize: 13 }}>
+                    <div style={{ fontSize: 14.5 }}>
                       {r.checklist.items.map((i) => (
                         <div key={i.key} style={{ color: i.ok === false ? 'var(--red-deep)' : i.ok ? 'var(--on-green-2)' : 'var(--text-light)' }}>
                           {i.ok === false ? '✗' : i.ok ? '✓' : '·'} {i.label}{i.detail ? ` — ${i.detail}` : ''}
@@ -725,7 +738,7 @@ export default function PaymentSecurity() {
               columns={[
                 { key: 'contract_no', header: 'Contract' },
                 { key: 'reason', header: 'Reason' },
-                { key: 'approved_by', header: 'By', render: (r) => <>{r.approved_by}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{fmtDate(r.created_at)}</div></> },
+                { key: 'approved_by', header: 'By', render: (r) => <>{r.approved_by}<div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{fmtDate(r.created_at)}</div></> },
                 {
                   key: 'valid_until',
                   header: 'Until',
@@ -785,7 +798,7 @@ export default function PaymentSecurity() {
             </Field>
           </div>
           {form.mechanism_type === 'LC' && (
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, fontSize: 13 }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, fontSize: 14.5 }}>
               <input type="checkbox" checked={form.is_revolving} onChange={(e) => setForm({ ...form, is_revolving: e.target.checked })} />
               Revolving LC
             </label>
@@ -826,15 +839,16 @@ export default function PaymentSecurity() {
 
             {detailNotice && <div className="ps-alert green" role="status" style={{ marginTop: 12, marginBottom: 0 }}>{detailNotice}</div>}
 
-            {(canDraw || canReinstate || canAskRelease) && (
+            {(canDraw || canReinstate || canAskRelease || canVerify) && (
               <div className="cell-actions" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+                {canVerify && <button type="button" className="btn btn-primary btn-sm" onClick={() => startAction('verify')}>Record bank confirmation</button>}
                 {canDraw && <button type="button" className="btn btn-secondary btn-sm" onClick={() => startAction('utilize')}>Utilize</button>}
                 {canReinstate && <button type="button" className="btn btn-secondary btn-sm" onClick={() => startAction('replenish')}>Replenish</button>}
                 {canAskRelease && <button type="button" className="btn btn-ghost btn-sm" onClick={() => startAction('release')}>Request release</button>}
               </div>
             )}
-            {(canManage || canRelease) && !canDraw && !canReinstate && !canAskRelease && (
-              <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--text-light)' }}>
+            {(canManage || canCheck || canRelease) && !canDraw && !canReinstate && !canAskRelease && !canVerify && (
+              <p style={{ margin: '12px 0 0', fontSize: 14.5, color: 'var(--text-light)' }}>
                 {detail.status === 'DRAFT' ? 'Awaiting acceptance — nothing can be drawn on it until it is taken on record.'
                   : detail.status === 'RELEASE_PENDING' ? 'A release request is open on this instrument. Decide it in the release queue.'
                     : `This instrument is ${detail.status.replaceAll('_', ' ').toLowerCase()} — nothing more can be drawn or released on it.`}
@@ -847,6 +861,10 @@ export default function PaymentSecurity() {
                 {action === 'release' ? (
                   <Field label="Reason">
                     <input required value={actionValue} onChange={(e) => setActionValue(e.target.value)} />
+                  </Field>
+                ) : action === 'verify' ? (
+                  <Field label="Bank's confirmation reference (SFMS message or advice no.)" required>
+                    <input required minLength={4} value={actionValue} onChange={(e) => setActionValue(e.target.value)} placeholder="e.g. SFMS 760 ref SBIN26100412345" />
                   </Field>
                 ) : (
                   <div className="form-grid" style={{ marginTop: 8 }}>
@@ -865,8 +883,8 @@ export default function PaymentSecurity() {
                     )}
                   </div>
                 )}
-                {action === 'utilize' && <p style={{ margin: '0 0 8px', fontSize: 13.5, color: 'var(--text-light)' }}>{fmtCurrency(detail.available_amount)} is available. To raise a demand on the bank, use “Start waterfall invocation” instead — this only records a draw.</p>}
-                {action === 'replenish' && <p style={{ margin: '0 0 8px', fontSize: 13.5, color: 'var(--text-light)' }}>{fmtCurrency(detail.utilized_amount)} has been drawn{detail.is_revolving ? '' : '. This instrument does not revolve, so say what put the cover back'}.</p>}
+                {action === 'utilize' && <p style={{ margin: '0 0 8px', fontSize: 15, color: 'var(--text-light)' }}>{fmtCurrency(detail.available_amount)} is available. To raise a demand on the bank, use “Start waterfall invocation” instead — this only records a draw.</p>}
+                {action === 'replenish' && <p style={{ margin: '0 0 8px', fontSize: 15, color: 'var(--text-light)' }}>{fmtCurrency(detail.utilized_amount)} has been drawn{detail.is_revolving ? '' : '. This instrument does not revolve, so say what put the cover back'}.</p>}
                 <div className="form-actions">
                   <button type="button" className="btn btn-ghost" onClick={() => setAction(null)}>Cancel</button>
                   <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Confirm'}</button>
@@ -881,7 +899,7 @@ export default function PaymentSecurity() {
             {detail.requirements?.length > 0 && (
               <>
                 <div className="section-title" style={{ marginTop: 16 }}>Contract requirements</div>
-                <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18 }}>
+                <ul style={{ fontSize: 14.5, margin: 0, paddingLeft: 18 }}>
                   {detail.requirements.map((r) => (
                     <li key={r.id}>{typeLabel({ ...r, is_revolving: 0 })} — min {fmtCurrency(r.min_amount)}, priority {r.waterfall_priority}</li>
                   ))}
@@ -920,7 +938,7 @@ export default function PaymentSecurity() {
                     return (
                       <div className="timeline-item" key={ev.id}>
                         <strong>{eventLabel(ev.event_type)}</strong> — {ev.actor_name}
-                        {more && <div style={{ fontSize: 13.5 }}>{more}</div>}
+                        {more && <div style={{ fontSize: 15 }}>{more}</div>}
                         <div className="t-meta">{fmtDateTime(ev.created_at)}</div>
                       </div>
                     );

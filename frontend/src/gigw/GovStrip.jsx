@@ -33,7 +33,7 @@ export function focusMain(e) {
 }
 
 export default function GovStrip({ withSkip = false }) {
-  const { t, lang, setLang, toggleLang, textSize, setTextSize, contrast, toggleContrast } = useGigw();
+  const { t, lang, setLang, textSize, setTextSize, contrast, toggleContrast } = useGigw();
   const sizes = [
     { key: 'sm', label: 'A-', aria: t('a11y.textSmaller') },
     { key: 'md', label: 'A', aria: t('a11y.textNormal') },
@@ -83,29 +83,22 @@ export default function GovStrip({ withSkip = false }) {
           <span aria-hidden="true" className="gigw-contrast-icon" />
           <span className="gigw-tool-label">{t('a11y.contrast')}</span>
         </button>
-        <button
-          type="button"
-          className="gigw-tool gigw-tool-text"
-          lang={lang === 'hi' ? 'en' : 'hi'}
-          aria-label={t('a11y.languageLabel')}
-          onClick={toggleLang}
-        >{t('a11y.language')}</button>
+        {/* DBIM v3 s.7.5.1(i): one language control, marked "अ | A". */}
         <div className="gigw-regional-lang-wrap">
-          <label htmlFor="gigw-regional-lang-select" className="sr-only">
-            Select Regional Language
+          <label htmlFor="gigw-regional-lang-select" className="gigw-lang-mark" title={t('lang.select')}>
+            <span aria-hidden="true"><span lang="hi">अ</span> | <span lang="en">A</span></span>
+            <span className="sr-only">{t('lang.select')}</span>
           </label>
           <select
             id="gigw-regional-lang-select"
             className="gigw-tool gigw-lang-select"
             value={lang}
             onChange={(e) => setLang(e.target.value)}
-            aria-label="Select Regional Language"
-            title="Regional Language Selection / क्षेत्रीय भाषा चयन"
           >
-            <option value="en">English</option>
-            <option value="hi">हिन्दी (HP/Bihar)</option>
-            <option value="gu">ગુજરાતી (Solar)</option>
-            <option value="mr">मराठी (Wind)</option>
+            <option value="en" lang="en">English</option>
+            <option value="hi" lang="hi">हिंदी</option>
+            <option value="gu" lang="gu">ગુજરાતી</option>
+            <option value="mr" lang="mr">मराठी</option>
           </select>
         </div>
         <button

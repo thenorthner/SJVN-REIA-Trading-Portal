@@ -17,6 +17,7 @@ import {
 import { fmtDate, fmtDateTime } from '../../datetime.js';
 import { REASON_CODES, CHARGE_LINES } from '../../disputesMeta.js';
 import SellerInvoiceUpload from './SellerInvoiceUpload.jsx';
+import { showAlert, askConfirm } from '../../lib/dialogs.js';
 
 const STATUS_STEPS = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'PAID'];
 const STATUS_LABELS = {
@@ -66,7 +67,7 @@ function exportCsv(rows) {
 
 // A small mark for each thing that goes with the bill.
 const Mark = ({ on, children, title }) => (
-  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: on ? 'var(--t-green-100)' : 'var(--slate-100)', color: on ? 'var(--on-green-2)' : '#94a3b8' }}>{children}</span>
+  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 14, fontWeight: 700, background: on ? 'var(--t-green-100)' : 'var(--slate-100)', color: on ? 'var(--on-green-2)' : '#94a3b8' }}>{children}</span>
 );
 
 function StatusStepper({ status }) {
@@ -215,7 +216,7 @@ export default function SellerInvoices() {
   // One at a time, through the same routes the single buttons use, so every bill
   // is held to the same checks and a refusal names the bill it was for.
   async function bulk(list, call, verb) {
-    if (!window.confirm(`${verb} ${list.length} invoice${list.length === 1 ? '' : 's'}?`)) return;
+    if (!(await askConfirm(`${verb} ${list.length} invoice${list.length === 1 ? '' : 's'}?`))) return;
     setBulkBusy(true);
     const failed = [];
     let done = 0;
@@ -264,7 +265,7 @@ export default function SellerInvoices() {
         setShowValidation(true);
         if (err.response?.data?.invoice) setSelected(err.response.data.invoice);
       } else {
-        alert(err.response?.data?.error || 'Validation failed');
+        showAlert(err.response?.data?.error || 'Validation failed');
       }
     }
   }
@@ -275,7 +276,7 @@ export default function SellerInvoices() {
       setValidationResult(JSON.parse(selected.validation_json));
       setShowValidation(true);
     } catch {
-      alert('Could not parse stored validation result');
+      showAlert('Could not parse stored validation result');
     }
   }
 
@@ -283,7 +284,7 @@ export default function SellerInvoices() {
     try {
       await downloadInvoicePdf(api, selected);
     } catch (err) {
-      alert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
+      showAlert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
     }
   }
 
@@ -428,7 +429,7 @@ export default function SellerInvoices() {
       // SJVN's own computation of a month, shown once it is approved, is not
       // one of the seller's invoices — say so.
       render: (r) => (r.raised_by_seller === false
-        ? <span>{r.invoice_no}<div style={{ fontSize: 13, color: 'var(--on-blue)' }}>Raised by SJVN</div></span>
+        ? <span>{r.invoice_no}<div style={{ fontSize: 14.5, color: 'var(--on-blue)' }}>Raised by SJVN</div></span>
         : r.invoice_no),
     },
     { key: 'contract_no', header: 'Contract' },
@@ -557,13 +558,13 @@ export default function SellerInvoices() {
                     <span className="detail-label">Energy Charges</span>
                     <span className="detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>
                       {fmtCurrency(calculatedCharges)}
-                      <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-light)' }}>{fmtNumber(energyPreview.energy_mwh)} MWh × 1,000 units × ₹{contractPreview?.tariff_per_unit}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 400, color: 'var(--text-light)' }}>{fmtNumber(energyPreview.energy_mwh)} MWh × 1,000 units × ₹{contractPreview?.tariff_per_unit}</div>
                     </span>
                   </div>
                   <div className="detail-item"><span className="detail-label">Data Source</span><span className="detail-value">{energyPreview.source} ({energyPreview.data_type})</span></div>
                 </div>
               ) : (
-                <div style={{ color: 'var(--danger)', fontSize: 13 }}>
+                <div style={{ color: 'var(--danger)', fontSize: 14.5 }}>
                   No locked energy data found for this contract and period. Energy data must be validated and locked by SJVN before you can generate an invoice.
                 </div>
               )}
@@ -599,7 +600,7 @@ export default function SellerInvoices() {
 
           {energyPreview && (
             <div style={{ background: 'var(--bg-main)', border: '2px solid var(--primary)', borderRadius: 8, padding: 16, margin: '12px 0', textAlign: 'center' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>TOTAL INVOICE AMOUNT</div>
+              <div style={{ fontSize: 14.5, color: 'var(--text-secondary)', marginBottom: 4 }}>TOTAL INVOICE AMOUNT</div>
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--success)' }}>{fmtCurrency(totalAmount)}</div>
             </div>
           )}
@@ -752,19 +753,19 @@ export default function SellerInvoices() {
             <div className="form-actions" style={{ marginTop: 18, flexWrap: 'wrap' }}>
               {selected.status === 'DRAFT' && (isMaker
                 ? <button type="button" className="btn btn-primary" disabled={!!busy} onClick={handleSendToChecker}>Send to checker</button>
-                : <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>A draft your maker has not yet sent for checking.</span>)}
+                : <span style={{ fontSize: 15, color: 'var(--text-muted)' }}>A draft your maker has not yet sent for checking.</span>)}
               {selected.status === 'DRAFT' && selected.raised_by_seller !== false && (
                 <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={openRevise}>Revise</button>
               )}
               {selected.status === 'PENDING_L2' && (canSendToSjvn
                 ? <button type="button" className="btn btn-primary" disabled={!!busy} onClick={handleCheckerApprove}>Approve &amp; submit to SJVN</button>
-                : <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Waiting for your company&apos;s checker to approve it and submit it to SJVN.</span>)}
+                : <span style={{ fontSize: 15, color: 'var(--text-muted)' }}>Waiting for your company&apos;s checker to approve it and submit it to SJVN.</span>)}
               {selected.status === 'REJECTED' && selected.raised_by_seller !== false && (
                 <>
                   <button type="button" className="btn btn-primary" disabled={!!busy} onClick={openRevise}>Revise the bill</button>
                   {canSendToSjvn
                     ? <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={handleSubmitForApproval}>Resubmit to SJVN</button>
-                    : <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Your company&apos;s checker sends it to SJVN again.</span>}
+                    : <span style={{ fontSize: 15, color: 'var(--text-muted)' }}>Your company&apos;s checker sends it to SJVN again.</span>}
                 </>
               )}
               {selected.status !== 'CANCELLED' && selected.raised_by_seller !== false && (

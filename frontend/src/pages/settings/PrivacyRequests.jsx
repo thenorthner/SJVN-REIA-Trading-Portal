@@ -3,12 +3,17 @@ import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, Tabs, Tab } f
 import api from '../../api/client.js';
 import { fmtDateTime } from '../../datetime.js';
 import { REQUEST_TYPES } from '../../gigw/PrivacyPanel.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 /**
  * The Data Protection Officer's desk: data-principal requests (DPDP Act 2023)
  * to acknowledge and close, and the register of statutory declarations made on
- * critical submissions, with who, when, from where and on what.
+ * critical submissions, with who, when, from where and on what. The Web
+ * Information Manager (admins) also answers feedback from the public Feedback
+ * page here (GIGW 3.0 quality guideline 11).
  */
+const FEEDBACK_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+const FB_CATEGORY = { content: 'Content', accessibility: 'Accessibility', technical: 'Technical', translation: 'Translation', suggestion: 'Suggestion' };
 const STATUSES = ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];
 const TYPE_LABEL = Object.fromEntries(REQUEST_TYPES.map((t) => [t.value, t.label.split(' —')[0].split(' /')[0]]));
 
@@ -19,11 +24,30 @@ export default function PrivacyRequests() {
   const [status, setStatus] = useState('');
   const [editing, setEditing] = useState(null);
   const [popup, setPopup] = useState(null);
+  const { user } = useAuth();
+  const canFeedback = FEEDBACK_ROLES.includes(user?.role);
+  const [feedback, setFeedback] = useState([]);
+  const [fbEditing, setFbEditing] = useState(null);
 
   const load = () => {
     api.privacy.allRequests(status ? { status } : undefined).then(setRows).catch(() => setRows([]));
     api.privacy.declarations({ limit: 500 }).then(setDecls).catch(() => setDecls([]));
+    if (canFeedback) api.privacy.feedback().then(setFeedback).catch(() => setFeedback([]));
   };
+
+  async function saveFeedback() {
+    if (fbEditing.status === 'REPLIED' && (fbEditing.reply || '').trim().length < 5) {
+      setPopup({ tone: 'error', title: 'Reply needed', message: 'Paste or summarise the reply sent to the visitor before marking it replied.' });
+      return;
+    }
+    try {
+      await api.privacy.updateFeedback(fbEditing.id, { status: fbEditing.status, reply: fbEditing.reply });
+      setFbEditing(null);
+      load();
+    } catch (err) {
+      setPopup({ tone: 'error', title: 'Could not update', message: err.response?.data?.error || err.message });
+    }
+  }
   useEffect(load, [status]);
 
   async function save() {
@@ -42,11 +66,31 @@ export default function PrivacyRequests() {
 
   return (
     <div>
-      <PageHeader title="Data requests & declarations" subtitle="DPDP Act 2023 data-principal requests, and the statutory declaration register" />
+      <PageHeader title="Data requests & declarations" subtitle={`DPDP Act 2023 data-principal requests, the statutory declaration register${canFeedback ? ', and public feedback' : ''}`} />
       <Tabs>
         <Tab active={tab === 'requests'} onClick={() => setTab('requests')}>Data-principal requests</Tab>
         <Tab active={tab === 'declarations'} onClick={() => setTab('declarations')}>Declaration register</Tab>
+        {canFeedback && <Tab active={tab === 'feedback'} onClick={() => setTab('feedback')}>Public feedback</Tab>}
       </Tabs>
+
+      {tab === 'feedback' && canFeedback && (
+        <Card title="Feedback from the public Feedback page">
+          <Table
+            caption="Public feedback"
+            emptyMessage="No feedback received yet."
+            onRowClick={(r) => setFbEditing({ ...r, status: r.status === 'NEW' ? 'REPLIED' : r.status })}
+            columns={[
+              { key: 'reference_no', header: 'Reference' },
+              { key: 'created_at', header: 'Received', render: (r) => fmtDateTime(r.created_at) },
+              { key: 'name', header: 'From', render: (r) => `${r.name} (${r.email})` },
+              { key: 'category', header: 'About', render: (r) => FB_CATEGORY[r.category] || r.category },
+              { key: 'message', header: 'Feedback', render: (r) => (r.message.length > 90 ? `${r.message.slice(0, 90)}…` : r.message) },
+              { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+            ]}
+            rows={feedback}
+          />
+        </Card>
+      )}
 
       {tab === 'requests' && (
         <Card
@@ -114,6 +158,27 @@ export default function PrivacyRequests() {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button type="button" className="btn" onClick={() => setEditing(null)}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={save}>Save</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+      <Modal open={!!fbEditing} onClose={() => setFbEditing(null)} title={fbEditing ? `${fbEditing.reference_no} — ${FB_CATEGORY[fbEditing.category] || fbEditing.category}` : ''} width="compact">
+        {fbEditing && (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <p style={{ margin: 0 }}><strong>{fbEditing.name}</strong> ({fbEditing.email}) · {fmtDateTime(fbEditing.created_at)}{fbEditing.page_url ? ` · page ${fbEditing.page_url}` : ''}</p>
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{fbEditing.message}</p>
+            <Field label="Status" htmlFor="fb-status">
+              <select id="fb-status" className="select" value={fbEditing.status} onChange={(e) => setFbEditing({ ...fbEditing, status: e.target.value })}>
+                <option value="REPLIED">Replied</option>
+                <option value="CLOSED">Closed without reply</option>
+              </select>
+            </Field>
+            <Field label="Reply sent to the visitor" htmlFor="fb-reply">
+              <textarea id="fb-reply" rows={4} value={fbEditing.reply || ''} onChange={(e) => setFbEditing({ ...fbEditing, reply: e.target.value })} />
+            </Field>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn" onClick={() => setFbEditing(null)}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={saveFeedback}>Save</button>
             </div>
           </div>
         )}

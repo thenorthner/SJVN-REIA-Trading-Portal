@@ -111,7 +111,7 @@ export default function ThermalCoalBlendingInflow3D({
                 background: 'rgba(217, 119, 6, 0.15)',
                 color: '#fbbf24',
                 border: '1px solid rgba(217, 119, 6, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -120,7 +120,7 @@ export default function ThermalCoalBlendingInflow3D({
                 CEA & CERC BLENDING NORMS
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               {/* Example figures, not the station's account: under the station's
                   name they read as its own coal and URS (Thermal QA run 19). */}
               <span style={{ fontWeight: 700, color: '#fbbf24' }}>Illustration — example figures, not {station?.station_name || 'this station'}'s account.</span>{' '}Coal India Linkage (CCL/ECL) vs Imported Blended Coal ➔ Weighted GCV & Price ➔ Merit Order Dispatch (MOD)
@@ -136,7 +136,7 @@ export default function ThermalCoalBlendingInflow3D({
               type="button"
               className={`btn btn-xs ${selectedPresetIdx === idx ? 'btn-primary' : 'btn-ghost'}`}
               style={{
-                fontSize: 12,
+                fontSize: 13.5,
                 padding: '4px 10px',
                 background: selectedPresetIdx === idx ? 'rgba(217, 119, 6, 0.3)' : 'rgba(255, 255, 255, 0.04)',
                 borderColor: selectedPresetIdx === idx ? '#d97706' : 'rgba(255, 255, 255, 0.1)',
@@ -174,22 +174,22 @@ export default function ThermalCoalBlendingInflow3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
               STAGE 1: DUAL INFLOW
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>Coal Streams</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Coal Streams</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Domestic vs Imported</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Domestic vs Imported</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Linkage Ratio: {preset.domesticPct}% / {preset.importedPct}%
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 }}>
               <span style={{ color: '#94a3b8' }}>Domestic (CIL {preset.domesticPct}%):</span>
               <span style={{ color: '#f8fafc', fontWeight: 600 }}>{domesticGcv} kCal | ₹{domesticPricePerTonne}/T</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Imported ({preset.importedPct}%):</span>
               <span style={{ color: '#fbbf24', fontWeight: 600 }}>{importedGcv} kCal | ₹{importedPricePerTonne}/T</span>
             </div>
@@ -211,22 +211,22 @@ export default function ThermalCoalBlendingInflow3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 2: BUNKER BLEND
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>Form 15 Pool</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Form 15 Pool</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Weighted GCV & Landed Cost</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Weighted GCV & Landed Cost</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Transit & Handling: -{transitLossPct}% Normative
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Blended GCV:</span>
               <span style={{ fontWeight: 700, color: '#38bdf8' }}>{fmtNumber(weightedGcv, 0)} kCal/kg</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Weighted Landed Price:</span>
               <span style={{ fontWeight: 700, color: '#f8fafc' }}>₹{fmtNumber(weightedPricePerTonne, 0)} / Tonne</span>
             </div>
@@ -248,11 +248,11 @@ export default function ThermalCoalBlendingInflow3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: modBadgeColor, letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: modBadgeColor, letterSpacing: '0.04em' }}>
               STAGE 3: DISPATCH MERIT
             </span>
             <span style={{
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               background: `${modBadgeColor}20`,
               color: modBadgeColor,
@@ -262,17 +262,17 @@ export default function ThermalCoalBlendingInflow3D({
               MOD QUEUE
             </span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Power Market Merit Order</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Power Market Merit Order</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Resulting ECR: ₹{blendedEcr.toFixed(3)} / kWh
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Grid Scheduling Priority</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: modBadgeColor, marginTop: 2 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Grid Scheduling Priority</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: modBadgeColor, marginTop: 2 }}>
               {modStatus}
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', marginTop: 3 }}>
               DISCOMs requisition lower ECR first
             </div>
           </div>
@@ -287,7 +287,7 @@ export default function ThermalCoalBlendingInflow3D({
           border: '1px solid rgba(217, 119, 6, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',

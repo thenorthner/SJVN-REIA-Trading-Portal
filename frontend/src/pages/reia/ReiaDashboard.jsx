@@ -6,6 +6,7 @@ import { fmtDate } from '../../datetime.js';
 import SjvnDeskCard from '../../components/SjvnDeskCard.jsx';
 import MacroEnergyGrid3D from '../../components/MacroEnergyGrid3D.jsx';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const COLORS = ['url(#eliteBlue)', 'url(#eliteGreen)', 'url(#eliteOrange)', 'url(#eliteRed)', 'url(#elitePurple)', 'url(#eliteTeal)'];
 
@@ -24,7 +25,7 @@ export default function ReiaDashboard() {
     try {
       await api.reports.reiaDashboardPdf();
     } catch (err) {
-      alert(err.message || 'Failed to download REIA dashboard PDF');
+      showAlert(err.message || 'Failed to download REIA dashboard PDF');
     } finally {
       setPdfLoading(false);
     }
@@ -213,8 +214,8 @@ export default function ReiaDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyBilling}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="billing_period" tick={{ fontSize: 13.5 }} />
-                <YAxis tick={{ fontSize: 13.5 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
+                <XAxis dataKey="billing_period" tick={{ fontSize: 15 }} />
+                <YAxis tick={{ fontSize: 15 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
                 <Tooltip formatter={(v) => fmtCurrency(v)} />
                 <Legend />
                 <Line type="monotone" dataKey="total" name="Billed Amount" stroke="var(--primary)" strokeWidth={2.5} dot={{ r: 3 }} />
@@ -242,8 +243,8 @@ export default function ReiaDashboard() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byStatus}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="status" tick={{ fontSize: 13 }} />
-              <YAxis tick={{ fontSize: 13.5 }} allowDecimals={false} />
+              <XAxis dataKey="status" tick={{ fontSize: 14.5 }} />
+              <YAxis tick={{ fontSize: 15 }} allowDecimals={false} />
               <Tooltip />
               <Bar dataKey="c" name="Invoice count" fill="#1f5cd6" radius={[6, 6, 0, 0]} />
             </BarChart>

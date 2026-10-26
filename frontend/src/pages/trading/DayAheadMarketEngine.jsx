@@ -78,12 +78,12 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
           <h2 style={{ margin: 0, color: themeColor }}>
             {isGreen ? 'Green Day-Ahead Market (GDAM)' : 'Conventional Day-Ahead Market (DAM)'}
           </h2>
-          <p style={{ margin: '5px 0 0 0', color: 'var(--slate-600)', fontSize: 13 }}>
+          <p style={{ margin: '5px 0 0 0', color: 'var(--slate-600)', fontSize: 14.5 }}>
             Unified Workflow Engine: Manage the entire {productLabel} lifecycle from bidding to tax invoices.
           </p>
         </div>
         {isGreen && (
-          <div style={{ background: 'var(--t-green-100)', color: 'var(--on-green)', padding: '5px 10px', borderRadius: 12, fontSize: 13.5, fontWeight: 'bold' }}>
+          <div style={{ background: 'var(--t-green-100)', color: 'var(--on-green)', padding: '5px 10px', borderRadius: 12, fontSize: 15, fontWeight: 'bold' }}>
              RPO Compliance Eligible
           </div>
         )}
@@ -103,7 +103,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
               color: activeTab === tab.id ? themeColor : 'var(--slate-500)', 
               fontWeight: activeTab === tab.id ? 'bold' : 'normal', 
               cursor: 'pointer', 
-              fontSize: 14,
+              fontSize: 15.5,
               whiteSpace: 'nowrap'
             }}>
             {tab.label}

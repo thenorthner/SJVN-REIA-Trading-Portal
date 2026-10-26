@@ -24,8 +24,8 @@ function ExchangeVolumes({ exchange, month }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="product" tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={56} />
+                <XAxis dataKey="product" tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} width={56} />
                 <Tooltip formatter={(v) => [`${mu(v)} MU`, 'Volume']} />
                 <Bar dataKey="volume_mu" name="Volume" fill="var(--primary)" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </BarChart>

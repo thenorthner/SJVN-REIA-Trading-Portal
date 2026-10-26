@@ -116,7 +116,7 @@ export default function ThermalCapacityRecoveryGate3D({
                 background: 'rgba(225, 29, 72, 0.15)',
                 color: '#fb7185',
                 border: '1px solid rgba(225, 29, 72, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -125,15 +125,15 @@ export default function ThermalCapacityRecoveryGate3D({
                 CERC REGULATION 42
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               AFC Fixed Cost Pool ➔ Declared Availability Gate (PAFM vs NAPAF) ➔ Pro-Rata / Incentive Recovery ➔ Monthly Committed Bill
             </div>
           </div>
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Target Availability</div>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#fb7185' }}>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Target Availability</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fb7185' }}>
             NAPAF {napaf}%
           </div>
         </div>
@@ -163,20 +163,20 @@ export default function ThermalCapacityRecoveryGate3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fb7185', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fb7185', letterSpacing: '0.04em' }}>
               STAGE 1: AFC POOL
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>Annual CERC</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Annual CERC</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Approved Fixed Cost</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>5 Capital Components</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Approved Fixed Cost</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>5 Capital Components</div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Annual AFC Pool</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Annual AFC Pool</div>
             <div style={{ fontSize: 19, fontWeight: 700, color: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               {fmtCurrency(annualAfc)}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 3 }}>
               Monthly Base: {fmtCurrency(baseMonthlyCapacity)}
             </div>
           </div>
@@ -197,22 +197,22 @@ export default function ThermalCapacityRecoveryGate3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 2: AVAILABILITY GATE
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>ERPC REA</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>ERPC REA</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>PAFM vs Target NAPAF</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>PAFM vs Target NAPAF</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Plant Availability Factor
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Achieved (PAFM):</span>
               <span style={{ fontWeight: 700, color: hasIncentive ? '#4ade80' : '#f87171' }}>{pafm}%</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Recovery Ratio:</span>
               <span style={{ fontWeight: 700, color: '#38bdf8' }}>{(recoveryRatio * 100).toFixed(1)}%</span>
             </div>
@@ -234,11 +234,11 @@ export default function ThermalCapacityRecoveryGate3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: hasIncentive ? '#4ade80' : '#f87171', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: hasIncentive ? '#4ade80' : '#f87171', letterSpacing: '0.04em' }}>
               STAGE 3: INCENTIVE ENGINE
             </span>
             <span style={{
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               background: hasIncentive ? 'rgba(74, 222, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)',
               color: hasIncentive ? '#4ade80' : '#f87171',
@@ -248,17 +248,17 @@ export default function ThermalCapacityRecoveryGate3D({
               {hasIncentive ? 'FULL RECOVERY' : 'PRO-RATA PENALTY'}
             </span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Performance Multiplier</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Performance Multiplier</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             {hasIncentive ? `Surplus: +${(pafm - napaf).toFixed(2)}%` : `Shortfall: -${(napaf - pafm).toFixed(2)}%`}
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Recovery Determination</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Recovery Determination</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: hasIncentive ? '#4ade80' : '#f87171' }}>
               {hasIncentive ? '100% Fixed Recovery' : `${(recoveryRatio * 100).toFixed(1)}% Recovery Only`}
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', marginTop: 3 }}>
               {hasIncentive ? 'Eligible for peak availability incentive' : 'Under-recovery deduction applied'}
             </div>
           </div>
@@ -279,20 +279,20 @@ export default function ThermalCapacityRecoveryGate3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
               STAGE 4: COMMITTED CHARGE
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>Billed Discoms</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Billed Discoms</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Net Capacity Charge</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>Block C5 of Invoice</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Net Capacity Charge</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>Block C5 of Invoice</div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Monthly Demand Payable</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Monthly Demand Payable</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
               {fmtCurrency(netPayableCapacity)}
             </div>
-            <div style={{ fontSize: 12, color: '#4ade80', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: '#4ade80', marginTop: 3 }}>
               Ready for DISCOM ledger debit
             </div>
           </div>
@@ -307,7 +307,7 @@ export default function ThermalCapacityRecoveryGate3D({
           border: '1px solid rgba(225, 29, 72, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',

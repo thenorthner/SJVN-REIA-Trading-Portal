@@ -66,7 +66,7 @@ export const DashboardKPIs = () => {
     <div className="animate-fade-in-up stagger-2">
       {failed && (
         <div style={{ background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--on-red)',
-                      borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
+                      borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 14.5 }}>
           Could not load live figures — the cards below are showing no value rather than a stale one.
         </div>
       )}
@@ -137,10 +137,10 @@ export default function MainDashboard() {
                         <stop offset="95%" stopColor="#c2410c" stopOpacity={0.6}/>
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
                     <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
-                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 13.5 }} />
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 15 }} />
                     {MIX.map((m) => (
                       <Bar key={m.key} dataKey={m.key} name={m.label} stackId="mu" fill={m.colour} maxBarSize={32} isAnimationActive={false} />
                     ))}

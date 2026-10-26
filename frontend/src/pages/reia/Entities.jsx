@@ -7,22 +7,33 @@ import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtNumber } f
 import { DocumentManager, PreviewModal, UploadModal } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
 import { catalogForEntityType, APPROVAL_STATUS_LABELS, getRegulatoryItemLabel } from '../../constants/regulatoryApprovals.js';
-import { ROLE_GROUPS } from '../../roles.js';
+import { ROLE_GROUPS, isCounterpartyRole } from '../../roles.js';
 import {
   KYC_RULES, FIELD_LABELS, normaliseKycInput, fieldError, validateStakeholderForm,
   CATEGORY_OPTIONS, CREDIT_RATING_OPTIONS, TECHNOLOGY_OPTIONS, SUPPLY_CRITERIA_OPTIONS, VERTICAL_LABELS,
 } from '../../lib/kycValidation.js';
+import { showAlert } from '../../lib/dialogs.js';
 
 // The desks that onboard: REIA for its sellers and buyers, Commercial for a
 // hydro or thermal station's beneficiaries. Mirrors ENTITY_WRITE on the server,
 // which is what actually decides. A counterparty's own login edits its profile
 // through the API, not on this screen.
 const CAN_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
-const CAN_APPROVE = CAN_WRITE;
-const CAN_VERIFY = CAN_WRITE;
+// Phase B.2: on the REIA desk the maker onboards, edits and records a clearance's
+// details; the checker approves the company, verifies its bank account and
+// marks a clearance verified, rejected or not applicable. The station desks have
+// no split yet, and the administrators keep onboarding (governance).
+const STATIONS = [...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE];
+const CAN_MAKE = [...new Set([...ROLE_GROUPS.REIA_MAKE, ...STATIONS])];
+const CAN_APPROVE = [...new Set([...ROLE_GROUPS.REIA_CHECK, ...STATIONS])];
+const CAN_VERIFY = CAN_APPROVE;
+const CAN_RECORD = [...CAN_MAKE, 'SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+const DECIDING = ['VERIFIED', 'REJECTED', 'NOT_APPLICABLE'];
 const CAN_DIRECT_ADMIT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 // Barring a counterparty is an administrator's decision.
 const CAN_BLACKLIST = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+// Mirrors INTAKE_ROLES in backend routes/documents.js.
+const DOC_INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, 'SJVN_ADMIN', 'IT_SUPER_ADMIN'])];
 
 const emptyForm = (vertical) => ({
   // A station's stakeholders are the beneficiaries it bills; REIA onboards both sides.
@@ -39,6 +50,10 @@ const emptyForm = (vertical) => ({
 });
 
 /** A form field that can show what is wrong with it, under the control. */
+// The four categories seeded before categories were kept per side (masters
+// lookup ENTITY_CATEGORY), and the side each belongs to.
+const LEGACY_CATEGORY_SIDE = { 'RE Generator': 'SELLER', SPV: 'SELLER', DISCOM: 'BUYER', 'C&I': 'BUYER' };
+
 function KField({ id, label, required, error, hint, children }) {
   return (
     <label className={'field' + (error ? ' has-error' : '')} htmlFor={id}>
@@ -126,15 +141,28 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
   useEffect(() => {
     Promise.all([
       api.masters.lookups({ category: 'ENTITY_CATEGORY' }).catch(() => []),
+      api.masters.lookups({ category: 'ENTITY_CATEGORY_SELLER' }).catch(() => []),
+      api.masters.lookups({ category: 'ENTITY_CATEGORY_BUYER' }).catch(() => []),
       api.masters.lookups({ category: 'TECHNOLOGY' }).catch(() => []),
-    ]).then(([catRows, techRows]) => {
-      if (Array.isArray(catRows) && catRows.length > 0) {
-        const catLabels = catRows.map((r) => r.label || r.code);
-        setCategories((prev) => ({
-          SELLER: Array.from(new Set([...prev.SELLER, ...catLabels])),
-          BUYER: Array.from(new Set([...prev.BUYER, ...catLabels])),
-        }));
-      }
+    ]).then(([legacyRows, sellerRows, buyerRows, techRows]) => {
+      setCategories((prev) => {
+        const next = { SELLER: [...prev.SELLER], BUYER: [...prev.BUYER] };
+        const add = (side, r) => {
+          // A lookup whose code is already a listed category is that category,
+          // under a longer label ("C&I" / "C&I Consumer"); it is not offered twice.
+          const value = next[side].includes(r.code) ? r.code : (r.label || r.code);
+          if (!next[side].includes(value)) next[side].push(value);
+        };
+        (Array.isArray(sellerRows) ? sellerRows : []).forEach((r) => add('SELLER', r));
+        (Array.isArray(buyerRows) ? buyerRows : []).forEach((r) => add('BUYER', r));
+        // Categories added before they were kept per side: the known ones go to
+        // their side, anything else stays on both rather than disappear.
+        (Array.isArray(legacyRows) ? legacyRows : []).forEach((r) => {
+          const side = LEGACY_CATEGORY_SIDE[r.code];
+          if (side) add(side, r); else { add('SELLER', r); add('BUYER', r); }
+        });
+        return next;
+      });
       if (Array.isArray(techRows) && techRows.length > 0) {
         const techLabels = techRows.map((r) => r.label || r.code);
         setTechnologies((prev) => Array.from(new Set([...prev, ...techLabels])));
@@ -148,17 +176,16 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
     setQuickAddSaving(true);
     try {
       const code = clean.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 30);
+      // A new category belongs to the kind of company it was added for.
+      const side = (isEditMode ? editFormData.entity_type : form.entity_type) === 'BUYER' ? 'BUYER' : 'SELLER';
       await api.masters.createLookup({
-        category: lookupCategory,
+        category: lookupCategory === 'ENTITY_CATEGORY' ? `ENTITY_CATEGORY_${side}` : lookupCategory,
         code,
         label: clean,
         sort_order: 10,
       });
       if (lookupCategory === 'ENTITY_CATEGORY') {
-        setCategories((prev) => ({
-          SELLER: Array.from(new Set([...prev.SELLER, clean])),
-          BUYER: Array.from(new Set([...prev.BUYER, clean])),
-        }));
+        setCategories((prev) => ({ ...prev, [side]: Array.from(new Set([...prev[side], clean])) }));
       } else if (lookupCategory === 'TECHNOLOGY') {
         setTechnologies((prev) => Array.from(new Set([...prev, clean])));
       }
@@ -169,7 +196,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
       }
       setQuickAddLookup(null);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to save lookup');
+      showAlert(err.response?.data?.error || err.message || 'Failed to save lookup');
     } finally {
       setQuickAddSaving(false);
     }
@@ -385,7 +412,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
               <button
                 type="button"
                 className="btn btn-xs btn-outline"
-                style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                style={{ padding: '1px 8px', fontSize: 12.5, fontWeight: 600 }}
                 onClick={() => setQuickAddLookup({ field, label, category: lookupCat, value: '', isEdit: false })}
               >
                 + Add New
@@ -642,7 +669,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
     { key: 'name', header: 'Name', render: (r) => (
       <div>
         <div style={{fontWeight: 600}}>{r.name}</div>
-        {r.parent_name && <div style={{fontSize: 13, color: 'var(--slate-500)'}}>Parent: {r.parent_name}</div>}
+        {r.parent_name && <div style={{fontSize: 14.5, color: 'var(--slate-500)'}}>Parent: {r.parent_name}</div>}
       </div>
     )},
     { key: 'entity_type', header: 'Type', render: (r) => <Badge status={r.entity_type} /> },
@@ -673,7 +700,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
     { key: 'actions', header: 'Actions', render: (r) => (
       <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
         <button type="button" className="btn btn-xs btn-outline" onClick={() => openDetail(r)}>View</button>
-        {CAN_WRITE.includes(user?.role) && (
+        {CAN_MAKE.includes(user?.role) && (
           <button type="button" className="btn btn-xs btn-outline" onClick={() => startEdit(r)}>Edit</button>
         )}
       </div>
@@ -694,7 +721,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 Compliance documents
               </button>
             )}
-            <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>
+            {CAN_MAKE.includes(user?.role) && <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>}
           </>
         )}
       />
@@ -726,7 +753,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
         <>
           {expiring.length > 0 && (
             <Card title={`Clearances lapsing within 60 days or lapsed — ${expiring.length}`}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13.5 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 15 }}>
                 {expiring.slice(0, 12).map((a) => (
                   <div key={a.id}>
                     <Badge status={a.days_left < 0 || a.status === 'EXPIRED' ? 'REJECTED' : a.days_left <= 7 ? 'PENDING' : 'DRAFT'}
@@ -852,7 +879,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 </button>
               )}
             </div>
-            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 0 }}>
               Specific clearances required for {form.entity_type === 'SELLER' ? 'sellers' : 'buyers'}.
               After create, upload supporting docs and mark each item Submitted / Verified.
               Mark <strong>N/A</strong> only where genuinely not applicable (with a note).
@@ -872,17 +899,17 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14.5 }}>
                           {item.label}
                           {item.is_mandatory ? (
-                            <span style={{ color: 'var(--red-deep)', marginLeft: 6, fontSize: 13 }}>Required</span>
+                            <span style={{ color: 'var(--red-deep)', marginLeft: 6, fontSize: 14.5 }}>Required</span>
                           ) : (
-                            <span style={{ color: 'var(--slate-500)', marginLeft: 6, fontSize: 13 }}>Optional</span>
+                            <span style={{ color: 'var(--slate-500)', marginLeft: 6, fontSize: 14.5 }}>Optional</span>
                           )}
                         </div>
-                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{item.help}</div>
+                        <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{item.help}</div>
                       </div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, whiteSpace: 'nowrap' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, whiteSpace: 'nowrap' }}>
                         <input
                           type="checkbox"
                           checked={na}
@@ -910,7 +937,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', background: 'var(--t-blue-50)', borderRadius: 6, color: 'var(--on-blue)', fontSize: 13, marginBottom: 20 }}>
+          <div style={{ padding: '12px 16px', background: 'var(--t-blue-50)', borderRadius: 6, color: 'var(--on-blue)', fontSize: 14.5, marginBottom: 20 }}>
             <strong>Next:</strong> After save, upload KYC / licence PDFs under Documents, then each checklist item is marked Verified. Approval is blocked until all mandatory items are Verified (or properly N/A). The bank account is verified against the cancelled cheque and becomes payable on approval.
           </div>
 
@@ -924,10 +951,10 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
       {selected && (
         <Modal open={true} onClose={() => setSelected(null)} title={`Stakeholder: ${selected.name}`} width={800}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+            <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
               {selected.parent_name ? `SPV of ${selected.parent_name}` : 'Parent Entity'} · {selected.category || 'General'}
             </span>
-            {CAN_WRITE.includes(user?.role) && (
+            {CAN_MAKE.includes(user?.role) && (
               <button
                 type="button"
                 className="btn btn-sm btn-outline"
@@ -960,7 +987,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                     <td>
                       {selected.is_blacklisted ? <Badge status="REJECTED" label="BLACKLISTED" /> : <Badge status="ACTIVE" label="Clear" />}
                       {(selected.blacklist_reason || selected.blacklisted_by) && (
-                        <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+                        <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
                           {selected.is_blacklisted ? 'Blacklisted' : 'Cleared'}
                           {selected.blacklisted_by ? ` by ${selected.blacklisted_by}` : ''}
                           {selected.blacklisted_at ? ` on ${fmtDate(selected.blacklisted_at)}` : ''}
@@ -991,23 +1018,23 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                     <td>Bank Details</td>
                     <td>
                       <div>{selected.account_no || '-'}, {selected.bank_name || '-'}</div>
-                      <div style={{fontSize: 13, color: 'var(--slate-500)'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
+                      <div style={{fontSize: 14.5, color: 'var(--slate-500)'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
                       <div style={{ marginTop: 6 }}>
                         {selected.is_penny_drop_verified
                           ? <Badge status="ACTIVE" label="Bank verified" />
                           : <Badge status="PENDING" label={selected.status === 'APPROVED' ? 'Bank not verified' : 'Verified on approval'} />}
                         {/* A record approved before approval started confirming the account
                             has no other way to be cleared for payment. */}
-                        {!selected.is_penny_drop_verified && selected.status === 'APPROVED' && CAN_WRITE.includes(user?.role) && (
+                        {!selected.is_penny_drop_verified && selected.status === 'APPROVED' && CAN_VERIFY.includes(user?.role) && (
                           <button type="button" className="btn btn-sm btn-outline" style={{ marginLeft: 8 }} onClick={confirmBank}>
                             Confirm against bank proof
                           </button>
                         )}
                       </div>
                       {selected.pending_bank_json && (
-                        <div style={{ fontSize: 13, color: 'var(--amber-strong)', marginTop: 4 }}>
+                        <div style={{ fontSize: 14.5, color: 'var(--amber-strong)', marginTop: 4 }}>
                           A change of bank account is waiting. It becomes the live account when this record is re-approved.
-                          {CAN_WRITE.includes(user?.role) && (
+                          {CAN_VERIFY.includes(user?.role) && (
                             <div style={{ marginTop: 6, color: 'var(--slate-600)' }}>
                               {callbacks[0]
                                 ? <span>Call-back: {callbacks[0].contact_name} on …{String(callbacks[0].phone).slice(-4)}, {callbacks[0].called_at} — <strong>{callbacks[0].confirmed ? 'confirmed' : 'NOT confirmed'}</strong></span>
@@ -1053,7 +1080,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
           </div>
           
           <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Regulatory Approvals</h4>
-          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 0 }}>
             Track each clearance with status, reference no., issuer and validity. Upload proof under Documents below (same doc types).
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
@@ -1073,44 +1100,45 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <strong style={{ fontSize: 13 }}>{item.label}</strong>
+                    <strong style={{ fontSize: 14.5 }}>{item.label}</strong>
                     <Badge status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'} label={APPROVAL_STATUS_LABELS[item.status] || item.status} />
-                    {item.is_mandatory ? <span style={{ fontSize: 13, color: 'var(--red-deep)' }}>Required</span> : <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>Optional</span>}
+                    {item.is_mandatory ? <span style={{ fontSize: 14.5, color: 'var(--red-deep)' }}>Required</span> : <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>Optional</span>}
                   </div>
-                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
+                  <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>
                     {item.reference_no ? `Ref: ${item.reference_no} · ` : ''}
                     {item.issued_by ? `Issuer: ${item.issued_by} · ` : ''}
                     {item.issued_on ? `Issued: ${item.issued_on} · ` : ''}
                     {item.valid_until ? `Valid till: ${item.valid_until}` : ''}
                     {!item.reference_no && !item.issued_by && !item.issued_on && !item.valid_until ? 'No details yet' : ''}
                   </div>
-                  {item.notes && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{item.notes}</div>}
+                  {item.notes && <div style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 2 }}>{item.notes}</div>}
                   {item.verified_by && (
-                    <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 2 }}>
+                    <div style={{ fontSize: 14.5, color: 'var(--text-subtle)', marginTop: 2 }}>
                       Verified by {item.verified_by}{item.verified_at ? ` · ${fmtDate(item.verified_at)}` : ''}
                     </div>
                   )}
                   {(() => {
                     const proof = docForCode(item.approval_code);
                     const vs = proof?.verification_status;
-                    // SJVN Admin and REIA users can directly upload and verify proofs; stakeholders can also upload from portal.
-                    const canUpload = ['SJVN_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'IT_SUPER_ADMIN'].includes(user?.role) || !['FINANCE_USER', 'TRADING_USER'].includes(user?.role);
+                    // On SJVN's side the desks' officers and the administrators take documents in
+                    // (INTAKE_ROLES in routes/documents.js); stakeholders upload from their portal.
+                    const canUpload = DOC_INTAKE_ROLES.includes(user?.role) || isCounterpartyRole(user?.role);
                     return (
                       <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {proof ? (
                           <>
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: vs === 'VERIFIED' ? 'var(--on-green-2)' : vs === 'REJECTED' ? 'var(--red-deep)' : 'var(--amber-strong)' }}>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: vs === 'VERIFIED' ? 'var(--on-green-2)' : vs === 'REJECTED' ? 'var(--red-deep)' : 'var(--amber-strong)' }}>
                                {vs === 'VERIFIED' ? 'Proof verified' : vs === 'REJECTED' ? 'Proof rejected' : 'Proof uploaded — pending review'}
                             </span>
-                            <button type="button" className="link-btn" style={{ fontSize: 13.5 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
+                            <button type="button" className="link-btn" style={{ fontSize: 15 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
                                View proof
                             </button>
                           </>
                         ) : (
-                          <span style={{ fontSize: 13.5, color: 'var(--text-subtle)' }}>
+                          <span style={{ fontSize: 15, color: 'var(--text-subtle)' }}>
                             No proof uploaded
                             {canUpload ? (
-                              <button type="button" className="link-btn" style={{ fontSize: 13.5, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
+                              <button type="button" className="link-btn" style={{ fontSize: 15, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
                                 Upload
                               </button>
                             ) : ' · awaiting stakeholder upload'}
@@ -1130,14 +1158,14 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
           <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Contacts</h4>
           {selected.contacts?.length > 0 ? (
             <Table columns={[{key:'type', header:'Role', render: r=>r.contact_type}, {key:'name', header:'Name'}, {key:'email', header:'Email'}, {key:'phone', header:'Phone'}]} rows={selected.contacts} />
-          ) : <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No contacts found.</div>}
+          ) : <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No contacts found.</div>}
 
-          {selected.entity_type === 'SELLER' && CAN_WRITE.includes(user?.role) && (
+          {selected.entity_type === 'SELLER' && CAN_MAKE.includes(user?.role) && (
             <div style={{ marginTop: 24, padding: 16, background: 'var(--slate-50)', border: '1px dashed var(--slate-300)', borderRadius: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <h4 style={{ margin: '0 0 8px 0', color: 'var(--slate-700)' }}>Invoice Letterhead / Template</h4>
-                  <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
+                  <p style={{ fontSize: 14.5, color: 'var(--slate-500)', margin: 0 }}>
                     Please upload the Seller's invoice logo below. This logo will be displayed on the top left of the generated PDF.
                   </p>
                 </div>
@@ -1154,7 +1182,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
 
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--slate-200)' }}>
                 <h4 style={{ margin: '0 0 8px 0', color: 'var(--slate-700)' }}>Invoice Authentication</h4>
-                <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
+                <p style={{ fontSize: 14.5, color: 'var(--slate-500)', margin: 0 }}>
                   No signature image is stored or printed. An approved invoice carries a system authentication seal in the
                   “For &amp; on behalf of” box instead: the authorised signatory named below, the date and time of approval (IST),
                   a SHA-256 hash of the invoice figures and an audit reference — so a copy that has been altered no longer matches,
@@ -1221,14 +1249,14 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 16 }}>⚠️</span>
-                      <strong style={{ fontSize: 13, color: 'var(--on-amber)' }}>
+                      <strong style={{ fontSize: 14.5, color: 'var(--on-amber)' }}>
                         Mandatory Regulatory Clearances Pending
                       </strong>
                     </div>
                     {selected.regulatory_summary?.blocking?.length > 0 && (
                       <span
                         style={{
-                          fontSize: 13,
+                          fontSize: 14.5,
                           fontWeight: 600,
                           color: 'var(--amber-strong)',
                           background: 'var(--t-amber-100)',
@@ -1241,7 +1269,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 13.5, color: 'var(--on-amber)', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 15, color: 'var(--on-amber)', lineHeight: 1.45 }}>
                     Standard approval will remain on hold until mandatory regulatory clearances are verified or marked N/A in the checklist above.
                   </div>
                   {selected.regulatory_summary?.blocking?.length > 0 && (
@@ -1251,7 +1279,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                         paddingLeft: 22,
                         listStyleType: 'disc',
                         color: 'var(--on-amber)',
-                        fontSize: 13,
+                        fontSize: 14.5,
                         lineHeight: 1.6,
                       }}
                     >
@@ -1265,7 +1293,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 </div>
               )}
               {!!selected.is_blacklisted && (
-                <div style={{ fontSize: 13, color: 'var(--red-deep)', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                <div style={{ fontSize: 14.5, color: 'var(--red-deep)', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
                   This stakeholder is blacklisted and cannot be approved until the blacklist is cleared.
                 </div>
               )}
@@ -1301,7 +1329,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
       <Modal open={!!typesModal} onClose={() => setTypesModal(null)} title="Compliance documents" width={720}>
         {typesModal && (
           <div>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 0 }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 0 }}>
               The eight standard clearances are fixed. Add any other document SJVN wants on file. It joins every
               stakeholder's checklist and the Document Desk's upload list straight away.
             </p>
@@ -1351,7 +1379,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
             </form>
             <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Added so far</h4>
             {customTypes.length === 0 ? (
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Nothing added yet.</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>Nothing added yet.</div>
             ) : (
               <table className="table" style={{ width: '100%' }}>
                 <thead><tr><th>Document</th><th>Applies to</th><th>Required</th><th>Status</th><th /></tr></thead>
@@ -1375,7 +1403,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 </tbody>
               </table>
             )}
-            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 0 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 0 }}>
               Retiring keeps whatever is already filed against it. It only drops off stakeholders who have not started it, and off new ones.
             </p>
           </div>
@@ -1385,7 +1413,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
       <Modal open={!!callback} onClose={() => setCallback(null)} title="Bank change call-back" width={520}>
         {callback && (
           <form onSubmit={saveCallback} noValidate>
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginTop: 0 }}>
               Phone a number already on record for {selected?.name} (its corporate phone or a listed contact) — never one given with the change request — and ask them to confirm the new account.
             </p>
             <Field label="Person called" required><input value={callback.contact_name} onChange={(e) => setCallback({ ...callback, contact_name: e.target.value })} /></Field>
@@ -1416,9 +1444,9 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 onChange={(e) => setApprovalForm({ ...approvalForm, status: e.target.value })}
               >
                 {Object.entries(APPROVAL_STATUS_LABELS)
-                  .filter(([code]) => CAN_VERIFY.includes(user?.role) || code !== 'VERIFIED' || editApproval.status === 'VERIFIED')
+                  .filter(([code]) => code === editApproval.status || (DECIDING.includes(code) ? CAN_VERIFY : CAN_RECORD).includes(user?.role))
                   .map(([code, label]) => (
-                    <option key={code} value={code} disabled={code === 'VERIFIED' && !CAN_VERIFY.includes(user?.role)}>
+                    <option key={code} value={code} disabled={code !== editApproval.status && !(DECIDING.includes(code) ? CAN_VERIFY : CAN_RECORD).includes(user?.role)}>
                       {label}
                     </option>
                   ))}
@@ -1491,10 +1519,10 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-red)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Regulatory Debarment Action</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--t-red-line)', color: 'var(--on-red)', padding: '1px 6px', borderRadius: 4 }}>RESTRICTED</span>
+                    <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--on-red)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Regulatory Debarment Action</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, background: 'var(--t-red-line)', color: 'var(--on-red)', padding: '1px 6px', borderRadius: 4 }}>RESTRICTED</span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--on-red)', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--on-red)', lineHeight: 1.45 }}>
                     Blacklisting prevents this stakeholder from receiving approvals or participating in new power contracts across SJVN platforms.
                   </div>
                 </div>
@@ -1529,10 +1557,10 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-green)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Restore Stakeholder</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--t-green-line)', color: 'var(--on-green)', padding: '1px 6px', borderRadius: 4 }}>RE-ADMISSION</span>
+                    <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--on-green)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Restore Stakeholder</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, background: 'var(--t-green-line)', color: 'var(--on-green)', padding: '1px 6px', borderRadius: 4 }}>RE-ADMISSION</span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--on-green)', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--on-green)', lineHeight: 1.45 }}>
                     Clearing the debarment will restore normal standing, permitting fresh regulatory approvals and PPA/PSA allocations.
                   </div>
                 </div>
@@ -1553,13 +1581,13 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
               gap: 8,
             }}>
               <div>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Target Stakeholder</span>
-                <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--slate-900)' }}>{selected?.name}</div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Target Stakeholder</span>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--slate-900)' }}>{selected?.name}</div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {selected?.entity_type && <Badge status={selected.entity_type} />}
                 {selected?.pan_no && (
-                  <span style={{ fontSize: 12, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: '2px 8px', borderRadius: 6, color: 'var(--slate-700)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 13.5, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: '2px 8px', borderRadius: 6, color: 'var(--slate-700)', fontFamily: 'monospace' }}>
                     PAN: {selected.pan_no}
                   </span>
                 )}
@@ -1573,7 +1601,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
               borderRadius: 8,
               padding: '10px 14px',
               marginBottom: 16,
-              fontSize: 12.5,
+              fontSize: 14,
               color: 'var(--slate-600)',
             }}>
               <div style={{ fontWeight: 600, color: 'var(--slate-800)', marginBottom: 5 }}>Legal & Operational Notes:</div>
@@ -1594,7 +1622,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                   padding: '10px 12px',
                   borderRadius: 8,
                   border: '1.5px solid var(--slate-300)',
-                  fontSize: 13.5,
+                  fontSize: 15,
                   lineHeight: 1.5,
                   boxSizing: 'border-box',
                 }}
@@ -1602,7 +1630,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 onChange={(e) => setBlacklistForm({ ...blacklistForm, reason: e.target.value })}
                 placeholder={blacklistForm.blacklisted ? 'e.g. Debarred by MNRE Office Memorandum No. 283/54/2026 dated 14-Oct-2026' : 'e.g. Debarment revoked as per MNRE compliance order dated …'}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12, color: 'var(--slate-500)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 13.5, color: 'var(--slate-500)' }}>
                 <span>Recorded in the immutable compliance audit ledger</span>
                 <span style={{ color: (blacklistForm.reason?.trim().length || 0) < 10 ? 'var(--red-strong)' : 'var(--green-strong)', fontWeight: 600 }}>
                   {blacklistForm.reason?.trim().length || 0} / 10 min chars
@@ -1686,7 +1714,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                       <button
                         type="button"
                         className="btn btn-xs btn-outline"
-                        style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                        style={{ padding: '1px 8px', fontSize: 12.5, fontWeight: 600 }}
                         onClick={() => setQuickAddLookup({ field: 'category', label: 'Category', category: 'ENTITY_CATEGORY', value: '', isEdit: true })}
                       >
                         + Add New
@@ -1767,7 +1795,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                           <button
                             type="button"
                             className="btn btn-xs btn-outline"
-                            style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                            style={{ padding: '1px 8px', fontSize: 12.5, fontWeight: 600 }}
                             onClick={() => setQuickAddLookup({ field: 'technology', label: 'Technology', category: 'TECHNOLOGY', value: '', isEdit: true })}
                           >
                             + Add New

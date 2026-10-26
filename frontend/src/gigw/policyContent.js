@@ -25,6 +25,41 @@ export const HELP_LINKS = [
   { to: '/screen-reader-access', key: 'page.screenReader' },
   { to: '/help', key: 'page.help' },
   { to: '/sitemap', key: 'page.sitemap' },
+  { to: '/feedback', key: 'page.feedback' },
+  { to: '/related-links', key: 'page.related' },
+];
+
+// DBIM v3 s.5.4 global navigation menu on the public pages.
+export const NAV_LINKS = [
+  { to: '/', key: 'page.home' },
+  { to: '/about-us', key: 'page.about' },
+  { to: '/circulars', key: 'page.circulars' },
+  { to: '/help', key: 'page.help' },
+  { to: '/feedback', key: 'page.feedback' },
+  { to: '/contact-us', key: 'page.contactShort' },
+];
+
+// DBIM v3 s.5.6 "Related Links". Only official sites; each was checked by hand.
+export const RELATED_LINKS = [
+  { href: 'https://www.india.gov.in', en: 'National Portal of India', hi: 'भारत का राष्ट्रीय पोर्टल' },
+  { href: 'https://powermin.gov.in', en: 'Ministry of Power', hi: 'विद्युत मंत्रालय' },
+  { href: 'https://sjvn.nic.in', en: 'SJVN Limited — corporate website', hi: 'एसजेवीएन लिमिटेड — कॉर्पोरेट वेबसाइट' },
+  { href: 'https://cercind.gov.in', en: 'Central Electricity Regulatory Commission (CERC)', hi: 'केंद्रीय विद्युत विनियामक आयोग (सीईआरसी)' },
+  { href: 'https://cea.nic.in', en: 'Central Electricity Authority (CEA)', hi: 'केंद्रीय विद्युत प्राधिकरण (सीईए)' },
+  { href: 'https://mnre.gov.in', en: 'Ministry of New and Renewable Energy (MNRE)', hi: 'नवीन एवं नवीकरणीय ऊर्जा मंत्रालय (एमएनआरई)' },
+  { href: 'https://grid-india.in', en: 'Grid Controller of India (Grid-India)', hi: 'ग्रिड कंट्रोलर ऑफ इंडिया (ग्रिड-इंडिया)' },
+  { href: 'https://www.mygov.in', en: 'MyGov', hi: 'माईगॉव' },
+  { href: 'https://pgportal.gov.in', en: 'CPGRAMS — public grievances', hi: 'सीपीग्राम्स — लोक शिकायत' },
+  { href: 'https://rtionline.gov.in', en: 'RTI Online', hi: 'आरटीआई ऑनलाइन' },
+  { href: 'https://www.cert-in.org.in', en: 'CERT-In — report a cyber incident', hi: 'सीईआरटी-इन — साइबर घटना की सूचना' },
+];
+
+// SJVN's official handles, as linked from sjvn.nic.in (checked 22-Oct-2026).
+// Add Instagram / LinkedIn here only once SJVN confirms the official handle.
+export const SOCIAL_LINKS = [
+  { href: 'https://x.com/SjvnLimited', name: 'X', icon: 'x' },
+  { href: 'https://www.facebook.com/SJVNLtd', name: 'Facebook', icon: 'facebook' },
+  { href: 'https://www.youtube.com/@sjvnlimited5476', name: 'YouTube', icon: 'youtube' },
 ];
 
 export const POLICIES = {
@@ -252,10 +287,14 @@ export const POLICIES = {
         ],
       },
       {
-        h: b('Performance (only with consent)', 'प्रदर्शन (केवल सहमति से)'),
+        h: b('Functionality (only with consent)', 'कार्यक्षमता (केवल सहमति से)'),
+        list: [
+          b('sjvn_command_recents — your last five searches in the portal search.', 'sjvn_command_recents — पोर्टल खोज में आपकी अंतिम पाँच खोजें।'),
+          b('sjvn_recent_company_ids — the companies you opened most recently on the company users screen.', 'sjvn_recent_company_ids — कंपनी उपयोगकर्ता स्क्रीन पर हाल में खोली गई कंपनियाँ।'),
+        ],
         p: [b(
-          'If you choose “Accept all”, the portal may record anonymous page-load timings to find slow screens. No advertising, profiling or third-party tracking is used either way. You can change your choice at any time from “Cookie preferences” in the footer.',
-          'यदि आप “सभी स्वीकार करें” चुनते हैं, तो पोर्टल धीमी स्क्रीन खोजने हेतु अनाम पृष्ठ-लोड समय अभिलिखित कर सकता है। किसी भी स्थिति में विज्ञापन, प्रोफ़ाइलिंग या तृतीय-पक्ष ट्रैकिंग का उपयोग नहीं होता। आप फ़ुटर में “कुकी प्राथमिकताएँ” से किसी भी समय अपना विकल्प बदल सकते हैं।'
+          'These are written only if you choose “Accept all”, or turn on “Functionality” under “Customise”. Rejecting them, or turning them off later from “Cookie preferences” in the footer, deletes them. The portal sets no analytics, advertising or social-media tracking cookies.',
+          'ये केवल तभी लिखे जाते हैं जब आप “सभी स्वीकार करें” चुनें, या “अनुकूलित करें” में “कार्यक्षमता” चालू करें। इन्हें अस्वीकार करने पर, या बाद में फ़ुटर में “कुकी प्राथमिकताएँ” से बंद करने पर, ये हटा दिए जाते हैं। पोर्टल कोई विश्लेषण, विज्ञापन या सोशल-मीडिया ट्रैकिंग कुकी नहीं लगाता।'
         )],
       },
     ],
@@ -301,6 +340,24 @@ export const POLICIES = {
           b('Labelled form fields, error messages announced to screen readers, and data tables with column headers.', 'लेबलयुक्त फ़ॉर्म फ़ील्ड, स्क्रीन रीडर को घोषित त्रुटि संदेश, एवं स्तंभ शीर्षकों सहित डेटा तालिकाएँ।'),
           b('Content in English and Hindi.', 'अंग्रेज़ी एवं हिंदी में सामग्री।'),
         ],
+      },
+      {
+        h: b('GIGW 3.0 & DBIM v3 Conformance Matrix', 'GIGW 3.0 एवं DBIM v3 अनुपालन मैट्रिक्स'),
+        p: [
+          b(
+            'This portal has been designed and audited against the Guidelines for Indian Government Websites (GIGW 3.0 by STQC / MeitY) and the Digital Brand Identity Manual (DBIM Version 3, Jan 2025 by Digital Governance Division, MeitY). Core conformance parameters include:',
+            'इस पोर्टल की संरचना भारत सरकार की वेबसाइटों हेतु दिशानिर्देश (GIGW 3.0, STQC/MeitY) एवं डिजिटल ब्रांड पहचान नियमावली (DBIM संस्करण 3, जनवरी 2025, डिजिटल गवर्नेंस प्रभाग, MeitY) के अनुरूप तैयार एवं जाँची गई है। मुख्य अनुपालन मानक निम्नलिखित हैं:'
+          )
+        ],
+        list: [
+          b('Typography & Design System (DBIM Sec 4.1): Mandated Noto Sans typeface loaded for Latin, Devanagari, and Gujarati scripts; standardized 8px grid and functional color palette.', 'टाइपोग्राफी एवं डिज़ाइन प्रणाली (DBIM धारा 4.1): लैटिन, देवनागरी एवं गुजराती लिपियों हेतु अनिवार्य Noto Sans टाइपफ़ेस; मानकीकृत 8px ग्रिड एवं कार्यात्मक रंग पटल।'),
+          b('Statutory PSU Lineage (DBIM Sec 5.6): Official PSU identification statement reflecting administrative ministry (Ministry of Power) and joint venture status (Govt. of India & Govt. of Himachal Pradesh).', 'वैधानिक पीएसयू वंशानुक्रम (DBIM धारा 5.6): प्रशासनिक मंत्रालय (विद्युत मंत्रालय) एवं संयुक्त उद्यम स्थिति (भारत सरकार एवं हिमाचल प्रदेश सरकार) को दर्शाने वाला आधिकारिक वक्तव्य।'),
+          b('Perceivable (WCAG 2.1 AA / GIGW 3.0): Contrast ratio exceeds 4.5:1 for standard text and 3:1 for graphical UI elements; high-contrast black/yellow mode (7:1+ ratio) provided.', 'प्रत्यक्ष ग्राह्यता (WCAG 2.1 AA / GIGW 3.0): सामान्य पाठ हेतु कंट्रास्ट अनुपात 4.5:1 से अधिक तथा ग्राफ़िकल घटकों हेतु 3:1 से अधिक; उच्च कंट्रास्ट काला/पीला मोड (7:1+ अनुपात) उपलब्ध।'),
+          b('Operable (WCAG 2.1 AA / GIGW 3.0): First focusable link is “Skip to main content”; full keyboard navigation without keyboard traps; interactive dialogs trap focus and dismiss with Escape.', 'संचालनीयता (WCAG 2.1 AA / GIGW 3.0): प्रथम फ़ोकस योग्य तत्व “मुख्य सामग्री पर जाएँ” लिंक; बिना कीबोर्ड ट्रैप के पूर्ण कीबोर्ड संचालन; संवाद-बॉक्स फ़ोकस भीतर रखते हैं और Escape से बंद होते हैं।'),
+          b('Understandable (GIGW 3.0): Bilingual and multilingual support (English, Hindi, Gujarati, Marathi) with persistent language switching and clear error identification.', 'बोधगम्यता (GIGW 3.0): स्थायी भाषा विकल्प सहित द्विभाषी एवं बहुभाषी सहायता (अंग्रेज़ी, हिंदी, गुजराती, मराठी) तथा स्पष्ट त्रुटि पहचान।'),
+          b('Robust (WCAG 2.1 AA): Clean semantic HTML5 elements, ARIA roles, live regions for notifications, and compatibility with leading screen readers.', 'दृढ़ता (WCAG 2.1 AA): स्वच्छ सेमांटिक HTML5 तत्व, ARIA भूमिकाएँ, सूचनाओं हेतु लाइव क्षेत्र, तथा अग्रणी स्क्रीन रीडर्स के साथ पूर्ण अनुकूलता।'),
+          b('Digital Personal Data Protection (DPDP Act 2023): Granular cookie consent banner with essential and performance modes, without third-party tracking.', 'डिजिटल व्यक्तिगत डेटा संरक्षण (डीपीडीपी अधिनियम 2023): आवश्यक एवं प्रदर्शन मोड सहित सूक्ष्म कुकी सहमति बैनर, बिना किसी तृतीय-पक्ष ट्रैकिंग के।')
+        ]
       },
       {
         h: b('Known limitations', 'ज्ञात सीमाएँ'),
@@ -363,6 +420,59 @@ export const POLICIES = {
           'एसजेवीएन लिमिटेड को आरटीआई आवेदन rtionline.gov.in पर ऑनलाइन भी प्रस्तुत किए जा सकते हैं। आरटीआई अधिनियम की धारा 4(1)(ख) के अंतर्गत प्रकटीकरण एसजेवीएन की कॉर्पोरेट वेबसाइट पर प्रकाशित हैं।'
         )],
       },
+    ],
+  },
+
+  'about-us': {
+    key: 'page.about',
+    intro: b(
+      'SJVN Limited is a Navratna Central Public Sector Enterprise under the Ministry of Power, Government of India, and a joint venture of the Government of India and the Government of Himachal Pradesh. This portal is SJVN’s Integrated Energy Commercial & Trading Platform.',
+      'एसजेवीएन लिमिटेड विद्युत मंत्रालय, भारत सरकार के अधीन एक नवरत्न केंद्रीय सार्वजनिक क्षेत्र उपक्रम है तथा भारत सरकार एवं हिमाचल प्रदेश सरकार का संयुक्त उपक्रम है। यह पोर्टल एसजेवीएन का एकीकृत ऊर्जा वाणिज्यिक एवं व्यापार प्लेटफ़ॉर्म है।'
+    ),
+    sections: [
+      {
+        h: b('Ownership', 'स्वामित्व'),
+        list: [
+          b('Government of India — 55.00%', 'भारत सरकार — 55.00%'),
+          b('Government of Himachal Pradesh — 26.85%', 'हिमाचल प्रदेश सरकार — 26.85%'),
+          b('Public — 18.15%', 'जनता — 18.15%'),
+        ],
+        p: [b('Shareholding as published on sjvn.nic.in.', 'sjvn.nic.in पर प्रकाशित शेयरधारिता के अनुसार।')],
+      },
+      {
+        h: b('What this portal does', 'यह पोर्टल क्या करता है'),
+        list: [
+          b('Renewable Energy Implementing Agency (REIA): power purchase and sale agreements, energy accounts, bills, payment security and reconciliation with developers and discoms.', 'नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी (आरईआईए): विकासकर्ताओं एवं डिस्कॉम के साथ विद्युत क्रय एवं विक्रय अनुबंध, ऊर्जा लेखा, बिल, भुगतान सुरक्षा एवं मिलान।'),
+          b('Power trading: exchange and bilateral transactions, settlement and billing for trading clients.', 'विद्युत व्यापार: एक्सचेंज एवं द्विपक्षीय लेन-देन, व्यापार ग्राहकों हेतु निपटान एवं बिलिंग।'),
+          b('Hydro and thermal stations: billing of beneficiaries for SJVN’s generating stations.', 'जल एवं ताप विद्युत केंद्र: एसजेवीएन के उत्पादन केंद्रों हेतु लाभार्थियों की बिलिंग।'),
+        ],
+      },
+      {
+        h: b('Who uses it', 'इसका उपयोग कौन करता है'),
+        p: [b(
+          'SJVN officers, renewable energy developers, distribution companies and trading clients. Every account is issued by SJVN; there is no public registration.',
+          'एसजेवीएन अधिकारी, नवीकरणीय ऊर्जा विकासकर्ता, वितरण कंपनियाँ एवं व्यापार ग्राहक। प्रत्येक खाता एसजेवीएन द्वारा जारी किया जाता है; कोई सार्वजनिक पंजीकरण नहीं है।'
+        )],
+      },
+      {
+        h: b('More about SJVN', 'एसजेवीएन के बारे में अधिक'),
+        p: [b(
+          'The company’s history, projects, management, annual reports and RTI disclosures are on its corporate website, sjvn.nic.in.',
+          'कंपनी का इतिहास, परियोजनाएँ, प्रबंधन, वार्षिक रिपोर्ट एवं आरटीआई प्रकटीकरण इसकी कॉर्पोरेट वेबसाइट sjvn.nic.in पर उपलब्ध हैं।'
+        )],
+        links: [{ href: 'https://sjvn.nic.in', en: 'sjvn.nic.in', hi: 'sjvn.nic.in' }],
+      },
+    ],
+  },
+
+  'related-links': {
+    key: 'page.related',
+    intro: b(
+      'Official websites of the Government of India and the power-sector bodies this portal works with. Each link opens in a new tab.',
+      'भारत सरकार एवं उन विद्युत-क्षेत्र निकायों की आधिकारिक वेबसाइटें जिनके साथ यह पोर्टल कार्य करता है। प्रत्येक लिंक नए टैब में खुलता है।'
+    ),
+    sections: [
+      { h: b('Government and power sector', 'सरकार एवं विद्युत क्षेत्र'), links: 'RELATED' },
     ],
   },
 

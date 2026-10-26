@@ -113,7 +113,7 @@ export default function NettingModal({ open, clients, onClose, onApplied }) {
               </tbody>
             </table>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontSize: 13, marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontSize: 14.5, marginBottom: 8 }}>
             <div>Set off<br /><strong>{rs(position.set_off)}</strong></div>
             <div>Client still owes<br /><strong>{rs(position.after.client_owes)}</strong></div>
             <div>SJVN still owes<br /><strong>{rs(position.after.sjvn_owes)}</strong></div>

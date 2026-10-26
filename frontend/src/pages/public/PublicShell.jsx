@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Lock, Target } from 'lucide-react';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Search, UserRound, Target } from 'lucide-react';
+import { NAV_LINKS } from '../../gigw/policyContent.js';
+import ExternalLinkNotice from '../../gigw/ExternalLinkNotice.jsx';
 import GovStrip, { focusMain } from '../../gigw/GovStrip.jsx';
 import GigwFooter from '../../gigw/GigwFooter.jsx';
 import { useGigw } from '../../gigw/GigwContext.jsx';
@@ -8,21 +10,21 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { landingFor } from '../Login.jsx';
 import ThemeToggle from '../../components/ThemeToggle.jsx';
 import VisionModal, { VISION_OPEN_EVENT } from '../../components/VisionModal.jsx';
-import PortalSearchModal, { SEARCH_OPEN_EVENT } from '../../components/PortalSearchModal.jsx';
+import { openPortalSearch } from '../../components/PortalSearchModal.jsx';
 import AudioSpeechWidget, { AUDIO_SPEECH_TOGGLE_EVENT } from '../../components/AudioSpeechWidget.jsx';
-import KeyboardShortcutsModal, { SHORTCUTS_OPEN_EVENT } from '../../components/KeyboardShortcutsModal.jsx';
+import { openKeyboardShortcuts } from '../../components/KeyboardShortcutsModal.jsx';
 import BackToTopProgress from '../../components/BackToTopProgress.jsx';
 
 /**
- * PublicShell — Frame for public portal pages
- * Compliant with GIGW 3.0, UX4G, and matches the official SJVN Portal masthead.
+ * PublicShell — frame for the public portal pages, laid out as DBIM v3 s.5.4.3
+ * "Header 3" (a PSU, which does not carry the State Emblem): the identity strip
+ * and user controls, logo lockup 3B (logo, name, tagline), a highlighted search
+ * bar, a profile / sign-in control, and the global navigation menu below.
  */
 export default function PublicShell({ title, children }) {
   const { t, lang, toggleLang, textSize, setTextSize, toggleContrast } = useGigw();
   const { user } = useAuth() || {};
-  const [searchOpen, setSearchOpen] = useState(false);
   const [audioOpen, setAudioOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const location = useLocation();
   const [visionOpen, setVisionOpen] = useState(() => {
     return window.location.search.includes('vision') || window.location.hash === '#vision';
@@ -37,33 +39,15 @@ export default function PublicShell({ title, children }) {
 
   useEffect(() => {
     const handleOpenVision = () => setVisionOpen(true);
-    const handleOpenSearch = () => setSearchOpen(true);
     const handleToggleAudio = () => setAudioOpen((prev) => !prev);
-    const handleOpenShortcuts = () => setShortcutsOpen(true);
 
     window.addEventListener(VISION_OPEN_EVENT, handleOpenVision);
-    window.addEventListener(SEARCH_OPEN_EVENT, handleOpenSearch);
     window.addEventListener(AUDIO_SPEECH_TOGGLE_EVENT, handleToggleAudio);
-    window.addEventListener(SHORTCUTS_OPEN_EVENT, handleOpenShortcuts);
 
-    // Global keyboard shortcuts (Cmd+K, ?, Alt+U, Alt+A, Alt+C, Alt+L, Alt+1/Alt+S)
+    // Global keyboard shortcuts (Alt+U, Alt+A, Alt+C, Alt+L, Alt+1/Alt+S)
     function handleKeyDown(e) {
       const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
       const isInput = ['input', 'textarea', 'select'].includes(activeTag) || document.activeElement?.isContentEditable;
-
-      // Cmd+K / Ctrl+K
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchOpen((prev) => !prev);
-        return;
-      }
-
-      // ? key opens shortcuts cheat sheet (only when user is not typing in an input)
-      if (!isInput && (e.key === '?' || (e.code === 'Slash' && e.shiftKey))) {
-        e.preventDefault();
-        setShortcutsOpen((prev) => !prev);
-        return;
-      }
 
       // Alt+U for UX4G text-to-speech audio reader
       if (e.altKey && e.key.toLowerCase() === 'u') {
@@ -105,9 +89,7 @@ export default function PublicShell({ title, children }) {
 
     return () => {
       window.removeEventListener(VISION_OPEN_EVENT, handleOpenVision);
-      window.removeEventListener(SEARCH_OPEN_EVENT, handleOpenSearch);
       window.removeEventListener(AUDIO_SPEECH_TOGGLE_EVENT, handleToggleAudio);
-      window.removeEventListener(SHORTCUTS_OPEN_EVENT, handleOpenShortcuts);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [textSize, setTextSize, toggleContrast, toggleLang]);
@@ -117,6 +99,8 @@ export default function PublicShell({ title, children }) {
   }, [title, t]);
 
   const getDashboardPath = () => (user ? landingFor(user) : '/login');
+  const [q, setQ] = useState('');
+  const submitSearch = (e) => { e.preventDefault(); openPortalSearch(q); setQ(''); };
 
   return (
     <div className="gigw-public">
@@ -132,47 +116,48 @@ export default function PublicShell({ title, children }) {
             </span>
           </Link>
 
-          <nav className="gigw-masthead-nav" aria-label="Primary">
+          <form className="gigw-header-search" role="search" onSubmit={submitSearch}>
+            <label htmlFor="gigw-header-q" className="sr-only">{t('search.placeholder')}</label>
+            <input
+              id="gigw-header-q"
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t('search.placeholder')}
+              autoComplete="off"
+            />
+            <button type="submit" title={t('search.label')}>
+              <Search size={18} aria-hidden="true" />
+              <span className="sr-only">{t('search.label')}</span>
+            </button>
+          </form>
+
+          <div className="gigw-masthead-nav">
             <button
               type="button"
               className="gigw-header-vision-btn"
               onClick={() => setVisionOpen(true)}
-              aria-label={t('pub.shell.vision')}
               title={t('pub.shell.visionTitle')}
             >
-              <Target size={14} style={{ color: 'var(--primary)' }} />
+              <Target size={16} aria-hidden="true" />
               <span>{t('pub.shell.vision')}</span>
             </button>
-
-            {/* Quick Search Spotlight Trigger */}
-            <button
-              type="button"
-              className="gigw-search-trigger-btn"
-              onClick={() => setSearchOpen(true)}
-              aria-label={t('pub.shell.searchPortal')}
-              title={t('pub.shell.searchPortal')}
-            >
-              <Search size={14} />
-              <span>{t('pub.shell.search')}</span>
-              <kbd className="gigw-search-kbd-badge">⌘K</kbd>
-            </button>
-
             <ThemeToggle />
-
-            {/* Direct Sign In Button with Lock icon */}
-            <Link 
-              to={getDashboardPath()} 
-              className="btn btn-primary gigw-header-signin-btn"
-            >
-              <Lock size={14} />
-              <span>
-                {user 
-                  ? (t('pub.shell.dashboard')) 
-                  : (t('pub.shell.signIn'))}
-              </span>
+            <Link to={getDashboardPath()} className="btn btn-primary gigw-header-signin-btn">
+              <UserRound size={16} aria-hidden="true" />
+              <span>{user ? t('pub.shell.dashboard') : t('pub.shell.signIn')}</span>
             </Link>
-          </nav>
+          </div>
         </div>
+        <nav className="gigw-global-nav" aria-label={t('nav.global')}>
+          <ul>
+            {NAV_LINKS.map((l) => (
+              <li key={l.to}>
+                <NavLink to={l.to} end={l.to === '/'}>{t(l.key)}</NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
       </header>
 
       <main id="main-content" className="gigw-public-main" tabIndex={-1}>
@@ -180,10 +165,9 @@ export default function PublicShell({ title, children }) {
       </main>
       <GigwFooter />
       <VisionModal open={visionOpen} onClose={() => setVisionOpen(false)} />
-      <PortalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <AudioSpeechWidget open={audioOpen} onClose={() => setAudioOpen(false)} />
-      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <BackToTopProgress />
+      <ExternalLinkNotice />
     </div>
   );
 }

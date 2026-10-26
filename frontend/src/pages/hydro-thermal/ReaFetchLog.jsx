@@ -59,7 +59,7 @@ export default function ReaFetchLog({ onScanned }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
         <div>
           <h4 id="rea-fetch-log-title" style={{ margin: 0 }}>REA fetch log — NRPC</h4>
-          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 2 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 2 }}>
             The scheduled scan runs at 06:00 IST daily on the 1st–10th, then every third day.
             {status && <> Fetched: <strong>{status.total_processed}</strong> · Failed: <strong>{status.total_failed}</strong>
               {status.latest_fetch && <> · Last: {status.latest_fetch.period_month} on {at(status.latest_fetch.fetched_at)}</>}</>}

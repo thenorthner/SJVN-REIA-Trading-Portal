@@ -92,7 +92,7 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
         <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--slate-50)', borderRadius: '8px 8px 0 0' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, color: 'var(--slate-700)' }}>{product} cleared blocks</h2>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
+            <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>
               {record.client_name} · {record.exchange} · {record.deliveryDate}
             </div>
           </div>
@@ -102,32 +102,32 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
         <div style={{ padding: 20 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px 20px', marginBottom: 24 }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
-              <div style={{ fontSize: 14 }}>{record.client_name}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
+              <div style={{ fontSize: 15.5 }}>{record.client_name}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
-              <div style={{ fontSize: 14 }}>{record.exchange}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
+              <div style={{ fontSize: 15.5 }}>{record.exchange}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
-              <div style={{ fontSize: 14 }}>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
+              <div style={{ fontSize: 15.5 }}>
                 {record.contract_id
                   ? <Link to={`/trading/exchange/contracts/${record.contract_id}`}>{record.contract_id}</Link>
                   : '—'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
-              <div style={{ fontSize: 14 }}>{record.status}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
+              <div style={{ fontSize: 15.5 }}>{record.status}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
-              <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fmtNumber(totalMwh, 3)} MWh</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
+              <div style={{ fontSize: 15.5, fontWeight: 'bold' }}>{fmtNumber(totalMwh, 3)} MWh</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
-              <div style={{ fontSize: 14, fontWeight: 'bold' }}>₹{fmtNumber(totalValue, 2)}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
+              <div style={{ fontSize: 15.5, fontWeight: 'bold' }}>₹{fmtNumber(totalValue, 2)}</div>
             </div>
           </div>
 

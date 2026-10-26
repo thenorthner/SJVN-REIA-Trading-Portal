@@ -91,7 +91,7 @@ export default function MmrExcelUploader() {
 
           <div style={{ display: 'grid', gap: 14, maxWidth: 480, margin: '0 auto' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 12 }}>
-              <label style={{ fontSize: 13, fontWeight: 600 }}>
+              <label style={{ fontSize: 14.5, fontWeight: 600 }}>
                 Month<span style={{ color: 'var(--red)' }}> *</span>
               </label>
               <select className="input" value={month} onChange={(e) => setMonth(e.target.value)} required>
@@ -101,7 +101,7 @@ export default function MmrExcelUploader() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 12 }}>
-              <label style={{ fontSize: 13, fontWeight: 600 }}>
+              <label style={{ fontSize: 14.5, fontWeight: 600 }}>
                 year<span style={{ color: 'var(--red)' }}> *</span>
               </label>
               <select className="input" value={year} onChange={(e) => setYear(e.target.value)} required>
@@ -111,7 +111,7 @@ export default function MmrExcelUploader() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 12 }}>
-              <label style={{ fontSize: 13, fontWeight: 600 }}>
+              <label style={{ fontSize: 14.5, fontWeight: 600 }}>
                 Upload Excel<span style={{ color: 'var(--red)' }}> *</span>
               </label>
               <div>
@@ -123,14 +123,14 @@ export default function MmrExcelUploader() {
                   onChange={onFileChange}
                   required
                 />
-                {fileName && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 6 }}>{fileName}</div>}
+                {fileName && <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 6 }}>{fileName}</div>}
               </div>
             </div>
           </div>
 
-          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 16 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginTop: 16 }}>{error}</div>}
           {success && (
-            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 16 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginTop: 16 }}>
               Upload <strong>{success.id}</strong> submitted — {success.filename}
               {success.revision_no ? ` · period ${success.revision_no}` : ''}.
             </div>
@@ -144,9 +144,9 @@ export default function MmrExcelUploader() {
 
       {recent.length > 0 && (
         <Card style={{ marginTop: 16 }}>
-          <strong style={{ fontSize: 13 }}>Recent MMR uploads</strong>
+          <strong style={{ fontSize: 14.5 }}>Recent MMR uploads</strong>
           <div style={{ overflowX: 'auto', marginTop: 8 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
               <thead>
                 <tr style={{ background: 'var(--slate-100)' }}>
                   {['Id', 'Period', 'File', 'Status', 'Created'].map((h) => (

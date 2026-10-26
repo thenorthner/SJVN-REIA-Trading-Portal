@@ -5,6 +5,7 @@ import { DocumentManager, PreviewModal } from './DocumentManager.jsx';
 import { SettlementTrailPanel } from './SettlementTrail.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 import { paymentTermsText, rebateText, lpsText, paymentSecurityText } from '../lib/contractRules.js';
+import { askConfirm } from '../lib/dialogs.js';
 
 // The working file of one contract, shared by the seller, the buyer and the
 // REIA desk: its documents, project milestones, performance guarantee, the
@@ -38,14 +39,14 @@ function Countdown({ days }) {
   const late = days < 0;
   const soon = !late && days <= 30;
   return (
-    <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: late ? 'var(--t-red-50)' : soon ? 'var(--t-amber-50)' : 'var(--slate-100)', color: late ? 'var(--red-deep)' : soon ? 'var(--amber-strong)' : 'var(--slate-600)' }}>
+    <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, fontSize: 14.5, fontWeight: 700, background: late ? 'var(--t-red-50)' : soon ? 'var(--t-amber-50)' : 'var(--slate-100)', color: late ? 'var(--red-deep)' : soon ? 'var(--amber-strong)' : 'var(--slate-600)' }}>
       {late ? `${plural(-days, 'day')} overdue` : days === 0 ? 'today' : `in ${plural(days, 'day')}`}
     </span>
   );
 }
 
 const Note = ({ children, tone }) => (
-  <p style={{ margin: '0 0 12px', fontSize: 13, lineHeight: 1.5, color: tone === 'red' ? 'var(--red-deep)' : 'var(--slate-600)' }}>{children}</p>
+  <p style={{ margin: '0 0 12px', fontSize: 14.5, lineHeight: 1.5, color: tone === 'red' ? 'var(--red-deep)' : 'var(--slate-600)' }}>{children}</p>
 );
 
 /** Upload a file against the contract and hand back the version it became. */
@@ -82,7 +83,7 @@ function Overview({ contract, ws, go }) {
           {flags.map((f) => (
             <button
               key={f.text} type="button" onClick={() => go(f.tab)}
-              style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 8, border: `1px solid ${f.tone === 'red' ? '#fca5a5' : 'var(--t-amber-100)'}`, background: f.tone === 'red' ? 'var(--t-red-50)' : 'var(--t-amber-50)', color: f.tone === 'red' ? 'var(--red-deep)' : 'var(--amber-strong)' }}
+              style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '8px 12px', borderRadius: 8, border: `1px solid ${f.tone === 'red' ? '#fca5a5' : 'var(--t-amber-100)'}`, background: f.tone === 'red' ? 'var(--t-red-50)' : 'var(--t-amber-50)', color: f.tone === 'red' ? 'var(--red-deep)' : 'var(--amber-strong)' }}
             >
               {f.text} →
             </button>
@@ -125,7 +126,8 @@ function Overview({ contract, ws, go }) {
 
 function Milestones({ ws, meta, run, raiseExtension }) {
   // Only a contract with a project behind it takes new milestones.
-  const manage = ws.can_manage;
+  // Phase B.2: the maker sets and edits milestones; the checker accepts a reported one.
+  const manage = ws.can_make;
   const canAdd = manage && ws.has_project;
   const canExtend = ws.request_types.includes('MILESTONE_EXTENSION');
   const outside = ws.side !== 'SJVN';
@@ -168,24 +170,24 @@ function Milestones({ ws, meta, run, raiseExtension }) {
                   <tr key={m.id}>
                     <td>
                       <strong>{m.label}</strong>
-                      {m.remarks && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{m.remarks}</div>}
+                      {m.remarks && <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{m.remarks}</div>}
                     </td>
                     <td>
                       {m.due_date ? fmtDate(m.due_date) : <span style={{ color: 'var(--slate-500)' }}>Not set</span>}
                       {m.status !== 'ACHIEVED' && <Countdown days={m.days_to_due} />}
-                      {m.extended && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Extended — first agreed {fmtDate(m.original_due_date)}</div>}
+                      {m.extended && <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>Extended — first agreed {fmtDate(m.original_due_date)}</div>}
                     </td>
                     <td>
                       <Badge status={tone} label={label} />
-                      {m.status === 'REPORTED' && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>Reported for {fmtDate(m.reported_date)}{m.reported_note ? ` — ${m.reported_note}` : ''}</div>}
+                      {m.status === 'REPORTED' && <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 2 }}>Reported for {fmtDate(m.reported_date)}{m.reported_note ? ` — ${m.reported_note}` : ''}</div>}
                     </td>
                     <td>
                       {m.achieved_date ? fmtDate(m.achieved_date) : '—'}
-                      {m.achieved_date && m.delay_days > 0 && <div style={{ fontSize: 13.5, color: 'var(--red-deep)' }}>{plural(m.delay_days, 'day')} late</div>}
+                      {m.achieved_date && m.delay_days > 0 && <div style={{ fontSize: 15, color: 'var(--red-deep)' }}>{plural(m.delay_days, 'day')} late</div>}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {manage && m.status === 'REPORTED' && (
+                        {ws.can_check && m.status === 'REPORTED' && (
                           <>
                             <button className="btn btn-success btn-sm" onClick={() => run(() => api.contractWorkspace.confirmMilestone(m.id, {}))}>Confirm</button>
                             <button className="btn btn-secondary btn-sm" onClick={() => setRefuse({ id: m.id, note: '' })}>Not accepted</button>
@@ -193,7 +195,7 @@ function Milestones({ ws, meta, run, raiseExtension }) {
                         )}
                         {manage && <button className="btn btn-secondary btn-sm" onClick={() => setEdit({ id: m.id, due_date: m.due_date || '', achieved_date: m.achieved_date || '', remarks: m.remarks || '' })}>Edit</button>}
                         {manage && !m.achieved_date && !m.reported_date && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => window.confirm(`Remove "${m.label}" from this contract?`) && run(() => api.contractWorkspace.removeMilestone(m.id))}>Remove</button>
+                          <button className="btn btn-secondary btn-sm" onClick={async () => (await askConfirm(`Remove "${m.label}" from this contract?`)) && run(() => api.contractWorkspace.removeMilestone(m.id))}>Remove</button>
                         )}
                         {outside && !m.achieved_date && m.status !== 'REPORTED' && (
                           <button className="btn btn-primary btn-sm" onClick={() => setReport({ id: m.id, achieved_date: '', note: '' })}>Report achieved</button>
@@ -436,14 +438,14 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <strong>{r.subject}</strong>
-                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>
+                <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 2 }}>
                   {meta.request_types?.[r.request_type] || r.request_type} · {meta.request_grounds?.[r.ground] || r.ground} · raised {fmtDateTime(r.created_at)} by {r.raised_by_name || SIDE_NAME[r.raised_by_side]}
                 </div>
               </div>
               <Badge status={tone} label={label} />
             </div>
-            <p style={{ margin: '8px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{r.description}</p>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <p style={{ margin: '8px 0', fontSize: 15, whiteSpace: 'pre-wrap' }}>{r.description}</p>
+            <div style={{ fontSize: 15, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {r.milestone_label && <span>Milestone: {r.milestone_label}</span>}
               {r.requested_date && <span>Asked for: {fmtDate(r.requested_date)}</span>}
               {r.amount && <span>Amount: {fmtCurrency(r.amount)}</span>}
@@ -451,7 +453,7 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
               {r.attachment_version_id && <button type="button" className="btn-link" onClick={() => onPreview(r.attachment_version_id, r.attachment_name)}>View attachment</button>}
             </div>
             {r.status !== 'PENDING' && r.status !== 'WITHDRAWN' && (
-              <div style={{ marginTop: 8, fontSize: 13, color: r.status === 'APPROVED' ? 'var(--on-green-2)' : 'var(--red-deep)' }}>
+              <div style={{ marginTop: 8, fontSize: 14.5, color: r.status === 'APPROVED' ? 'var(--on-green-2)' : 'var(--red-deep)' }}>
                 <strong>{r.status === 'APPROVED' ? 'Approved' : 'Refused'}</strong> by {r.decided_by_name || 'SJVN'} on {fmtDateTime(r.decided_at)}
                 {r.approved_date && r.approved_date !== r.requested_date ? ` — granted to ${fmtDate(r.approved_date)}` : ''}
                 {r.decision_note ? ` — ${r.decision_note}` : ''}
@@ -459,9 +461,9 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
             )}
             {r.status === 'PENDING' && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                {ws.can_manage && <button className="btn btn-success btn-sm" onClick={() => setDecide({ id: r.id, decision: 'APPROVED', note: '', approved_date: r.requested_date || '', type: r.request_type })}>Approve</button>}
-                {ws.can_manage && <button className="btn btn-danger btn-sm" onClick={() => setDecide({ id: r.id, decision: 'REJECTED', note: '', approved_date: '', type: r.request_type })}>Refuse</button>}
-                {ws.side === r.raised_by_side && <button className="btn btn-secondary btn-sm" onClick={() => window.confirm('Withdraw this request?') && run(() => api.contractWorkspace.withdrawRequest(r.id))}>Withdraw</button>}
+                {ws.can_check && <button className="btn btn-success btn-sm" onClick={() => setDecide({ id: r.id, decision: 'APPROVED', note: '', approved_date: r.requested_date || '', type: r.request_type })}>Approve</button>}
+                {ws.can_check && <button className="btn btn-danger btn-sm" onClick={() => setDecide({ id: r.id, decision: 'REJECTED', note: '', approved_date: '', type: r.request_type })}>Refuse</button>}
+                {ws.side === r.raised_by_side && <button className="btn btn-secondary btn-sm" onClick={async () => (await askConfirm('Withdraw this request?')) && run(() => api.contractWorkspace.withdrawRequest(r.id))}>Withdraw</button>}
               </div>
             )}
             {decide?.id === r.id && (
@@ -485,7 +487,9 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
 }
 
 function Notices({ ws, meta, run, setError, onPreview }) {
-  const canSend = ws.side !== 'SJVN' || ws.can_manage;
+  // SJVN's notices are written by the maker; one sent to SJVN is acknowledged by the checker.
+  const canSend = ws.side !== 'SJVN' || ws.can_make;
+  const canAck = ws.side !== 'SJVN' || ws.can_check;
   const twoSided = ws.side === 'SJVN' && ws.contract.has_seller && ws.contract.has_buyer;
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -493,7 +497,7 @@ function Notices({ ws, meta, run, setError, onPreview }) {
 
   async function submit(e) {
     e.preventDefault();
-    if (!window.confirm('Send this notice? It cannot be edited or withdrawn once sent.')) return;
+    if (!(await askConfirm('Send this notice? It cannot be edited or withdrawn once sent.'))) return;
     setBusy(true);
     try {
       const { file, ...body } = form;
@@ -551,7 +555,7 @@ function Notices({ ws, meta, run, setError, onPreview }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <strong>{n.subject}</strong>
-                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>
+                <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 2 }}>
                   {n.notice_no} · {meta.notice_types?.[n.notice_type] || n.notice_type} · {SIDE_NAME[n.sent_by_side]} → {SIDE_NAME[toSide]} · {fmtDateTime(n.created_at)} · {n.sent_by_name}
                   {n.parent_notice_id && byId[n.parent_notice_id] ? ` · in reply to ${byId[n.parent_notice_id].notice_no}` : ''}
                 </div>
@@ -560,17 +564,17 @@ function Notices({ ws, meta, run, setError, onPreview }) {
                 ? <Badge status="ACTIVE" label="Acknowledged" />
                 : <Badge status={n.response_overdue ? 'REJECTED' : 'PENDING'} label={n.response_overdue ? 'Reply overdue' : `Awaiting ${SIDE_NAME[n.awaiting]}`} />}
             </div>
-            <p style={{ margin: '8px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{n.body}</p>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <p style={{ margin: '8px 0', fontSize: 15, whiteSpace: 'pre-wrap' }}>{n.body}</p>
+            <div style={{ fontSize: 15, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {n.event_date && <span>Event: {fmtDate(n.event_date)}</span>}
               {n.response_due && <span style={{ color: n.response_overdue ? 'var(--red-deep)' : 'inherit' }}>Reply by: {fmtDate(n.response_due)}</span>}
               {n.acknowledged_at && <span>Acknowledged {fmtDateTime(n.acknowledged_at)} by {n.acknowledged_by_name}</span>}
               {n.attachment_version_id && <button type="button" className="btn-link" onClick={() => onPreview(n.attachment_version_id, n.attachment_name)}>View attachment</button>}
             </div>
-            {!mine && canSend && (
+            {!mine && (canSend || canAck) && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                {!n.acknowledged_at && <button className="btn btn-primary btn-sm" onClick={() => run(() => api.contractWorkspace.acknowledgeNotice(n.id))}>Acknowledge receipt</button>}
-                <button className="btn btn-secondary btn-sm" onClick={() => setForm({ ...blank, reply_to: n.id, notice_type: n.notice_type, subject: /^re:/i.test(n.subject) ? n.subject : `Re: ${n.subject}`, to_side: n.counterparty_side })}>Reply</button>
+                {canAck && !n.acknowledged_at && <button className="btn btn-primary btn-sm" onClick={() => run(() => api.contractWorkspace.acknowledgeNotice(n.id))}>Acknowledge receipt</button>}
+                {canSend && <button className="btn btn-secondary btn-sm" onClick={() => setForm({ ...blank, reply_to: n.id, notice_type: n.notice_type, subject: /^re:/i.test(n.subject) ? n.subject : `Re: ${n.subject}`, to_side: n.counterparty_side })}>Reply</button>}
               </div>
             )}
           </div>
@@ -588,7 +592,7 @@ function History({ contract, ws }) {
       {ws.amendments.map((a) => (
         <div key={a.id} className="cw-card">
           <strong>Amendment — version {a.version}</strong>
-          <span style={{ marginLeft: 8, fontSize: 13.5, color: 'var(--slate-500)' }}>{fmtDateTime(a.created_at)}</span>
+          <span style={{ marginLeft: 8, fontSize: 15, color: 'var(--slate-500)' }}>{fmtDateTime(a.created_at)}</span>
           <div className="table-wrap" style={{ marginTop: 8 }}>
             <table className="data-table" style={{ margin: 0 }}>
               <thead><tr><th scope="col">What changed</th><th scope="col">From</th><th scope="col">To</th></tr></thead>

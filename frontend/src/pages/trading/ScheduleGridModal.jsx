@@ -100,13 +100,13 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
         </div>
 
         {error && (
-          <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
+          <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 4, color: 'var(--red-deep)', fontSize: 14.5 }}>
             {error}
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 20 }}>
-          <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+          <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>
             Contracted quantum: <strong>{contracted} MW</strong> — no block may exceed this.
           </span>
           <div style={{ display: 'flex', gap: 10 }}>

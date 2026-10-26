@@ -49,7 +49,7 @@ export default function DailyScheduleEntry() {
     <div style={{ padding: 20, maxWidth: 820, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>Daily Schedule Entry</h1>
-        <Link to="/reports/daily-schedule" style={{ color: 'var(--on-blue)', fontSize: 13 }}>Daily Schedule Report →</Link>
+        <Link to="/reports/daily-schedule" style={{ color: 'var(--on-blue)', fontSize: 14.5 }}>Daily Schedule Report →</Link>
       </div>
       <Card>
         <form onSubmit={handleSubmit}>

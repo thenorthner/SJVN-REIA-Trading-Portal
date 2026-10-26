@@ -15,7 +15,7 @@ const emptyRevision = { effective_from: '', sale_rate_per_unit: '', purchase_rat
 const emptyBuyer = () => ({ buyer_name: '', share_percent: '', drawal_state: '' });
 
 const box = { padding: '10px 12px', border: '1px solid var(--slate-200, var(--slate-200))', borderRadius: 8, background: 'var(--slate-50, var(--slate-50))' };
-const small = { fontSize: 13.5, color: 'var(--slate-600, #475569)' };
+const small = { fontSize: 15, color: 'var(--slate-600, #475569)' };
 
 export default function BilateralRevisionsPanel({ transaction, onChanged }) {
   const { user } = useAuth();
@@ -68,11 +68,11 @@ export default function BilateralRevisionsPanel({ transaction, onChanged }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12, marginBottom: 14 }}>
-      {error && <div role="alert" style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 6, fontSize: 13, background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--on-red)' }}>{error}</div>}
+      {error && <div role="alert" style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 6, fontSize: 14.5, background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--on-red)' }}>{error}</div>}
 
       <div style={box}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <strong style={{ fontSize: 13 }}>Rate revisions</strong>
+          <strong style={{ fontSize: 14.5 }}>Rate revisions</strong>
           {canWrite && !revForm && <button type="button" className="btn btn-xs btn-outline" onClick={() => setRevForm({ ...emptyRevision })}>Revise rate</button>}
         </div>
         <div style={small}>
@@ -109,7 +109,7 @@ export default function BilateralRevisionsPanel({ transaction, onChanged }) {
 
       <div style={box}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <strong style={{ fontSize: 13 }}>Buyers</strong>
+          <strong style={{ fontSize: 14.5 }}>Buyers</strong>
           {canWrite && !splitForm && (
             <button type="button" className="btn btn-xs btn-outline" onClick={() => setSplitForm({ effective_from: '', buyers: [emptyBuyer(), emptyBuyer()] })}>
               {sets.length ? 'Change split' : 'Split between buyers'}

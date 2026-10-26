@@ -50,7 +50,7 @@ export default function ActingSwitch() {
   if (!mine || (mine.options.length === 0 && !mine.acting)) return null;
   const own = label(mine.real_role || user.role);
   return (
-    <label className="acting-switch" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+    <label className="acting-switch" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5 }}>
       <span className="sr-only">Work as</span>
       <select className="select" value={current()} onChange={(e) => switchTo(e.target.value)} style={{ maxWidth: 260 }}>
         <option value="">Myself — {own}</option>

@@ -26,7 +26,7 @@ export default function SellerHoldReasons({ invoice }) {
             : invoice.status === 'REJECTED' ? 'Why SJVN sent this bill back' : 'Why SJVN is holding this bill'}
       </div>
       {!done && v.started && (
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5 }}>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 15 }}>
           {open.map((t) => (
             <li key={t.key}><strong>{t.label}</strong> — {t.status === 'FAILED' ? 'did not pass' : 'still to be checked'}{t.note ? `: ${t.note}` : ''}</li>
           ))}

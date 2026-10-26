@@ -58,7 +58,7 @@ export default function StationPerformance({ vertical = 'HYDRO' }) {
 
       {all.map((s) => (
         <Card key={s.contract_id} title={`${s.station_name}${s.capacity_mw ? ` · ${s.capacity_mw} MW` : ''} · NAPAF ${pct(s.napaf_pct)}`}>
-          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13.5, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 15, marginBottom: 10 }}>
             <span>PAF YTD <strong>{pct(s.summary.paf_ytd_pct)}</strong></span>
             {s.thermal ? (
               <>
@@ -82,10 +82,10 @@ export default function StationPerformance({ vertical = 'HYDRO' }) {
               { key: 'pafm', header: 'PAFM', render: (r) => (r.billed ? <span style={{ color: r.below_napaf ? 'var(--red-deep)' : undefined, fontWeight: r.below_napaf ? 700 : 400 }}>{pct(r.pafm_pct)}</span> : '—') },
               { key: 'plf', header: 'PLF', render: (r) => (r.billed ? <span>{pct(r.plf_pct)}{r.plf_pct > s.thermal.plf_norm_pct && <div><Badge type="success">Incentive band</Badge></div>}</span> : '—') },
               { key: 'sched', header: 'Scheduled (MU)', render: (r) => (r.billed ? mu(r.ex_bus_kwh) : '—') },
-              { key: 'norms', header: 'Norms (GHR · aux · SFC)', render: (r) => (r.billed ? <span style={{ fontSize: 13 }}>{r.norm_ghr ?? '—'} kCal/kWh · {pct(r.norm_aux_pct)} · {r.norm_sfc_ml_per_kwh ?? '—'} ml/kWh</span> : '—') },
+              { key: 'norms', header: 'Norms (GHR · aux · SFC)', render: (r) => (r.billed ? <span style={{ fontSize: 14.5 }}>{r.norm_ghr ?? '—'} kCal/kWh · {pct(r.norm_aux_pct)} · {r.norm_sfc_ml_per_kwh ?? '—'} ml/kWh</span> : '—') },
               { key: 'fuel', header: 'Coal GCV / CVPF', render: (r) => (r.billed && r.gcv_received ? `${r.gcv_received} / ${r.cvpf} kCal/kg` : '—') },
-              { key: 'price', header: 'Landed coal · oil', render: (r) => (r.billed && r.coal_rs_per_tonne ? <span style={{ fontSize: 13 }}>{fmtCurrency(r.coal_rs_per_tonne)}/t · {fmtCurrency(r.oil_rs_per_kl || 0)}/kL</span> : '—') },
-              { key: 'coal', header: 'Coal on norms', render: (r) => (r.billed && r.coal_kg_per_kwh ? <span style={{ fontSize: 13 }}>{r.coal_kg_per_kwh} kg/kWh<div style={{ color: 'var(--text-light)' }}>{r.coal_tonnes.toLocaleString('en-IN')} t</div></span> : '—') },
+              { key: 'price', header: 'Landed coal · oil', render: (r) => (r.billed && r.coal_rs_per_tonne ? <span style={{ fontSize: 14.5 }}>{fmtCurrency(r.coal_rs_per_tonne)}/t · {fmtCurrency(r.oil_rs_per_kl || 0)}/kL</span> : '—') },
+              { key: 'coal', header: 'Coal on norms', render: (r) => (r.billed && r.coal_kg_per_kwh ? <span style={{ fontSize: 14.5 }}>{r.coal_kg_per_kwh} kg/kWh<div style={{ color: 'var(--text-light)' }}>{r.coal_tonnes.toLocaleString('en-IN')} t</div></span> : '—') },
               { key: 'ecr', header: 'ECR', render: (r) => (r.billed ? `₹${r.ecr}/kWh` : '—') },
               { key: 'short', header: 'Lost to availability', render: (r) => (r.billed && r.capacity_shortfall ? <span style={{ color: 'var(--red-deep)' }}>{fmtCurrency(r.capacity_shortfall)}</span> : '—') },
             ] : [

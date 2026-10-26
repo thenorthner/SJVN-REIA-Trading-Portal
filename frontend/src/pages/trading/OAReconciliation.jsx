@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const REGION_LABEL = { WR: 'Western', NR: 'Northern', ER: 'Eastern', SR: 'Southern', NER: 'North-Eastern' };
 
 // Actual open-access cost per month, split by charge type, so the cost line reads
 // at a glance rather than needing the table to be totalled up.
 function MonthlyCost({ months }) {
-  if (!months.length) return <p style={{ color: 'var(--slate-500)', fontSize: 14 }}>No applications in this period.</p>;
+  if (!months.length) return <p style={{ color: 'var(--slate-500)', fontSize: 15.5 }}>No applications in this period.</p>;
   const max = Math.max(...months.map(m => m.total), 1);
   const parts = [
     ['ists', '#2563eb', 'ISTS'],
@@ -19,7 +20,7 @@ function MonthlyCost({ months }) {
       <div style={{ display: 'grid', gap: 10 }}>
         {months.map(m => (
           <div key={m.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 130px', gap: 12, alignItems: 'center' }}>
-            <span style={{ fontSize: 13 }}>{m.month}</span>
+            <span style={{ fontSize: 14.5 }}>{m.month}</span>
             <div style={{ display: 'flex', height: 18, borderRadius: 3, overflow: 'hidden', background: 'var(--slate-100, var(--slate-100))' }}>
               {parts.map(([key, colour, label]) => (
                 m[key] > 0 && (
@@ -27,11 +28,11 @@ function MonthlyCost({ months }) {
                 )
               ))}
             </div>
-            <span style={{ fontSize: 13, textAlign: 'right' }}>{fmtCurrency(m.total)}</span>
+            <span style={{ fontSize: 14.5, textAlign: 'right' }}>{fmtCurrency(m.total)}</span>
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 18, fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 18, fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
         {parts.map(([key, colour, label]) => (
           <span key={key}><span style={{ display: 'inline-block', width: 10, height: 10, background: colour, marginRight: 5 }} />{label}</span>
         ))}
@@ -56,7 +57,7 @@ export default function OAReconciliation() {
       const [r, m] = await Promise.all([api.oaCharges.reconcile(params), api.oaCharges.actualsByMonth(params)]);
       setRecon(r); setMonths(m);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to load reconciliation');
+      showAlert(err.response?.data?.error || err.message || 'Failed to load reconciliation');
     } finally {
       setLoading(false);
     }
@@ -132,11 +133,11 @@ export default function OAReconciliation() {
       <Card title="Period">
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>From</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>From</label>
             <input type="date" className="input" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>To</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>To</label>
             <input type="date" className="input" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} />
           </div>
           <button className="btn btn-ghost" onClick={() => setRange({ from: '', to: '' })}>Clear</button>
@@ -170,7 +171,7 @@ export default function OAReconciliation() {
 
       <Card title="Match rate by transmission corridor">
         <Table columns={regionColumns} rows={regionRows} loading={loading} emptyMessage="No applications." />
-        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
           ISTS is billed per corridor, not nationally — the same day is charged at a different rate in each. A whole
           corridor drifting means its rate is missing or stale, rather than one application being unusual.
         </p>

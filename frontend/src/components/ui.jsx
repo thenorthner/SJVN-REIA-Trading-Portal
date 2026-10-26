@@ -1,4 +1,5 @@
 import React from 'react';
+import UrjaEmptyState from './UrjaEmptyState.jsx';
 import { useFocusTrap } from '../gigw/focusTrap.js';
 import { useCanWrite } from '../lib/deskAccess.js';
 
@@ -96,7 +97,7 @@ const TONE_MAP = {
   DRAFT: 'gray', PENDING: 'amber', SUBMITTED: 'blue', UNDER_APPROVAL: 'amber', UNDER_REVIEW: 'amber',
   PARTIALLY_PAID: 'amber', PARTIALLY_CLEARED: 'amber', OPEN: 'amber', REJECTED: 'red', DISPUTED: 'red',
   EXPIRED: 'red', CANCELLED: 'gray', TERMINATED: 'gray', AMENDED: 'blue', INVOKED: 'red', OVERDUE: 'red',
-  CLOSED: 'gray', NO_BID: 'gray', LOCKED: 'green', VALIDATED: 'blue',
+  CLOSED: 'gray', NEW: 'amber', REPLIED: 'green', NO_BID: 'gray', LOCKED: 'green', VALIDATED: 'blue',
   // Seller invoice validation
   MATCHED: 'green', PARTIAL: 'amber', MISMATCH: 'red', WAIVED: 'blue', NO_COUNTERPART: 'gray',
   // Dispute lifecycle
@@ -132,8 +133,25 @@ export function Table({
 }) {
   const raw = rows ?? data ?? [];
   const list = Array.isArray(raw) ? raw : [];
+  // A table that scrolls inside its box must be reachable by keyboard to be
+  // scrolled (WCAG 2.1.1); it becomes a focusable, named region only then.
+  const wrapRef = React.useRef(null);
+  const [scrolls, setScrolls] = React.useState(false);
+  React.useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    const check = () => setScrolls(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
+    check();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [list.length]);
   return (
-    <div className="table-wrap">
+    <div
+      className="table-wrap"
+      ref={wrapRef}
+      {...(scrolls ? { tabIndex: 0, role: 'region', 'aria-label': caption || 'Table' } : {})}
+    >
       {/* aria-busy tells assistive tech the table is mid-load rather than empty. */}
       <table className="data-table" aria-busy={loading || undefined}>
         {caption && <caption className="sr-only">{caption}</caption>}
@@ -146,7 +164,13 @@ export function Table({
         </thead>
         <tbody>
           {list.length === 0 && (
-            <tr><td colSpan={columns.length} className="empty-cell">{loading ? 'Loading...' : emptyMessage}</td></tr>
+            <tr>
+              <td colSpan={columns.length} className="empty-cell">
+                {loading ? 'Loading...' : (
+                  React.isValidElement(emptyMessage) ? emptyMessage : <UrjaEmptyState message={emptyMessage} />
+                )}
+              </td>
+            </tr>
           )}
           {list.map((row, i) => (
             <tr
@@ -333,7 +357,7 @@ export function AlertPopup({ open, tone = 'error', title, message, items, action
                       ? {
                           display: 'list-item',
                           listStyleType: 'disc',
-                          fontSize: 13.5,
+                          fontSize: 15,
                           lineHeight: 1.5,
                           color: 'var(--text)',
                         }
@@ -360,7 +384,8 @@ export function AlertPopup({ open, tone = 'error', title, message, items, action
         </div>
         <div className="alert-popup-actions">
           {actions}
-          <button type="button" className="btn btn-primary" ref={okRef} onClick={onClose}>
+          {/* With its own actions, the popup's close button is the way out, not the answer. */}
+          <button type="button" className={actions ? 'btn btn-ghost' : 'btn btn-primary'} ref={okRef} onClick={onClose}>
             {buttonText}
           </button>
         </div>
@@ -413,7 +438,7 @@ export function StatementViewer({ statement }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
           <h4 style={{ margin: 0, color: 'var(--slate-800)' }}>Statement {statement.recon_no}</h4>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>Period: {statement.period} ({statement.period_type}) • Basis: {statement.data_basis}</div>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>Period: {statement.period} ({statement.period_type}) • Basis: {statement.data_basis}</div>
         </div>
         <Badge status={statement.status} />
       </div>
@@ -425,7 +450,7 @@ export function StatementViewer({ statement }) {
         <StatCard label="Unreconciled Amt" value={fmtCurrency(m.unreconciled_amount)} tone={m.unreconciled_amount === 0 ? 'green' : 'red'} />
       </div>
 
-      <div style={{ backgroundColor: isHealthy ? 'var(--t-green-50)' : 'var(--t-red-50)', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 13, border: `1px solid ${isHealthy ? 'var(--t-green-line)' : 'var(--t-red-line)'}` }}>
+      <div style={{ backgroundColor: isHealthy ? 'var(--t-green-50)' : 'var(--t-red-50)', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 14.5, border: `1px solid ${isHealthy ? 'var(--t-green-line)' : 'var(--t-red-line)'}` }}>
         <strong style={{ color: isHealthy ? 'var(--on-green)' : 'var(--on-red)' }}>{isHealthy ? 'Data is fully reconciled and ready for sign-off.' : 'Exceptions detected. Review required before sign-off.'}</strong>
       </div>
 
@@ -450,9 +475,9 @@ export function StatementViewer({ statement }) {
           <tbody>
             {statement.items.map((it, idx) => (
               <tr key={idx} style={{ background: ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN', 'NOT_CONNECTED'].includes(it.status) ? 'transparent' : 'var(--t-red-50)' }}>
-                <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'normal', minWidth: 150 }}>{it.label}</td>
+                <td style={{ fontWeight: 500, fontSize: 14.5, whiteSpace: 'normal', minWidth: 150 }}>{it.label}</td>
                 <td>{it.status === 'NOT_CONNECTED'
-                  ? <span style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}>Not checked</span>
+                  ? <span style={{ color: 'var(--text-muted)', fontSize: 15, fontWeight: 600 }}>Not checked</span>
                   : it.status === 'OVERRIDDEN' ? <Badge status="AUTO_MATCHED" label="Overridden" />
                     : <Badge status={['EXACT', 'AUTO_MATCHED'].includes(it.status) ? 'AUTO_MATCHED' : it.status === 'CARRIED' ? 'REOPENED' : 'NEEDS_REVIEW'} />}</td>
                 <td>{it.metered != null ? fmtNumber(it.metered, 2) : '-'}</td>
@@ -460,7 +485,7 @@ export function StatementViewer({ statement }) {
                 <td style={{ color: it.variance !== 0 ? 'var(--on-red)' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
                   {it.variance != null ? fmtNumber(it.variance, 2) : '-'}
                 </td>
-                <td style={{ fontSize: 13.5, color: 'var(--slate-600)', whiteSpace: 'normal', minWidth: 200, lineHeight: 1.4 }}>{it.notes || '—'}</td>
+                <td style={{ fontSize: 15, color: 'var(--slate-600)', whiteSpace: 'normal', minWidth: 200, lineHeight: 1.4 }}>{it.notes || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -469,11 +494,11 @@ export function StatementViewer({ statement }) {
       
       <div style={{ display: 'flex', gap: 24, marginTop: 16, borderTop: '1px solid var(--slate-200)', paddingTop: 16 }}>
         <div>
-          <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>SJVN Sign-off</div>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none' }}>SJVN Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.sjvn ? `${statement.sign_off.sjvn.by}` : 'Pending'}</div>
         </div>
         <div>
-          <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>Counterparty Sign-off</div>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none' }}>Counterparty Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.counterparty ? `${statement.sign_off.counterparty.by}` : 'Pending'}</div>
         </div>
       </div>
@@ -500,7 +525,7 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
     <div className="card" style={{ border: '1px solid var(--slate-300)', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'var(--surface)' }}>
       <div style={{ background: 'var(--slate-50)', padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 13.5, textTransform: 'none', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Demand notice{invocationNo ? ` · ${invocationNo}` : ''}</div>
+          <div style={{ fontSize: 15, textTransform: 'none', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Demand notice{invocationNo ? ` · ${invocationNo}` : ''}</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-900)', marginTop: 4 }}>{letter.subject}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -511,47 +536,47 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
 
       <div style={{ padding: '20px' }}>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>To:</div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--slate-800)' }}>{letter.to}</div>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>To:</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--slate-800)' }}>{letter.to}</div>
         </div>
 
         <div style={{ display: 'flex', gap: 32, marginBottom: 20, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Demand Amount</div>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>Demand Amount</div>
             <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--red-deep)' }}>{fmtCurrency(letter.amount)}</div>
           </div>
           {letter.requested != null && Number(letter.requested) !== Number(letter.amount) && (
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Asked for</div>
-              <div style={{ fontSize: 15, fontWeight: 500 }}>{fmtCurrency(letter.requested)}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>Asked for</div>
+              <div style={{ fontSize: 16, fontWeight: 500 }}>{fmtCurrency(letter.requested)}</div>
             </div>
           )}
           {Number(letter.shortfall_uncovered) > 0 && (
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Not covered by any security</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--red-deep)' }}>{fmtCurrency(letter.shortfall_uncovered)}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>Not covered by any security</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--red-deep)' }}>{fmtCurrency(letter.shortfall_uncovered)}</div>
             </div>
           )}
           <div>
-            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Date Issued</div>
-            <div style={{ fontSize: 15, fontWeight: 500 }}>{issued && !Number.isNaN(issued.getTime()) ? issued.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</div>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>Date Issued</div>
+            <div style={{ fontSize: 16, fontWeight: 500 }}>{issued && !Number.isNaN(issued.getTime()) ? issued.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</div>
           </div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Outstanding Invoices Covered:</div>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 4 }}>Outstanding Invoices Covered:</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {invoices.length === 0 && <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>None named — the amount was entered by the desk.</span>}
+            {invoices.length === 0 && <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>None named — the amount was entered by the desk.</span>}
             {invoices.map((inv) => (
-              <span key={inv} style={{ padding: '4px 8px', background: 'var(--slate-100)', borderRadius: 4, fontSize: 13, border: '1px solid var(--slate-200)' }}>{inv}</span>
+              <span key={inv} style={{ padding: '4px 8px', background: 'var(--slate-100)', borderRadius: 4, fontSize: 14.5, border: '1px solid var(--slate-200)' }}>{inv}</span>
             ))}
           </div>
         </div>
 
         {draws.length > 0 && (
           <div>
-            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Drawn, in waterfall order:</div>
-            <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: 'var(--slate-700)' }}>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 4 }}>Drawn, in waterfall order:</div>
+            <ol style={{ margin: 0, paddingLeft: 20, fontSize: 15.5, color: 'var(--slate-700)' }}>
               {draws.map((step, i) => (
                 <li key={step?.id || i} style={{ marginBottom: 4 }}>
                   {typeof step === 'string'
@@ -563,7 +588,7 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
           </div>
         )}
       </div>
-      <div style={{ padding: '12px 20px', background: 'var(--t-amber-50)', borderTop: '1px solid var(--t-amber-100)', fontSize: 13.5, color: 'var(--on-amber)' }}>
+      <div style={{ padding: '12px 20px', background: 'var(--t-amber-50)', borderTop: '1px solid var(--t-amber-100)', fontSize: 15, color: 'var(--on-amber)' }}>
         <strong>Important:</strong> This is a demand against the counterparty's payment security. The amounts above have been drawn on the instruments named.
       </div>
     </div>
@@ -633,3 +658,6 @@ export function SampleDataNotice({ detail }) {
     </div>
   );
 }
+
+export { UrjaEmptyState };
+

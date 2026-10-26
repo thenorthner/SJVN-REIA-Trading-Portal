@@ -9,6 +9,8 @@ import { DocumentManager } from '../../components/DocumentManager.jsx';
 import BidForecastPanel from '../../components/BidForecastPanel.jsx';
 import RtmSessionBanner from '../../components/RtmSessionBanner.jsx';
 import DayAheadGateBanner from '../../components/DayAheadGateBanner.jsx';
+import { triggerUrjaCelebration } from '../../components/UrjaCelebration.jsx';
+import { showAlert, askText } from '../../lib/dialogs.js';
 
 const EMPTY_FORM = {
   client_id: '', exchange: 'IEX', product: 'DAM', bid_date: '', delivery_date: '', gate_closure_time: '',
@@ -246,7 +248,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
     try {
       saveBlob(await api.bids.downloadBulkTemplate(), 'bid_bulk_template.csv');
     } catch {
-      alert('Could not download the template. Please try again.');
+      showAlert('Could not download the template. Please try again.');
     }
   }
 
@@ -311,7 +313,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       await api.bids.recordResult(selectedBid.id, payload);
       await refreshSelected(selectedBid.id);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to record result');
+      showAlert(err.response?.data?.error || 'Failed to record result');
     }
   }
 
@@ -324,7 +326,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       setResultForm(null);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to sync IEX result');
+      showAlert(err.response?.data?.error || 'Failed to sync IEX result');
     } finally {
       setSyncBusy(false);
     }
@@ -341,7 +343,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       setSelectedBid(created);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Carry-forward failed');
+      showAlert(err.response?.data?.error || 'Carry-forward failed');
     }
   }
 
@@ -387,10 +389,8 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       // cover this one, the desk can still place it by recording why.
       const shortfall = lastFundsCheck.current;
       if (shortfall?.applies && !shortfall.ok) {
-        const why = window.prompt(
-          `Insufficient funds: this bid needs ₹${fmtNumber(shortfall.required, 0)} but only ₹${fmtNumber(shortfall.available, 0)} is available `
-          + `(short by ₹${fmtNumber(shortfall.shortfall, 0)}).\n\nEnter a reason to place it anyway, or Cancel to stop.`,
-        );
+        const why = (await askText(`Insufficient funds: this bid needs ₹${fmtNumber(shortfall.required, 0)} but only ₹${fmtNumber(shortfall.available, 0)} is available `
+          + `(short by ₹${fmtNumber(shortfall.shortfall, 0)}).\n\nEnter a reason to place it anyway, or Cancel to stop.`));
         if (!why || !why.trim()) { setError('Bid not placed: insufficient funds. Add a pre-payment or raise the credit limit.'); return; }
         payload.funds_override_reason = why.trim();
       }
@@ -402,6 +402,11 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         setError(created.compliance_warnings.map((w) => `Note (Clause ${w.clause}): ${w.message}`).join('\n'));
       }
       load();
+      triggerUrjaCelebration({
+        title: 'Bid saved',
+        message: created?.id ? `Bid #${created.id} is saved on the platform; it goes to the exchange only when submitted.` : 'The bid is saved on the platform; it goes to the exchange only when submitted.',
+        badge: 'DAM / RTM',
+      });
     } catch (err) {
       // The API returns structured clause findings; show those rather than a
       // generic failure so the trader knows which limit was hit.
@@ -420,7 +425,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       setSelectedBid(null);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Action failed');
+      showAlert(err.response?.data?.error || 'Action failed');
     }
   }
 
@@ -431,7 +436,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         r = await api.bids.submit(id);
       } catch (err) {
         if (err.response?.data?.code !== 'INSUFFICIENT_FUNDS') throw err;
-        const why = window.prompt(`${err.response.data.error}\n\nEnter a reason to send it anyway, or Cancel to stop.`);
+        const why = (await askText(`${err.response.data.error}\n\nEnter a reason to send it anyway, or Cancel to stop.`));
         if (!why || !why.trim()) return;
         r = await api.bids.submit(id, { funds_override_reason: why.trim() });
       }
@@ -440,10 +445,16 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       // While the exchange API is not live nothing leaves the platform; say so
       // at the moment the desk would otherwise believe the exchange has the bid.
       if (r?.submission?.mode === 'STUB') {
-        alert(`Not sent to the exchange — stub mode.\n\n${r.submission.message || 'The bid was recorded as submitted without contacting the exchange.'}`);
+        showAlert(`Not sent to the exchange — stub mode.\n\n${r.submission.message || 'The bid was recorded as submitted without contacting the exchange.'}`);
+      } else {
+        triggerUrjaCelebration({
+          title: 'Bid submitted to the exchange',
+          message: `Bid #${id} is with the exchange for its session.`,
+          badge: 'DAM / RTM',
+        });
       }
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to submit to exchange. Check Gate Closure.');
+      showAlert(err.response?.data?.error || 'Failed to submit to exchange. Check Gate Closure.');
     }
   }
 
@@ -452,7 +463,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       <span>
         {r.id}
         {(r.source_kind === 'ISET' || r.source_kind === 'ISET_LATEST') && (
-          <span style={{ marginLeft: 6, fontSize: 12.5, color: 'var(--slate-500)', fontWeight: 600 }}>ISET</span>
+          <span style={{ marginLeft: 6, fontSize: 14, color: 'var(--slate-500)', fontWeight: 600 }}>ISET</span>
         )}
       </span>
     ) },
@@ -463,7 +474,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
     { key: 'type', label: 'Bid Type', render: r => r.type || 'Sell' },
     { key: 'revision_no', label: 'Rev No', render: r => r.revision_no || 1 },
     { key: 'internal_status', label: 'Internal Status', render: r => (
-      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 13.5 }}>File Prepared</span> : 
+      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 15 }}>File Prepared</span> : 
       <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge>
     ) },
     { key: 'status', label: 'Exchange Status', render: r => {
@@ -472,7 +483,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       if (r.status === 'SUBMITTED' && r.submission_mode === 'STUB') {
         return (
           <span
-            style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 13.5, cursor: 'help' }}
+            style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 15, cursor: 'help' }}
             title={`Recorded without contacting the exchange (stub mode). Receipt ${r.exchange_receipt_ref || '—'} is local, not an exchange acknowledgement.`}
           >
             Not sent — stub
@@ -480,10 +491,10 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         );
       }
       if (tab.short === 'RTM') {
-        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 13.5 }}>Submitted to Exchange</span>;
-        if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 13.5 }}>Pending Gateway</span>;
-        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 13.5, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>Rejected by Exchange</span>;
-        return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 13.5 }}>Pending Gateway</span>; // Default mock for new RTM bids
+        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 15 }}>Submitted to Exchange</span>;
+        if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 15 }}>Pending Gateway</span>;
+        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 15, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>Rejected by Exchange</span>;
+        return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 15 }}>Pending Gateway</span>; // Default mock for new RTM bids
       }
       return <Badge type={r.status === 'CLEARED' ? 'success' : r.status === 'DRAFT' ? 'neutral' : 'primary'}>{r.status}</Badge>;
     } },
@@ -507,7 +518,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             onChange={(e) => {
               if (e.target.checked) {
                 if (selectedForCompare.length < 2) setSelectedForCompare([...selectedForCompare, r.id]);
-                else alert('You can only compare 2 revisions at a time.');
+                else showAlert('You can only compare 2 revisions at a time.');
               } else {
                 setSelectedForCompare(selectedForCompare.filter(id => id !== r.id));
               }
@@ -590,11 +601,11 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 16 }}></span>
               <div>
-                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--slate-700)' }}>
+                <span style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--slate-700)' }}>
                   {clearance.sldc_name || 'SLDC'} Standing Clearance:{' '}
                 </span>
-                <span style={{ fontWeight: 700, fontSize: 13, color: tone.fg }}>{tone.label}</span>
-                <span style={{ fontSize: 13.5, color: 'var(--slate-500)', marginLeft: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 14.5, color: tone.fg }}>{tone.label}</span>
+                <span style={{ fontSize: 15, color: 'var(--slate-500)', marginLeft: 8 }}>
                   {clearance.client_name}
                   {clearance.tgna_approved_mw != null && ` | T-GNA Cap: ${clearance.tgna_approved_mw} MW`}
                   {clearance.standing_clearance_no && ` | ${clearance.standing_clearance_no}`}
@@ -604,32 +615,32 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {clearance.state === 'ACTIVE' && (
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--green-strong)' }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--green-strong)' }}>
                   Expires in: {clearance.days_left} days
                 </span>
               )}
               {clearance.state === 'RENEWAL_DUE' && (
                 <>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--amber-strong)' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--amber-strong)' }}>
                     Expires in: {clearance.days_left} day(s) — bidding continues
                   </span>
-                  <button className="btn btn-sm" style={{ background: 'var(--amber-strong)', color: '#fff', fontSize: 13 }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--amber-strong)', color: '#fff', fontSize: 14.5 }}>
                     Trigger Renewal Declaration
                   </button>
                 </>
               )}
               {clearance.state === 'EXPIRED' && (
                 <>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--red-strong)' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--red-strong)' }}>
                     Lapsed {Math.abs(clearance.days_left)} day(s) ago — new bids refused
                   </span>
-                  <WriteOnly><button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 13 }}>
+                  <WriteOnly><button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 14.5 }}>
                     Submit Renewal NOW
                   </button></WriteOnly>
                 </>
               )}
               {clearance.state === 'NOT_ON_RECORD' && (
-                <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+                <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                   No NOC captured for this client — capacity limits cannot be checked
                 </span>
               )}
@@ -641,7 +652,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       {/* Alert / Countdown Banner */}
       {tab.short === 'RTM' ? (
         <RtmSessionBanner>
-          <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontWeight: 600, fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 6 }}>
             Current Time: <LiveClock /> IST
           </div>
         </RtmSessionBanner>
@@ -658,27 +669,27 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
           <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-portfolio-name">Portfolio Name</label>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-portfolio-name">Portfolio Name</label>
               <PortfolioSelect id="bids-portfolio-name" includeAll />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-delivery-date">Delivery Date</label>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-delivery-date">Delivery Date</label>
               <input id="bids-delivery-date" type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-submission-date">Submission Date</label>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-submission-date">Submission Date</label>
               <input id="bids-submission-date" type="date" className="input" />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-type">Bid Type</label>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-type">Bid Type</label>
               <select id="bids-bid-type" className="input"><option>--Select--</option><option>Sell</option><option>Buy</option></select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid">Bid</label>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid">Bid</label>
               <select id="bids-bid" className="input"><option>--Select--</option><option>Single</option><option>Block</option></select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-source">Bid Source</label>
+              <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-source">Bid Source</label>
               <select id="bids-bid-source" className="input"><option>--Select--</option><option>Web Portal</option><option>API Gateway</option><option>Excel Upload</option></select>
             </div>
             
@@ -693,7 +704,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       ) : (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 20, background: 'var(--surface)', padding: 15, border: '1px solid var(--border)', borderRadius: 8 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, marginBottom: 5, color: 'var(--text-muted)' }} htmlFor="bids-delivery-date-2">Delivery Date</label>
+            <label style={{ display: 'block', fontSize: 15, marginBottom: 5, color: 'var(--text-muted)' }} htmlFor="bids-delivery-date-2">Delivery Date</label>
             <input id="bids-delivery-date-2" type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={!deliveryDateFilter} onClick={() => setAppliedDeliveryDate(deliveryDateFilter)}>
@@ -707,7 +718,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         </div>
       )}
 
-      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 14 }}>{tab.hint}</div>
+      <div style={{ fontSize: 15, color: 'var(--slate-500)', marginBottom: 14 }}>{tab.hint}</div>
 
       {/* Per-product summary — this product's bidding position at a glance. */}
       <Card style={{ marginBottom: 16 }}>
@@ -720,7 +731,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             { label: 'Clear ratio', value: summary.quantumBid > 0 ? `${Math.round(summary.clearRatio)}%` : '—' },
           ].map((s) => (
             <div key={s.label}>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{s.label}</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{s.label}</div>
               <div style={{ fontSize: 20, fontWeight: 600, color: s.tone || 'var(--slate-900)' }}>{s.value}</div>
             </div>
           ))}
@@ -796,7 +807,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
           >
             <div style={{ fontSize: 40, marginBottom: 10 }}></div>
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop Bid CSV/Excel Here</div>
-            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 5 }}>or click to <strong>Browse Files</strong></div>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 5 }}>or click to <strong>Browse Files</strong></div>
             <input
               id="bulk-file-upload"
               type="file"
@@ -808,7 +819,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
           {/* Re-bid: pull a past bid's blocks in, then edit the dates before submitting. */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 13, color: 'var(--slate-600)' }} htmlFor="bids-copy-from-previous-bid">Copy from previous bid:</label>
+            <label style={{ fontSize: 14.5, color: 'var(--slate-600)' }} htmlFor="bids-copy-from-previous-bid">Copy from previous bid:</label>
             <select id="bids-copy-from-previous-bid"
               className="input"
               style={{ maxWidth: 380 }}
@@ -825,7 +836,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             <WriteOnly><button className="btn btn-outline" disabled={!reuseId} onClick={handleReuseBid}>Load rows</button></WriteOnly>
           </div>
 
-          {bulkFileNote && <div style={{ marginBottom: 10, fontSize: 13, color: 'var(--slate-600)' }}>{bulkFileNote}</div>}
+          {bulkFileNote && <div style={{ marginBottom: 10, fontSize: 14.5, color: 'var(--slate-600)' }}>{bulkFileNote}</div>}
           
           {bulkResult && (
             <div style={{ marginTop: 15 }}>
@@ -856,7 +867,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 <div style={{ marginTop: 12 }}>
                   <h4 style={{ marginBottom: 8, color: 'var(--on-red)' }}>Errors ({bulkResult.errors.length})</h4>
                   {bulkResult.errors.map((e, i) => (
-                    <div key={i} style={{ color: 'var(--on-red)', fontSize: 13 }}>
+                    <div key={i} style={{ color: 'var(--on-red)', fontSize: 14.5 }}>
                       {e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}
                     </div>
                   ))}
@@ -884,12 +895,12 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
           {/* ── PTC-Style CREATE DAM NEW BID Header with Clock Fallback ── */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '2px solid var(--navy)', marginBottom: 20 }}>
             <h3 style={{ margin: 0, color: 'var(--navy)', fontWeight: 700, letterSpacing: 0.5 }}>CREATE DAM NEW BID</h3>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: 13, color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '6px 14px', borderRadius: 4, border: '1px solid var(--slate-300)' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: 14.5, color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '6px 14px', borderRadius: 4, border: '1px solid var(--slate-300)' }}>
               <span>DATE : <LiveClock format="date" /></span>
               <span style={{ margin: '0 6px', color: 'var(--text-subtle)' }}>|</span>
               {/* Clock Fallback: if server clock payload is empty, use local synced clock with visual indicator */}
               <span>TIME : <LiveClock format="time24" /></span>
-              <span style={{ fontSize: 12.5, color: 'var(--green-strong)', animation: 'pulse 2s infinite', marginLeft: 4 }} title="Local clock sync — server WebSocket fallback active">● SYNC</span>
+              <span style={{ fontSize: 14, color: 'var(--green-strong)', animation: 'pulse 2s infinite', marginLeft: 4 }} title="Local clock sync — server WebSocket fallback active">● SYNC</span>
             </div>
           </div>
 
@@ -899,20 +910,20 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-300)', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <div>
-                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--navy)', fontSize: 14 }}>{clearance.client_name}</h4>
-                    <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--navy)', fontSize: 15.5 }}>{clearance.client_name}</h4>
+                    <div style={{ fontSize: 15, color: 'var(--slate-600)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       {clearance.noar_id && <span>NOAR ID: <strong>{clearance.noar_id}</strong></span>}
                       {clearance.standing_clearance_no && <span>NOC: <strong>{clearance.standing_clearance_no}</strong></span>}
                       {clearance.tgna_approved_mw != null && <span>T-GNA Cap: <strong>{clearance.tgna_approved_mw} MW</strong></span>}
                       {clearance.max_ramp_rate_mw_per_min != null && <span>Ramp: <strong>{clearance.max_ramp_rate_mw_per_min} MW/min</strong></span>}
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, background: 'var(--t-blue-50)', padding: '4px 8px', borderRadius: 4, color: 'var(--on-blue)', fontWeight: 600 }}>
+                  <div style={{ fontSize: 14.5, background: 'var(--t-blue-50)', padding: '4px 8px', borderRadius: 4, color: 'var(--on-blue)', fontWeight: 600 }}>
                     {clearance.is_generator ? 'Generating Station' : 'Trader / Buyer'}
                   </div>
                 </div>
 
-                <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 15, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                   <span>Valid till <strong>{clearance.valid_till}</strong></span>
                   {clearance.periphery_loss_percent != null && (
                     <span>Injection loss to periphery: <strong>{clearance.periphery_loss_percent}%</strong></span>
@@ -948,21 +959,21 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 </Field>
                 {/* Segment Tag — Read-only */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>Segment:</span>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--navy)', background: 'var(--t-blue-50)', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--slate-600)' }}>Segment:</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', background: 'var(--t-blue-50)', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
                 </div>
                 <Field label="Delivery Date" required>
                   <input type="date" className="input" value={form.delivery_date} onChange={e => setForm({...form, delivery_date: e.target.value})} required />
                 </Field>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>
+                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 15, fontWeight: 600, color: 'var(--slate-600)' }}>
                       Portfolio
                       <span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>
                       <span className="sr-only"> (required)</span>
                     </label>
                     {form.client_id && (
-                      <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: 'var(--navy)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                      <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: 'var(--navy)', fontSize: 14.5, cursor: 'pointer', textDecoration: 'underline' }}>
                         View Profile
                       </button>
                     )}
@@ -986,7 +997,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                   {funds && (form.type || 'Sell') === 'Buy' && (
-                    <div data-testid="bid-funds-line" style={{ marginTop: 6, fontSize: 12.5, color: funds.available > 0 ? 'var(--slate-600)' : 'var(--red-strong)' }}>
+                    <div data-testid="bid-funds-line" style={{ marginTop: 6, fontSize: 14, color: funds.available > 0 ? 'var(--slate-600)' : 'var(--red-strong)' }}>
                       Funds available: <strong>₹{fmtNumber(funds.available, 0)}</strong>
                       {' '}(pre-payment ₹{fmtNumber(funds.pre_payment_balance, 0)} + credit limit ₹{fmtNumber(funds.credit_limit, 0)} − held by other buy bids ₹{fmtNumber(funds.committed, 0)})
                     </div>
@@ -998,7 +1009,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Bid Type — Color-Coded (placed first to match PTC layout) */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid Type</span>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid Type</span>
                   <div role="group" aria-label="Bid Type" style={{ display: 'flex', gap: 16 }}>
                     {[
                       { value: 'Buy', emoji: '', color: 'var(--green-strong)', bg: '#f0fdf4' },
@@ -1006,7 +1017,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                       { value: 'Both', emoji: '', color: 'var(--slate-600)', bg: 'transparent' },
                     ].map(opt => (
                       <label key={opt.value} style={{
-                        display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, cursor: 'pointer',
                         color: (form.type || 'Sell') === opt.value ? opt.color : 'var(--slate-500)',
                         fontWeight: (form.type || 'Sell') === opt.value ? 700 : 400,
                         background: (form.type || 'Sell') === opt.value ? opt.bg : 'transparent',
@@ -1023,10 +1034,10 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
                 {/* Bid Structure */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid</span>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid</span>
                   <div role="group" aria-label="Bid" style={{ display: 'flex', gap: 20 }}>
                     {['Single', 'Block'].map(opt => (
-                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }}>
+                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, cursor: 'pointer', color: 'var(--slate-700)' }}>
                         <input type="radio" name="bidStructure" value={opt} checked={(form.structure || 'Single') === opt} onChange={e => setForm({...form, structure: e.target.value})} style={{ accentColor: 'var(--navy)' }} />
                         {opt}
                       </label>
@@ -1037,19 +1048,19 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
                 {/* Bid On — EX-BUS vs Regional Periphery */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid On</span>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid On</span>
                   <div role="group" aria-label="Bid On" style={{ display: 'flex', gap: 20 }}>
                     {[
                       { value: 'EX-BUS', label: 'EX-BUS', hint: 'Plant Busbar' },
                       { value: 'PERIPHERY', label: 'Regional Periphery', hint: 'Grid Entry Point' },
                     ].map(opt => (
-                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }} title={opt.hint}>
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, cursor: 'pointer', color: 'var(--slate-700)' }} title={opt.hint}>
                         <input type="radio" name="bidOn" value={opt.value} checked={(form.bid_on || 'EX-BUS') === opt.value} onChange={e => setForm({...form, bid_on: e.target.value})} style={{ accentColor: 'var(--navy)' }} />
                         {opt.label}
                       </label>
                     ))}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 4 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--text-subtle)', marginTop: 4 }}>
                     {(form.bid_on || 'EX-BUS') === 'EX-BUS'
                       ? 'Losses borne by buyer · ₹/kWh at plant terminal'
                       : 'Includes CTU/STU transmission loss adjustment'}
@@ -1071,22 +1082,22 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 20, marginBottom: 20, background: 'var(--t-blue-50)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>Select Excel File Bid Type to Upload :</span>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--slate-600)' }}>Select Excel File Bid Type to Upload :</span>
                   <div role="group" aria-label="Select Excel File Bid Type to Upload " style={{ display: 'flex', gap: 18, marginTop: 8 }}>
                     {['24 Blocks', '50 Blocks', '96 Blocks'].map(opt => (
-                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }}>
+                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, cursor: 'pointer', color: 'var(--slate-700)' }}>
                         <input type="radio" name="blockGranularity" value={opt} defaultChecked={opt === '96 Blocks'} style={{ accentColor: 'var(--navy)' }} />
                         {opt}
                       </label>
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, fontSize: 13.5 }}>
+                <div style={{ display: 'flex', gap: 8, fontSize: 15 }}>
                   <span style={{ color: 'var(--slate-500)' }}>Download formats:</span>
                   {['24 blocks', '50 blocks', '96 blocks'].map((t, i) => (
                     <React.Fragment key={t}>
                       {i > 0 && <span style={{ color: 'var(--slate-300)' }}>|</span>}
-                      <button type="button" onClick={handleDownloadTemplate} style={{ background: 'none', border: 'none', color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 13.5 }}>{t}</button>
+                      <button type="button" onClick={handleDownloadTemplate} style={{ background: 'none', border: 'none', color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 15 }}>{t}</button>
                     </React.Fragment>
                   ))}
                 </div>
@@ -1118,8 +1129,8 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 }}
               >
                 <div style={{ fontSize: 36, marginBottom: 8 }}></div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop .xlsx Bid File Here</div>
-                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
+                <div style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop .xlsx Bid File Here</div>
+                <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
                 <input
                   id="dam-file-upload"
                   type="file"
@@ -1128,7 +1139,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   style={{ display: 'none' }}
                 />
               </label>
-              {bulkFileNote && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--navy)', fontWeight: 500 }}> {bulkFileNote}</div>}
+              {bulkFileNote && <div style={{ marginTop: 10, fontSize: 14.5, color: 'var(--navy)', fontWeight: 500 }}> {bulkFileNote}</div>}
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
                 <WriteOnly><button type="button" className="btn btn-primary" style={{ background: 'var(--navy)' }} disabled={!bulkText} onClick={() => runBulk(true)}>Import File Data</button></WriteOnly>
               </div>
@@ -1161,7 +1172,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   <div style={{ marginTop: 12 }}>
                     <h4 style={{ marginBottom: 8, color: 'var(--on-red)' }}>Errors ({bulkResult.errors.length})</h4>
                     {bulkResult.errors.map((e, i) => (
-                      <div key={i} style={{ color: 'var(--on-red)', fontSize: 13 }}>{e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}</div>
+                      <div key={i} style={{ color: 'var(--on-red)', fontSize: 14.5 }}>{e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}</div>
                     ))}
                   </div>
                 )}
@@ -1206,29 +1217,29 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   {/* Quantum Limit Guardrail */}
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--slate-50)', border: '1px solid var(--slate-300)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-700)' }}>Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
+                      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--slate-700)' }}>Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
                     </div>
                     <div style={{ height: 6, background: 'var(--slate-200)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
                       <div style={{ height: '100%', background: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9', width: `${Math.min(100, utilPercent)}%` }} />
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
                       Current Bid: {maxBidMW.toFixed(2)} MW {isExBus ? `(EX-BUS) → ${regionalMW.toFixed(2)} MW (Periphery)` : '(Regional Periphery)'}
                     </div>
                   </div>
 
                   {/* Net Financial Estimator */}
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--t-green-50)', border: '1px solid var(--t-green-line)' }}>
-                    <h4 style={{ fontSize: 13, color: 'var(--green-strong)', margin: '0 0 8px 0' }}>Automated Clearing Net Financial Estimator</h4>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--slate-600)', marginBottom: 4 }}>
+                    <h4 style={{ fontSize: 14.5, color: 'var(--green-strong)', margin: '0 0 8px 0' }}>Automated Clearing Net Financial Estimator</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, color: 'var(--slate-600)', marginBottom: 4 }}>
                       <span>Gross Revenue (Estimated):</span>
                       <span>₹ {grossRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--red-strong)', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, color: 'var(--red-strong)', marginBottom: 4 }}>
                       <span>Transmission & SLDC Fees:</span>
                       <span>- ₹ {(regionalTxFee + stateTxFee + dailySLDCFee).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--green-strong)', fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--t-green-line)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14.5, color: 'var(--green-strong)', fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--t-green-line)' }}>
                       <span>Net Realization:</span>
                       <span>₹ {netRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
@@ -1239,7 +1250,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
             {/* ── Manual Block Entry (fallback/alternative) ── */}
             <details style={{ marginBottom: 20 }}>
-              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--slate-600)', marginBottom: 10 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)', marginBottom: 10 }}>
                 ▸ Manual Block Entry (add blocks individually)
               </summary>
               <div style={{ paddingTop: 10 }}>
@@ -1314,7 +1325,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                     {i > 0 && <span style={{ color: 'var(--navy)' }}>→</span>}
                     <span
                       style={{
-                        padding: '4px 8px', borderRadius: 4, fontSize: 13.5,
+                        padding: '4px 8px', borderRadius: 4, fontSize: 15,
                         background: l.id === selectedBid.id ? 'var(--navy)' : 'var(--surface)',
                         color: l.id === selectedBid.id ? '#fff' : 'var(--slate-700)',
                         border: '1px solid var(--t-blue-100)', cursor: 'pointer',
@@ -1468,7 +1479,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   <h4 style={{ marginBottom: 10, color: index === 0 ? 'var(--slate-600)' : 'var(--on-green)' }}>
                     {index === 0 ? 'Base Revision' : 'Target Revision'} ({bid.revision_no || '1'})
                   </h4>
-                  <div style={{ fontSize: 13, marginBottom: 15, color: 'var(--slate-500)' }}>
+                  <div style={{ fontSize: 14.5, marginBottom: 15, color: 'var(--slate-500)' }}>
                     <p><strong>Ref:</strong> {bid.id}</p>
                     <p><strong>Status:</strong> {bid.status}</p>
                   </div>
@@ -1503,10 +1514,10 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 </div>
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--slate-700)' }}>Revision {bid.revision_no || 1}</div>
-                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
                     <strong>Submitted:</strong> {bid.id} | <strong>Type:</strong> {bid.type}
                   </div>
-                  <div style={{ fontSize: 13, marginTop: 4, display: 'flex', gap: 10 }}>
+                  <div style={{ fontSize: 14.5, marginTop: 4, display: 'flex', gap: 10 }}>
                     <span style={{ color: 'var(--green-strong)' }}>File Prepared</span>
                     <span>|</span>
                     {bid.status === 'REJECTED' ? 
@@ -1530,14 +1541,14 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-100)' }}>
             <div>
               <h3 style={{ margin: 0 }}>Audit Trail Viewer: {auditBid.id}</h3>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
             </div>
             <button onClick={() => setAuditBid(null)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
           </div>
           <div style={{ flex: 1, padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 6, border: '1px solid var(--slate-200)', marginBottom: 20 }}>
                <h4 style={{ margin: '0 0 10px 0', color: 'var(--slate-700)' }}>Digital Signature & Provenance</h4>
-               <div style={{ fontSize: 13, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+               <div style={{ fontSize: 14.5, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div><strong>Bid Source:</strong> API Gateway</div>
                   <div><strong>Origin Timestamp:</strong> {auditBid.bid_date} 10:45:12 UTC</div>
                   <div><strong>User Agent:</strong> SJVN_Algo_Bot/2.1</div>
@@ -1565,7 +1576,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               <div style={{ fontSize: 32 }}></div>
               <div>
                 <h4 style={{ margin: '0 0 8px 0', color: 'var(--red-strong)', fontSize: 16 }}>Regulatory Constraint Violation Risk</h4>
-                <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-700)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 14.5, color: 'var(--slate-700)', lineHeight: 1.5 }}>
                   As per its SLDC Standing Clearance, <strong>{clearance?.client_name || 'this generating station'}</strong> is strictly prohibited from submitting <strong>BUY</strong> bids on the power exchange unless the plant is undergoing an active <strong>Forced Outage</strong>.
                 </p>
               </div>
@@ -1579,7 +1590,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   onChange={e => setOutageAcknowledged(e.target.checked)} 
                   style={{ marginTop: 4, accentColor: 'var(--red-strong)', width: 16, height: 16 }}
                 />
-                <span style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 500 }}>
+                <span style={{ fontSize: 14.5, color: 'var(--slate-600)', fontWeight: 500 }}>
                   I confirm that {clearance?.client_name || 'this generating station'} is currently experiencing a forced outage and this BUY bid is for replacement power. I understand that false declarations may result in {clearance?.sldc_name || 'the SLDC'} revoking the standing clearance (Clause 28).
                 </span>
               </label>
@@ -1606,7 +1617,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       {showProfile && (
         <Modal open={true} onClose={() => setShowProfile(false)} title="Portfolio Profile" width={640}>
           <div style={{ padding: '0 20px 20px 20px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, border: '1px solid var(--slate-200)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5, border: '1px solid var(--slate-200)' }}>
               <tbody>
                 {[
                   { k: 'Portfolio ID:', v: clearance?.client_id || '—' },

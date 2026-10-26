@@ -15,7 +15,7 @@ const MAX_PROSE = 74; // ch — long enough for a table row, short enough to rea
 function Prose({ children }) {
   return (
     <p style={{
-      margin: '0 0 12px', fontSize: 14, lineHeight: 1.7,
+      margin: '0 0 12px', fontSize: 15.5, lineHeight: 1.7,
       color: 'var(--text)', maxWidth: `${MAX_PROSE}ch`,
     }}>
       {children}
@@ -40,9 +40,9 @@ function Note({ tone = 'info', title, children }) {
       maxWidth: `${MAX_PROSE}ch`,
     }}>
       {title && (
-        <div style={{ fontSize: 13, fontWeight: 700, color: t.fg, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: t.fg, marginBottom: 4 }}>{title}</div>
       )}
-      <div style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text)' }}>{children}</div>
+      <div style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text)' }}>{children}</div>
     </div>
   );
 }
@@ -56,15 +56,15 @@ function Steps({ items }) {
             <span style={{
               width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
               background: 'var(--primary-light)', color: 'var(--primary)',
-              fontSize: 13.5, fontWeight: 700,
+              fontSize: 15, fontWeight: 700,
             }}>{i + 1}</span>
             {i < items.length - 1 && (
               <span style={{ flex: 1, width: 1, background: 'var(--border)', marginTop: 4 }} />
             )}
           </div>
           <div style={{ paddingTop: 3 }}>
-            <div style={{ fontSize: 14, fontWeight: 650, color: 'var(--text)' }}>{s.title}</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 3 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 650, color: 'var(--text)' }}>{s.title}</div>
+            <div style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 3 }}>
               {s.detail}
             </div>
           </div>
@@ -77,14 +77,14 @@ function Steps({ items }) {
 function GuideTable({ columns, rows, caption }) {
   return (
     <div style={{ margin: '4px 0 16px', overflowX: 'auto' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13.5 }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 15 }}>
         <thead>
           <tr>
             {columns.map((c) => (
               <th key={c} style={{
                 textAlign: 'left', padding: '8px 12px 8px 0',
                 borderBottom: '1px solid var(--border)',
-                fontSize: 13, fontWeight: 700, letterSpacing: '.04em',
+                fontSize: 14.5, fontWeight: 700, letterSpacing: '.04em',
                 textTransform: 'none', color: 'var(--text-muted)', whiteSpace: 'nowrap',
               }}>{c}</th>
             ))}
@@ -108,7 +108,7 @@ function GuideTable({ columns, rows, caption }) {
         </tbody>
       </table>
       {caption && (
-        <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+        <div style={{ fontSize: 15, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
           {caption}
         </div>
       )}
@@ -121,11 +121,11 @@ function Terms({ items }) {
     <dl style={{ margin: '4px 0 8px', maxWidth: `${MAX_PROSE}ch` }}>
       {items.map((t) => (
         <div key={t.term} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-          <dt style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>
+          <dt style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
             {t.term}
             {t.also && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {t.also}</span>}
           </dt>
-          <dd style={{ margin: '3px 0 0', fontSize: 13.5, lineHeight: 1.65, color: 'var(--text-muted)' }}>
+          <dd style={{ margin: '3px 0 0', fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)' }}>
             {t.def}
           </dd>
         </div>
@@ -141,7 +141,7 @@ function Faq({ items }) {
       {items.map((f) => (
         <details key={f.q} style={{ borderBottom: '1px solid var(--border)' }}>
           <summary style={{
-            cursor: 'pointer', padding: '13px 0', fontSize: 14, fontWeight: 600,
+            cursor: 'pointer', padding: '13px 0', fontSize: 15.5, fontWeight: 600,
             color: 'var(--text)', listStyle: 'none', display: 'flex',
             alignItems: 'flex-start', gap: 10,
           }}>
@@ -149,7 +149,7 @@ function Faq({ items }) {
             <span>{f.q}</span>
           </summary>
           <div style={{
-            fontSize: 13.5, lineHeight: 1.7, color: 'var(--text-muted)',
+            fontSize: 15, lineHeight: 1.7, color: 'var(--text-muted)',
             padding: '0 0 15px 22px',
           }}>{f.a}</div>
         </details>
@@ -244,7 +244,7 @@ export default function ModuleGuide({ guide, sections }) {
         padding: '22px 24px', marginBottom: 18,
       }}>
         <div style={{
-          fontSize: 13, fontWeight: 700, letterSpacing: '.07em',
+          fontSize: 14.5, fontWeight: 700, letterSpacing: '.07em',
           textTransform: 'none', color: 'var(--primary)', marginBottom: 8,
         }}>
           {effectiveGuide.eyebrow || 'Reference'}
@@ -253,7 +253,7 @@ export default function ModuleGuide({ guide, sections }) {
           {effectiveGuide.title}
         </h2>
         <p style={{
-          margin: 0, fontSize: 14.5, lineHeight: 1.7,
+          margin: 0, fontSize: 15.5, lineHeight: 1.7,
           color: 'var(--text-muted)', maxWidth: `${MAX_PROSE}ch`,
         }}>
           {effectiveGuide.summary}
@@ -270,14 +270,14 @@ export default function ModuleGuide({ guide, sections }) {
                 borderRadius: 8, border: '1px solid var(--border)',
               }}>
                 <div style={{
-                  fontSize: 12.5, fontWeight: 700, letterSpacing: '.05em',
+                  fontSize: 14, fontWeight: 700, letterSpacing: '.05em',
                   textTransform: 'none', color: 'var(--text-muted)',
                 }}>{f.label}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: '4px 0 2px' }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '4px 0 2px' }}>
                   {f.value}
                 </div>
                 {f.hint && (
-                  <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted)' }}>{f.hint}</div>
+                  <div style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--text-muted)' }}>{f.hint}</div>
                 )}
               </div>
             ))}
@@ -306,7 +306,7 @@ export default function ModuleGuide({ guide, sections }) {
                 paddingBottom: 6, marginBottom: 12, borderBottom: '1px solid var(--border)',
               }}>
                 <span style={{
-                  fontSize: 13, fontWeight: 700, color: 'var(--text-muted)',
+                  fontSize: 14.5, fontWeight: 700, color: 'var(--text-muted)',
                   fontVariantNumeric: 'tabular-nums',
                 }}>
                   {String(i + 1).padStart(2, '0')}
@@ -317,7 +317,7 @@ export default function ModuleGuide({ guide, sections }) {
               </div>
               {s.blurb && (
                 <p style={{
-                  margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.65,
+                  margin: '0 0 14px', fontSize: 15, lineHeight: 1.65,
                   color: 'var(--text-muted)', maxWidth: `${MAX_PROSE}ch`,
                 }}>{s.blurb}</p>
               )}
@@ -333,7 +333,7 @@ export default function ModuleGuide({ guide, sections }) {
               borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', padding: '14px 8px 14px 14px',
             }}>
               <div style={{
-                fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em',
+                fontSize: 14, fontWeight: 700, letterSpacing: '.06em',
                 textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
               }}>On this page</div>
               {effectiveGuide.sections.map((s) => (
@@ -342,7 +342,7 @@ export default function ModuleGuide({ guide, sections }) {
                   href={`#${s.id}`}
                   style={{
                     display: 'block', padding: '6px 10px', marginBottom: 2,
-                    fontSize: 13.5, lineHeight: 1.45, textDecoration: 'none',
+                    fontSize: 15, lineHeight: 1.45, textDecoration: 'none',
                     borderLeft: `2px solid ${active === s.id ? 'var(--primary)' : 'transparent'}`,
                     color: active === s.id ? 'var(--primary)' : 'var(--text-muted)',
                     fontWeight: active === s.id ? 650 : 400,
@@ -360,13 +360,13 @@ export default function ModuleGuide({ guide, sections }) {
                 padding: 14, marginTop: 14,
               }}>
                 <div style={{
-                  fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em',
+                  fontSize: 14, fontWeight: 700, letterSpacing: '.06em',
                   textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
                 }}>{effectiveGuide.quickRef.title}</div>
                 {effectiveGuide.quickRef.items.map((q) => (
                   <div key={q.k} style={{ marginBottom: 11 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--text)' }}>{q.k}</div>
-                    <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted)' }}>{q.v}</div>
+                    <div style={{ fontSize: 15, fontWeight: 650, color: 'var(--text)' }}>{q.k}</div>
+                    <div style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--text-muted)' }}>{q.v}</div>
                   </div>
                 ))}
               </div>
@@ -377,7 +377,7 @@ export default function ModuleGuide({ guide, sections }) {
 
       {effectiveGuide.footnote && (
         <p style={{
-          fontSize: 13.5, color: 'var(--text-muted)', marginTop: 16,
+          fontSize: 15, color: 'var(--text-muted)', marginTop: 16,
           maxWidth: `${MAX_PROSE}ch`, lineHeight: 1.6,
         }}>{effectiveGuide.footnote}</p>
       )}

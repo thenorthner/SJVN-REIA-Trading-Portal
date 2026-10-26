@@ -154,7 +154,7 @@ export default function HydroTds({ vertical = 'HYDRO' }) {
               <Field label="Deductor TAN"><input maxLength={10} value={form.deductor_tan} onChange={(e) => setForm({ ...form, deductor_tan: e.target.value.toUpperCase() })} placeholder="e.g. PTLP12345A" /></Field>
               <Field label="Payment reference (UTR)"><input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></Field>
             </div>
-            <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Record the cash received separately in Account Display; this posts only the tax part.</p>
+            <p style={{ fontSize: 15, color: 'var(--text-muted)' }}>Record the cash received separately in Account Display; this posts only the tax part.</p>
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Record</button>

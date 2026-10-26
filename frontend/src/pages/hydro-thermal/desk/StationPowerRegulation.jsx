@@ -98,7 +98,7 @@ export default function StationPowerRegulation({ vertical = 'HYDRO' }) {
             { key: 'beneficiary_name', header: 'Beneficiary', render: (r) => <Link to={`${pathFor(vertical, 'ledger')}?beneficiary=${encodeURIComponent(r.beneficiary_name)}`}>{r.beneficiary_name}</Link> },
             { key: 'station_name', header: 'Station' },
             { key: 'ground', header: 'Ground', render: (r) => <Badge type="warning">{GROUND[r.ground]}</Badge> },
-            { key: 'overdue', header: 'Overdue', render: (r) => <span>{fmtCurrency(r.overdue)}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>oldest {r.days_overdue} days past due</div></span> },
+            { key: 'overdue', header: 'Overdue', render: (r) => <span>{fmtCurrency(r.overdue)}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>oldest {r.days_overdue} days past due</div></span> },
             { key: 'security_short', header: 'Security short', render: (r) => (r.security_short > 0 ? fmtCurrency(r.security_short) : '—') },
             { key: 'act', header: '', render: (r) => (canWrite
               ? <button type="button" className="btn btn-primary btn-sm" onClick={() => open('NOTICE', r, { notice_ref: '', notice_date: today(), remarks: '' })}>Serve notice</button>
@@ -112,23 +112,23 @@ export default function StationPowerRegulation({ vertical = 'HYDRO' }) {
       <Card title="Regulation cases">
         <Table
           columns={[
-            { key: 'case_no', header: 'Case', render: (c) => <span>{c.case_no}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{c.station_name}</div></span> },
-            { key: 'beneficiary_name', header: 'Beneficiary', render: (c) => <span>{c.beneficiary_name}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{GROUND[c.ground]} · {fmtCurrency(c.outstanding_at_notice)} at notice</div></span> },
+            { key: 'case_no', header: 'Case', render: (c) => <span>{c.case_no}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{c.station_name}</div></span> },
+            { key: 'beneficiary_name', header: 'Beneficiary', render: (c) => <span>{c.beneficiary_name}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{GROUND[c.ground]} · {fmtCurrency(c.outstanding_at_notice)} at notice</div></span> },
             { key: 'status', header: 'Standing', render: (c) => (
               <span><Badge type={STATUS[c.status].tone}>{STATUS[c.status].label}</Badge>
-                {c.status === 'NOTICE_ISSUED' && <div style={{ fontSize: 12.5, color: c.notice_matured ? 'var(--amber-strong)' : 'var(--text-light)' }}>{c.notice_matured ? 'Notice period over' : `Can regulate from ${fmtDate(c.earliest_regulation_date)}`}</div>}
-                {c.status === 'REGULATING' && c.default_cleared && <div style={{ fontSize: 12.5, color: 'var(--on-green-2)' }}>Dues cleared — restore</div>}
+                {c.status === 'NOTICE_ISSUED' && <div style={{ fontSize: 14, color: c.notice_matured ? 'var(--amber-strong)' : 'var(--text-light)' }}>{c.notice_matured ? 'Notice period over' : `Can regulate from ${fmtDate(c.earliest_regulation_date)}`}</div>}
+                {c.status === 'REGULATING' && c.default_cleared && <div style={{ fontSize: 14, color: 'var(--on-green-2)' }}>Dues cleared — restore</div>}
               </span>
             ) },
             { key: 'dates', header: 'Notice / regulation', render: (c) => (
-              <span style={{ fontSize: 13 }}>
+              <span style={{ fontSize: 14.5 }}>
                 <div>Notice {c.notice_ref}, {fmtDate(c.notice_date)}</div>
                 {c.regulate_from && <div>Regulated from {fmtDate(c.regulate_from)} · {c.regulation_pct}% withheld · {c.rldc_intimation_ref}</div>}
                 {c.restored_on && <div>{c.status === 'WITHDRAWN' ? 'Withdrawn' : 'Restored'} {fmtDate(c.restored_on)} — {c.close_reason}</div>}
               </span>
             ) },
             { key: 'withheld', header: 'Withheld on bills', render: (c) => (c.withheld.length
-              ? <span>{mu(c.withheld_kwh)}{c.withheld.map((w) => <div key={w.bill_no} style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{w.billing_month}: {mu(w.withheld_kwh)} ({w.bill_no})</div>)}</span>
+              ? <span>{mu(c.withheld_kwh)}{c.withheld.map((w) => <div key={w.bill_no} style={{ fontSize: 14, color: 'var(--text-light)' }}>{w.billing_month}: {mu(w.withheld_kwh)} ({w.bill_no})</div>)}</span>
               : '—') },
             { key: 'now', header: 'Overdue now', render: (c) => (['NOTICE_ISSUED', 'REGULATING'].includes(c.status) ? fmtCurrency(c.overdue_now) : '—') },
             { key: 'act', header: '', render: (c) => (!canWrite ? null : (
@@ -150,7 +150,7 @@ export default function StationPowerRegulation({ vertical = 'HYDRO' }) {
           <div>
             {form.kind === 'NOTICE' && (
               <>
-                <p style={{ marginTop: 0, fontSize: 13.5 }}>{GROUND[form.row.ground]} — {fmtCurrency(form.row.overdue)} overdue, oldest {form.row.days_overdue} days. Supply can be regulated {n.notice_days ?? 15} days after the notice date.</p>
+                <p style={{ marginTop: 0, fontSize: 15 }}>{GROUND[form.row.ground]} — {fmtCurrency(form.row.overdue)} overdue, oldest {form.row.days_overdue} days. Supply can be regulated {n.notice_days ?? 15} days after the notice date.</p>
                 <Field label="Notice reference" required><input value={form.values.notice_ref} onChange={set('notice_ref')} style={{ width: '100%' }} /></Field>
                 <Field label="Notice date" required><input type="date" max={today()} value={form.values.notice_date} onChange={set('notice_date')} /></Field>
                 <Field label="Remarks"><textarea rows={2} value={form.values.remarks} onChange={set('remarks')} style={{ width: '100%' }} /></Field>

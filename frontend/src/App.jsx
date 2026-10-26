@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -7,13 +7,21 @@ import { useAuth } from './context/AuthContext.jsx';
 import { EliteChartGradients } from './components/EliteChartGradients.jsx';
 import CookieConsent from './gigw/CookieConsent.jsx';
 import DeclarationGate from './gigw/DeclarationGate.jsx';
+import PortalSearchModal, { SEARCH_OPEN_EVENT } from './components/PortalSearchModal.jsx';
+import KeyboardShortcutsModal, { SHORTCUTS_OPEN_EVENT } from './components/KeyboardShortcutsModal.jsx';
+import UrjaCelebration from './components/UrjaCelebration.jsx';
+import { Sparkles } from 'lucide-react';
 
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const PublicHome = lazy(() => import('./pages/public/PublicHome.jsx'));
 const PolicyPage = lazy(() => import('./pages/public/PolicyPage.jsx'));
 const Sitemap = lazy(() => import('./pages/public/PolicyPage.jsx').then((m) => ({ default: m.Sitemap })));
 const PrivacyRequests = lazy(() => import('./pages/settings/PrivacyRequests.jsx'));
 const ProjectAssignments = lazy(() => import('./pages/settings/ProjectAssignments.jsx'));
 const Delegations = lazy(() => import('./pages/settings/Delegations.jsx'));
+const PublicCirculars = lazy(() => import('./pages/public/PublicCirculars.jsx'));
+const PublicFeedback = lazy(() => import('./pages/public/PublicFeedback.jsx'));
+const CircularsManager = lazy(() => import('./pages/admin/CircularsManager.jsx'));
 
 const Login = lazy(() => import('./pages/Login.jsx'));
 const ConsolidatedDashboard = lazy(() => import('./pages/ConsolidatedDashboard.jsx'));
@@ -290,10 +298,61 @@ function RootShell() {
 const PUBLIC_PAGES = [
   'privacy-policy', 'terms-of-use', 'disclaimer', 'hyperlinking-policy', 'copyright-policy',
   'cookie-policy', 'security-policy', 'accessibility-statement', 'screen-reader-access',
-  'grievance-redressal', 'contact-us', 'help',
+  'grievance-redressal', 'contact-us', 'help', 'about-us', 'related-links',
 ];
 
 export default function App() {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  useEffect(() => {
+    const handleOpenSearch = () => setSearchOpen(true);
+    const handleOpenShortcuts = () => setShortcutsOpen(true);
+    const handleShowToast = (e) => {
+      setToastMessage(e.detail?.message || 'Command executed');
+      setTimeout(() => setToastMessage(null), 2500);
+    };
+
+    window.addEventListener(SEARCH_OPEN_EVENT, handleOpenSearch);
+    window.addEventListener(SHORTCUTS_OPEN_EVENT, handleOpenShortcuts);
+    window.addEventListener('sjvn:show-toast', handleShowToast);
+
+    function handleKeyDown(e) {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      const isInput = ['input', 'textarea', 'select'].includes(activeTag) || document.activeElement?.isContentEditable;
+
+      // Cmd+K / Ctrl+K opens Spotlight Command Palette anywhere
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+        return;
+      }
+
+      // / key opens search when not typing in form inputs
+      if (!isInput && e.key === '/' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+
+      // ? opens keyboard shortcuts when not typing in form inputs
+      if (!isInput && (e.key === '?' || (e.code === 'Slash' && e.shiftKey))) {
+        e.preventDefault();
+        setShortcutsOpen((prev) => !prev);
+        return;
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener(SEARCH_OPEN_EVENT, handleOpenSearch);
+      window.removeEventListener(SHORTCUTS_OPEN_EVENT, handleOpenShortcuts);
+      window.removeEventListener('sjvn:show-toast', handleShowToast);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   return (
     <Suspense fallback={<RouteFallback />}>
       <EliteChartGradients />
@@ -309,11 +368,15 @@ export default function App() {
       <Route path="/our-vision" element={<Navigate to="/?vision=true" replace />} />
       <Route path="/vision" element={<Navigate to="/?vision=true" replace />} />
       <Route path="/about-platform" element={<Navigate to="/?vision=true" replace />} />
-      <Route path="/about-us" element={<Navigate to="/?vision=true" replace />} />
-      <Route path="/about" element={<Navigate to="/?vision=true" replace />} />
+      <Route path="/about" element={<Navigate to="/about-us" replace />} />
+      <Route path="/feedback" element={<PublicFeedback />} />
       <Route path="/sitemap" element={<Sitemap />} />
+      <Route path="/circulars" element={<PublicCirculars />} />
+      <Route path="/public-circulars" element={<Navigate to="/circulars" replace />} />
+      <Route path="/disclosures" element={<Navigate to="/circulars" replace />} />
       <Route path="/home" element={<PublicHome />} />
       <Route path="/portal" element={<PublicHome />} />
+      <Route path="/404" element={<NotFound standalone />} />
 
       <Route path="/" element={<RootShell />}>
         <Route index element={<HomeRoute />} />
@@ -322,6 +385,7 @@ export default function App() {
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
         <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><Entities initialTab="kyc" /></ProtectedRoute>} />
         <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+        <Route path="admin/circulars" element={<ProtectedRoute roles={ROLE_GROUPS.CIRCULARS_WRITE}><CircularsManager /></ProtectedRoute>} />
  {/* Every SJVN officer may ask for break-glass or act on a charge they hold; the screen shows each what applies. */}
         <Route path="settings/delegations" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR', 'REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER', 'THERMAL_ADMIN', 'THERMAL_USER', 'TRADING_USER', 'TRADING_ADMIN', 'FINANCE_USER']}><Delegations /></ProtectedRoute>} />
         <Route path="admin/project-assignments" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR']}><ProjectAssignments /></ProtectedRoute>} />
@@ -616,11 +680,20 @@ export default function App() {
         <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-status" /></ProtectedRoute>} />
 
         <Route path="settings/privacy-requests" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR']}><PrivacyRequests /></ProtectedRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
       <CookieConsent />
       <DeclarationGate />
+      <PortalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <UrjaCelebration />
+      {toastMessage && (
+        <div className="sjvn-spotlight-toast" role="status" aria-live="polite">
+          <Sparkles size={16} color="#38bdf8" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </Suspense>
   );
 }

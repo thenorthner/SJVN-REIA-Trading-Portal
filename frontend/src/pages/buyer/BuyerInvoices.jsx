@@ -28,7 +28,7 @@ function DueTag({ b }) {
   const [bg, fg, text] = b.overdue ? ['#fef2f2', '#b91c1c', `${-b.days_to_due}d overdue`]
     : b.days_to_due <= 10 ? ['#fffbeb', '#b45309', b.days_to_due === 0 ? 'Due today' : `Due in ${b.days_to_due}d`]
       : ['#f0fdf4', '#15803d', `${b.days_to_due}d to go`];
-  return <span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: bg, color: fg, whiteSpace: 'nowrap' }}>{text}</span>;
+  return <span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 14.5, fontWeight: 700, background: bg, color: fg, whiteSpace: 'nowrap' }}>{text}</span>;
 }
 
 const VIEWS = [
@@ -149,7 +149,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
               alignItems: 'center',
               padding: '6px 12px',
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: 14.5,
               fontWeight: 700,
               background: maker ? 'var(--t-blue-50)' : 'var(--t-green-50)',
               color: maker ? 'var(--on-blue)' : 'var(--on-green-2)',
@@ -171,7 +171,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
           aria-selected={activeTab === 'INVOICES'}
           className={`nb-tab ${activeTab === 'INVOICES' ? 'active' : ''}`}
           onClick={() => handleTabChange('INVOICES')}
-          style={{ fontSize: 14.5, padding: '10px 20px' }}
+          style={{ fontSize: 15.5, padding: '10px 20px' }}
         >
           Payable Invoices
         </button>
@@ -182,7 +182,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
           aria-selected={activeTab === 'LEDGER'}
           className={`nb-tab ${activeTab === 'LEDGER' ? 'active' : ''}`}
           onClick={() => handleTabChange('LEDGER')}
-          style={{ fontSize: 14.5, padding: '10px 20px' }}
+          style={{ fontSize: 15.5, padding: '10px 20px' }}
         >
           Payment Ledger &amp; Receipts
         </button>
@@ -248,7 +248,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
               ) : null}
             >
               {!maker && approvablePins.length > 1 && (
-                <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-light)' }}>
+                <p style={{ margin: '0 0 10px', fontSize: 14.5, color: 'var(--text-light)' }}>
                   As Checker, select intimations to bulk authorize and submit to SJVN Finance, or review and return to maker individually.
                 </p>
               )}
@@ -302,14 +302,14 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
                     <tr key={b.id} className={`clickable ${b.overdue ? 'ps-row-critical' : b.days_to_due !== null && b.days_to_due <= 10 && b.left > 0 ? 'ps-row-warn' : ''}`} tabIndex={0} role="button" onClick={() => setOpenId(b.id)}
                       onKeyDown={(e) => { if (e.key === 'Enter') setOpenId(b.id); }}>
                       <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${b.invoice_no}`} checked={!!picked[b.id]} onChange={(e) => setPicked({ ...picked, [b.id]: e.target.checked })} /></td>
-                      <td><strong>{b.invoice_no}</strong>{!b.acknowledged_at && b.status !== 'CANCELLED' && <div style={{ fontSize: 13, color: 'var(--on-blue)' }}>Receipt not acknowledged</div>}</td>
+                      <td><strong>{b.invoice_no}</strong>{!b.acknowledged_at && b.status !== 'CANCELLED' && <div style={{ fontSize: 14.5, color: 'var(--on-blue)' }}>Receipt not acknowledged</div>}</td>
                       <td>{b.contract_no}</td>
-                      <td>{b.billing_period}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{b.invoice_type}</div></td>
+                      <td>{b.billing_period}<div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{b.invoice_type}</div></td>
                       <td>{fmtNumber(b.energy_mwh)} MWh</td>
-                      <td>{fmtCurrency(b.total_amount)}{b.disputed_amount > 0 && <div style={{ fontSize: 13, color: 'var(--amber-strong)' }}>{fmtCurrency(b.disputed_amount)} in dispute</div>}</td>
+                      <td>{fmtCurrency(b.total_amount)}{b.disputed_amount > 0 && <div style={{ fontSize: 14.5, color: 'var(--amber-strong)' }}>{fmtCurrency(b.disputed_amount)} in dispute</div>}</td>
                       <td>{b.left > 0 ? <strong>{fmtCurrency(b.left)}</strong> : '—'}
-                        {b.pending_intimation && <div style={{ fontSize: 13, color: 'var(--on-blue)' }}>{fmtCurrency(b.pending_intimation.amount)} {b.pending_intimation.with_finance ? 'with SJVN Finance' : 'with your checker'}</div>}
-                        {b.accrued_lps > 0 && b.left > 0 && <div style={{ fontSize: 13, color: 'var(--red-deep)' }}>incl. surcharge {fmtCurrency(b.accrued_lps)}</div>}</td>
+                        {b.pending_intimation && <div style={{ fontSize: 14.5, color: 'var(--on-blue)' }}>{fmtCurrency(b.pending_intimation.amount)} {b.pending_intimation.with_finance ? 'with SJVN Finance' : 'with your checker'}</div>}
+                        {b.accrued_lps > 0 && b.left > 0 && <div style={{ fontSize: 14.5, color: 'var(--red-deep)' }}>incl. surcharge {fmtCurrency(b.accrued_lps)}</div>}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{b.due_date ? fmtDate(b.due_date) : '—'} <DueTag b={b} /></td>
                       <td><Badge status={b.status} /></td>
                     </tr>
@@ -327,7 +327,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
         {bill && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-              <div style={{ fontSize: 13 }}>
+              <div style={{ fontSize: 14.5 }}>
                 {bill.acknowledged_at
                   ? <span style={{ color: 'var(--on-green-2)' }}>✓ Receipt acknowledged by {bill.acknowledged_by} on {fmtDateTime(bill.acknowledged_at)}</span>
                   : bill.status !== 'CANCELLED' && <><span style={{ color: 'var(--text-light)' }}>Presented on {fmtDate(bill.issued_on)}. </span><button type="button" className="btn btn-secondary btn-sm" onClick={acknowledge}>Acknowledge receipt</button></>}
@@ -350,7 +350,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
                 <InvoiceFinancialStrip invoice={{ ...full, direction: 'SJVN_TO_BUYER' }} />
                 <DisputeImpactPanel invoice={full} />
               </>
-            ) : <p style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading the bill…</p>}
+            ) : <p style={{ fontSize: 14.5, color: 'var(--text-light)' }}>Loading the bill…</p>}
             <p className="inline-note">A bill paid after its due date attracts late payment surcharge on the undisputed amount left unpaid. PSA bills carry no early-payment rebate.</p>
 
             {full && <InvoiceCompliance key={full.id} invoice={{ ...full, direction: 'SJVN_TO_BUYER' }} />}
@@ -366,12 +366,12 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
                 <div key={p.id} className="cw-card" style={{ borderLeft: '4px solid #16a34a' }}>
                   <strong style={{ color: 'var(--on-green-2)' }}>{fmtCurrency(p.amount)}</strong> recorded on {fmtDate(p.payment_date)}
                   <span style={{ color: 'var(--text-light)' }}> · {p.mode === 'WATERFALL' ? 'applied by SJVN' : p.mode || '—'} · {p.reference || '—'}{p.deduction > 0 ? ` · ${fmtCurrency(p.deduction)} deducted` : ''}{p.lps_component > 0 ? ` · ${fmtCurrency(p.lps_component)} of it to surcharge` : ''}</span>
-                  <button type="button" className="btn-link" style={{ marginLeft: 8, fontSize: 13, fontWeight: 600 }} onClick={() => { setOpenId(null); handleTabChange('LEDGER'); }}>Receipt in the ledger →</button>
+                  <button type="button" className="btn-link" style={{ marginLeft: 8, fontSize: 14.5, fontWeight: 600 }} onClick={() => { setOpenId(null); handleTabChange('LEDGER'); }}>Receipt in the ledger →</button>
                 </div>
               )
             ))}
             {forBill.filter((i) => i.status !== 'CONFIRMED').map((i) => <IntimationRow key={i.id} i={i} side="BUYER" tier={d.my_tier} myId={pins?.my_id} onChanged={refresh} onPreview={setPreview} />)}
-            {!full?.payments?.length && !forBill.length && <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-light)' }}>No payment has been recorded or notified on this bill.</p>}
+            {!full?.payments?.length && !forBill.length && <p style={{ margin: '0 0 8px', fontSize: 14.5, color: 'var(--text-light)' }}>No payment has been recorded or notified on this bill.</p>}
 
             {notify
               ? <IntimationForm bill={bill} modes={d.modes} sections={d.tds_sections} maker={maker} onCancel={() => setNotify(false)}
@@ -387,7 +387,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Disputes</div>
                 {full.disputes.map((x) => (
-                  <div key={x.id} style={{ fontSize: 13, marginBottom: 4 }}>
+                  <div key={x.id} style={{ fontSize: 14.5, marginBottom: 4 }}>
                     <Badge status={x.status} /> {x.dispute_no} — {fmtCurrency(x.disputed_amount)}{x.resolution_notes ? ` · ${x.resolution_notes}` : ''}{' '}
                     <button type="button" className="btn-link" onClick={() => navigate('/buyer/disputes')}>Open →</button>
                   </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const CATEGORIES = ['ISTS', 'STU', 'RLDC', 'SLDC', 'NOAR_FEE', 'OPERATING'];
 
@@ -43,7 +44,7 @@ export default function RateMaster() {
       await api.rateMaster.create({ ...newRate, rate_value: Number(newRate.rate_value) });
       setShowNew(false); setNewRate(EMPTY_NEW); load();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to create rate');
+      showAlert(err.response?.data?.error || err.message || 'Failed to create rate');
     }
   }
 
@@ -53,7 +54,7 @@ export default function RateMaster() {
       await api.rateMaster.revise({ ...revision, rate_value: Number(revision.rate_value) });
       setShowRevise(false); setRevision(EMPTY_REVISION); load();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to revise rate');
+      showAlert(err.response?.data?.error || err.message || 'Failed to revise rate');
     }
   }
 
@@ -82,7 +83,7 @@ export default function RateMaster() {
       // An open-ended window is the rate in force today.
       render: r => (r.effective_to ? r.effective_to : <Badge type="success">Current</Badge>),
     },
-    { key: 'created_by', label: 'Source', render: r => <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.created_by || '—'}</span> },
+    { key: 'created_by', label: 'Source', render: r => <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>{r.created_by || '—'}</span> },
   ];
 
   return (
@@ -111,7 +112,7 @@ export default function RateMaster() {
           </Field>
           <button className="btn btn-secondary" type="submit">Look up</button>
           {lookupResult && (
-            <div style={{ marginLeft: 8, fontSize: 14 }}>
+            <div style={{ marginLeft: 8, fontSize: 15.5 }}>
               {lookupResult.error
                 ? <span style={{ color: 'var(--danger, #b91c1c)' }}>{lookupResult.error}</span>
                 : <span><strong>₹{fmtNumber(lookupResult.rate_value, 2)}</strong> {lookupResult.unit} · in force {lookupResult.effective_from} → {lookupResult.effective_to || 'current'}</span>}
@@ -173,7 +174,7 @@ export default function RateMaster() {
 
       <Modal open={showRevise} onClose={() => setShowRevise(false)} title="Revise a rate">
         <form onSubmit={submitRevision}>
-          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 14 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 14 }}>
             The current window is closed the day before the new rate starts, so the history stays intact and non-overlapping.
           </p>
           <Field label="Charge" required>

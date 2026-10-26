@@ -112,7 +112,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
   }
 
   const columns = [
-    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.posting_no}</span> },
+    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15 }}>{r.posting_no}</span> },
     { key: 'period_month', header: 'Month' },
     { key: 'bill_category', header: 'Category', render: (r) => <Badge label={r.bill_category} /> },
     { key: 'bills_count', header: 'Bills' },
@@ -135,7 +135,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
         <span>
           <Badge status={r.status} label={r.status} />
           {r.fi_document_no && (
-            <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
+            <span style={{ display: 'block', fontSize: 14.5, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
           )}
         </span>
       ),
@@ -249,7 +249,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
       <Modal open={!!open} onClose={() => setOpen(null)} title={open ? open.posting_no : ''} width={820}>
         {open && (
           <div>
-            <div style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+            <div style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 14.5 }}>
               <Badge status={open.status} label={open.status} /> · {open.category_label} · {open.period_month}
               {open.plant_code && <> · plant {open.plant_code}</>}
               {open.fi_document_no && <> · Finance voucher {open.fi_document_no}</>}
@@ -267,7 +267,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
               ]}
               rows={open.lines || []}
             />
-            <p style={{ color: 'var(--text-light)', fontSize: 13.5, marginTop: 10 }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 15, marginTop: 10 }}>
               These are the amounts as they were booked. A later revision to any of these bills does
               not change them, because what Finance holds is not ours to restate.
             </p>
@@ -277,7 +277,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
 
       <Modal open={!!posting} onClose={() => setPosting(null)} title={`Post ${posting?.posting_no || ''} to Finance`}>
         <form onSubmit={doPost}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             Booking {fmtCurrency(posting?.total_amount)} across {posting?.bills_count} {posting?.bill_category === 'NOTES' ? 'note' : 'bill'}(s). Record
             the voucher number Finance returns, so the entry can be found from either side.
           </p>
@@ -296,7 +296,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
 
       <Modal open={!!reversing} onClose={() => setReversing(null)} title={`Reverse ${reversing?.posting_no || ''}`}>
         <form onSubmit={doReverse}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             The posting is not deleted: a counter-entry is written beside it and both stay visible.
             The month is then free to be prepared and posted again.
           </p>

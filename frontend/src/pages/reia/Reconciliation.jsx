@@ -13,9 +13,13 @@ import { fmtDateTime } from '../../datetime.js';
 // Who the API lets do what. Management was offered Override, Dispute and
 // Sign-off, each of which it is refused; REIA Admin, who may do all of it, was
 // offered nothing.
-const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
-const CAN_REGENERATE = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
-const CAN_APPROVE_REOPEN = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'];
+const CAN_REGENERATE = [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE];
+// Phase B.2: the maker runs a reconciliation, asks for sign-off and files its
+// evidence; the checker overrides a line, signs or disagrees for SJVN and decides
+// a reopen request (with Finance).
+const CAN_MAKE = ROLE_GROUPS.REIA_MAKE;
+const CAN_CHECK = ROLE_GROUPS.REIA_CHECK;
+const CAN_APPROVE_REOPEN = [...ROLE_GROUPS.REIA_CHECK, 'FINANCE_USER'];
 
 const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const runForm0 = () => ({
@@ -41,9 +45,9 @@ const figure = (v, unit) => {
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
-      <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 14.5, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+      {sub != null && <div style={{ fontSize: 15, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -55,7 +59,7 @@ function MatchCell({ status }) {
     return (
       <span
         title="No connector for the system this would be checked against, so this line was not checked."
-        style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}
+        style={{ color: 'var(--text-muted)', fontSize: 15, fontWeight: 600 }}
       >
         Not checked
       </span>
@@ -357,7 +361,7 @@ export default function Reconciliation() {
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadReconPdf}>
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_WRITE.includes(user?.role) && (
+            {CAN_MAKE.includes(user?.role) && (
               <button className="btn btn-secondary" onClick={openRun}>+ Run Reconciliation</button>
             )}
           </div>
@@ -371,7 +375,7 @@ export default function Reconciliation() {
       </Tabs>
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('reconciliation')} />}
-      {view === 'balance' && <BalanceConfirmationsPanel canWrite={[...CAN_WRITE, 'FINANCE_USER'].includes(user?.role)} />}
+      {view === 'balance' && <BalanceConfirmationsPanel canWrite={[...CAN_MAKE, 'FINANCE_USER'].includes(user?.role)} />}
 
       {view === 'main' && (
       <>
@@ -389,7 +393,7 @@ export default function Reconciliation() {
 
       {stats?.trend?.length > 0 && (
         <Card title="Auto-match trend (monthly)">
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 14.5 }}>
             {stats.trend.map((t) => (
               <span key={t.period} style={{ padding: '6px 10px', background: 'var(--bg-main, var(--slate-100))', borderRadius: 6 }}>
                 {t.period}: <strong>{Number(t.auto_match_pct || 0).toFixed(0)}%</strong>
@@ -405,7 +409,7 @@ export default function Reconciliation() {
             <div key={rq.id} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
               <span>{rq.recon_no} / {rq.period}</span>
               <span style={{ opacity: 0.7 }}>{rq.reason}</span>
-              <span style={{ fontSize: 13.5 }}>by {rq.requested_by_name}</span>
+              <span style={{ fontSize: 15 }}>by {rq.requested_by_name}</span>
               {CAN_APPROVE_REOPEN.includes(user?.role) && (
                 <>
                   <button className="btn btn-success btn-sm" type="button" onClick={() => actReopen(rq.id, 'APPROVED')}>Approve</button>
@@ -505,10 +509,10 @@ export default function Reconciliation() {
                 background: ackFeedback.type === 'success' ? 'var(--t-green-50)' : ackFeedback.type === 'danger' ? 'var(--t-red-50)' : 'var(--t-blue-50)',
                 border: `1px solid ${ackFeedback.type === 'success' ? '#10b981' : ackFeedback.type === 'danger' ? '#ef4444' : '#3b82f6'}`,
                 color: ackFeedback.type === 'success' ? 'var(--on-green)' : ackFeedback.type === 'danger' ? 'var(--on-red)' : 'var(--on-blue)',
-                fontSize: 13,
+                fontSize: 14.5,
                 lineHeight: 1.5,
               }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{ackFeedback.title}</div>
+                <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 2 }}>{ackFeedback.title}</div>
                 <div>{ackFeedback.message}</div>
               </div>
             )}
@@ -532,18 +536,18 @@ export default function Reconciliation() {
               borderRadius: 8,
               border: '1px solid var(--border)',
             }}>
-              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Dual Sign-off &amp; Acknowledgment Status</span>
                 {detail.sjvn_ack_at && detail.counterparty_ack_at ? (
-                  <span style={{ fontSize: 13.5, background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                  <span style={{ fontSize: 15, background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
                     ✓ 2/2 Complete (Closed &amp; Legally Agreed)
                   </span>
                 ) : (detail.sjvn_ack_at || detail.counterparty_ack_at) ? (
-                  <span style={{ fontSize: 13.5, background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                  <span style={{ fontSize: 15, background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
                     1/2 Acknowledged (Awaiting Dual Signature)
                   </span>
                 ) : (
-                  <span style={{ fontSize: 13.5, background: 'var(--text-muted)', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                  <span style={{ fontSize: 15, background: 'var(--text-muted)', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
                     0/2 Signed Off
                   </span>
                 )}
@@ -557,16 +561,16 @@ export default function Reconciliation() {
                   border: `1px solid ${detail.sjvn_ack_at ? 'var(--t-green-100)' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? 'var(--on-green)' : 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? 'var(--on-green)' : 'var(--text-muted)' }}>
                     SJVN REIA Desk Sign-Off
                   </div>
                   {detail.sjvn_ack_at ? (
-                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--on-green)' }}>
+                    <div style={{ marginTop: 4, fontSize: 14.5, color: 'var(--on-green)' }}>
                       <div style={{ fontWeight: 600 }}>Acknowledged by {detail.sjvn_ack_by}</div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>on {fmtDateTime(detail.sjvn_ack_at)}</div>
+                      <div style={{ fontSize: 14.5, opacity: 0.8 }}>on {fmtDateTime(detail.sjvn_ack_at)}</div>
                     </div>
                   ) : (
-                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>
+                    <div style={{ marginTop: 4, fontSize: 14.5, color: 'var(--text-muted)' }}>
                       Pending SJVN verification &amp; sign-off
                     </div>
                   )}
@@ -579,16 +583,16 @@ export default function Reconciliation() {
                   border: `1px solid ${detail.counterparty_ack_at ? 'var(--t-green-100)' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? 'var(--on-green)' : 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? 'var(--on-green)' : 'var(--text-muted)' }}>
                     Counterparty (Buyer/Seller) Sign-Off
                   </div>
                   {detail.counterparty_ack_at ? (
-                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--on-green)' }}>
+                    <div style={{ marginTop: 4, fontSize: 14.5, color: 'var(--on-green)' }}>
                       <div style={{ fontWeight: 600 }}>Acknowledged by {detail.counterparty_ack_by}</div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>on {fmtDateTime(detail.counterparty_ack_at)}</div>
+                      <div style={{ fontSize: 14.5, opacity: 0.8 }}>on {fmtDateTime(detail.counterparty_ack_at)}</div>
                     </div>
                   ) : (
-                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>
+                    <div style={{ marginTop: 4, fontSize: 14.5, color: 'var(--text-muted)' }}>
                       Pending Discom / Generator digital sign-off
                     </div>
                   )}
@@ -596,7 +600,7 @@ export default function Reconciliation() {
               </div>
 
               {detail.discrepancy_notes && (
-                <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--surface)', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
+                <div style={{ marginTop: 10, fontSize: 15, color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--surface)', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
                   <strong>Notes / Remarks:</strong> {detail.discrepancy_notes}
                 </div>
               )}
@@ -604,7 +608,7 @@ export default function Reconciliation() {
 
             <div className="section-title" style={{ marginTop: 16 }}>Three-way / check items</div>
             <div className="table-wrap">
-            <table className="data-table" style={{ width: '100%', fontSize: 13 }}>
+            <table className="data-table" style={{ width: '100%', fontSize: 14.5 }}>
               <thead>
                 <tr>
                   <th scope="col">Type</th><th scope="col">Metered</th><th scope="col">Billed</th><th scope="col">Paid/SAP</th><th scope="col">Var</th><th scope="col">Match</th><th scope="col"></th>
@@ -615,8 +619,8 @@ export default function Reconciliation() {
                   <tr key={it.id}>
                     <td style={{ whiteSpace: 'normal', minWidth: 200 }}>
                       {it.label}
-                      {!!it.pattern_flag && <div style={{ color: 'var(--error)', fontSize: 13 }}>Pattern flag — systemic?</div>}
-                      {it.notes && <div style={{ opacity: 0.6, fontSize: 13 }}>{it.notes}</div>}
+                      {!!it.pattern_flag && <div style={{ color: 'var(--error)', fontSize: 14.5 }}>Pattern flag — systemic?</div>}
+                      {it.notes && <div style={{ opacity: 0.6, fontSize: 14.5 }}>{it.notes}</div>}
                     </td>
                     <td>{figure(it.metered_value, it.unit)}</td>
                     <td>{figure(it.billed_value, it.unit)}</td>
@@ -624,20 +628,20 @@ export default function Reconciliation() {
                     <td>{figure(it.variance, it.unit)}</td>
                     <td><MatchCell status={it.match_status} /></td>
                     <td>
-                      {CAN_WRITE.includes(user?.role) && ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
+                      {CAN_CHECK.includes(user?.role) && ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
                         <div className="cell-actions">
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleOverride(it.id)}>Override</button>
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRaiseDispute(it.id)}>→ Dispute</button>
                         </div>
                       )}
-                      {it.dispute_id && <div style={{ fontSize: 13, color: 'var(--on-red)', fontWeight: 600 }}>Linked dispute</div>}
+                      {it.dispute_id && <div style={{ fontSize: 14.5, color: 'var(--on-red)', fontWeight: 600 }}>Linked dispute</div>}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             </div>
-            {CAN_WRITE.includes(user?.role) && (detail.items || []).some((it) => ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id) && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
+            {CAN_CHECK.includes(user?.role) && (detail.items || []).some((it) => ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id) && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
               <Field label="Override reason (required before Override)">
                 <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Why accepting variance..." />
               </Field>
@@ -657,13 +661,13 @@ export default function Reconciliation() {
 
             {/* Action Bar */}
             <div className="form-actions" style={{ flexWrap: 'wrap', gap: 10, marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-              {CAN_WRITE.includes(user?.role) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
+              {CAN_MAKE.includes(user?.role) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
                 <button type="button" className="btn btn-secondary" onClick={handleSignoffRequest}>
                   Request Sign-off
                 </button>
               )}
 
-              {CAN_WRITE.includes(user?.role) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && (
+              {CAN_CHECK.includes(user?.role) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && (
                 <>
                   {!detail.sjvn_ack_at && (
                   <button type="button" className="btn btn-success" onClick={() => triggerAckModal('AGREE')}>
@@ -700,13 +704,13 @@ export default function Reconciliation() {
               <DocumentManager 
                 moduleName="RECONCILIATION"
                 contractId={detail.contract_id}
-                canUpload={CAN_WRITE.includes(user?.role)}
+                canUpload={CAN_MAKE.includes(user?.role)}
                 title="Reconciliation Evidence & Approvals" 
               />
             </div>
 
             <div className="section-title" style={{ marginTop: 14 }}>Audit trail</div>
-            <ul style={{ paddingLeft: 18, fontSize: 13 }}>
+            <ul style={{ paddingLeft: 18, fontSize: 14.5 }}>
               {(detail.events || []).map((ev) => (
                 <li key={ev.id}>{fmtDateTime(ev.created_at)} — {eventWords(ev.event_type)} by {ev.actor_name}</li>
               ))}
@@ -732,10 +736,10 @@ export default function Reconciliation() {
                 padding: 14,
                 marginBottom: 16,
                 color: 'var(--on-green)',
-                fontSize: 13,
+                fontSize: 14.5,
                 lineHeight: 1.5,
               }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 4 }}>
                   Reconciliation Statement Confirmation
                 </div>
                 <div><strong>Recon #:</strong> {detail?.recon_no}</div>
@@ -753,7 +757,7 @@ export default function Reconciliation() {
                 />
               </Field>
 
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 14, fontSize: 13, cursor: 'pointer', background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 14, fontSize: 14.5, cursor: 'pointer', background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
                 <input
                   type="checkbox"
                   checked={ackModal.confirmed}
@@ -793,10 +797,10 @@ export default function Reconciliation() {
                 padding: 14,
                 marginBottom: 16,
                 color: 'var(--on-red)',
-                fontSize: 13,
+                fontSize: 14.5,
                 lineHeight: 1.5,
               }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 4 }}>
                   Disagreement & Dispute Escalation
                 </div>
                 <div>

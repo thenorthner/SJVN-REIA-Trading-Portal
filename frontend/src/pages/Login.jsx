@@ -11,6 +11,8 @@ import {
   Users, User, ChevronRight, Leaf, BarChart3, Handshake, 
   Globe2, CheckCircle2, Eye, EyeOff
 } from 'lucide-react';
+import SjvnBotMascot from '../components/SjvnBotMascot.jsx';
+import { showAlert } from '../lib/dialogs.js';
 
 export function landingFor(user, from) {
   const path = from?.pathname || '';
@@ -76,6 +78,7 @@ export default function Login() {
   const [loggingInRole, setLoggingInRole] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [inputFocus, setInputFocus] = useState(null); // 'email' | 'password' | null
   const [demoCategory, setDemoCategory] = useState(validDesks.includes(initialDesk) ? initialDesk : 'REIA');
 
   const filteredDemoAccounts = demoCategory === 'ALL'
@@ -132,7 +135,7 @@ export default function Login() {
     }}>
       <GovStrip withSkip />
       {/* Main Container - Full Screen */}
-      <main id="main-content" tabIndex={-1} style={{
+      <main id="main-content" className="login-main" tabIndex={-1} style={{
         display: 'flex',
         flex: 1,
         minHeight: 0,
@@ -142,7 +145,7 @@ export default function Login() {
       }}>
         
         {/* LEFT PANE - Image & Branding */}
-        <div style={{
+        <div className="login-left-pane" style={{
           flex: '1.15',
           position: 'relative',
           display: 'flex',
@@ -169,13 +172,13 @@ export default function Login() {
             </div>
             <div>
               <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '0.02em', margin: 0, lineHeight: 1.2 }}>SJVN Limited</div>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: '#cbd5e1' }}>A NAVRATNA CPSE</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '0.02em' }}>MINISTRY OF POWER, GOVERNMENT OF INDIA</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '0.06em', color: '#cbd5e1' }}>A NAVRATNA CPSE</div>
+              <div style={{ fontSize: 12.5, color: '#94a3b8', letterSpacing: '0.02em' }}>MINISTRY OF POWER, GOVERNMENT OF INDIA</div>
             </div>
           </div>
 
           {/* Middle Content */}
-          <div style={{ margin: 'auto 0', maxWidth: 480 }}>
+          <div className="login-left-pitch" style={{ margin: 'auto 0', maxWidth: 480 }}>
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -185,7 +188,7 @@ export default function Login() {
               background: 'rgba(16, 185, 129, 0.18)',
               border: '1px solid rgba(16, 185, 129, 0.4)',
               color: '#a7f3d0',
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               letterSpacing: '0.04em',
               marginBottom: 16,
@@ -199,7 +202,7 @@ export default function Login() {
               Integrated Energy Commercial &amp; Trading Platform
             </h1>
 
-            <p style={{ fontSize: 15, color: '#e2e8f0', lineHeight: 1.6, margin: 0 }}>
+            <p style={{ fontSize: 16, color: '#e2e8f0', lineHeight: 1.5, margin: 0 }}>
               Unified sovereign gateway for Renewable Energy procurement (REIA), Power Market trading on synchronized exchanges (IEX, PXIL, HPX), and Hydro-Thermal generation billing.
             </p>
           </div>
@@ -209,7 +212,7 @@ export default function Login() {
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            fontSize: 12,
+            fontSize: 13.5,
             color: '#cbd5e1',
             padding: '10px 16px',
             background: 'rgba(15, 23, 42, 0.55)',
@@ -240,7 +243,7 @@ export default function Login() {
           transition: 'background-color 0.25s ease, color 0.25s ease'
         }}>
           {/* Top Bar with Home Link & Theme Toggle */}
-          <div style={{
+          <div className="login-topbar" style={{
             position: 'absolute',
             top: 20,
             left: 28,
@@ -250,12 +253,12 @@ export default function Login() {
             alignItems: 'center',
             zIndex: 10
           }}>
-            <Link to="/" style={{ fontSize: 13, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Link to="/" style={{ fontSize: 14.5, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               ← Return to Portal Home
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {initialDesk && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: isDark ? 'rgba(59,130,246,0.15)' : '#eff6ff', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: isDark ? 'rgba(59,130,246,0.15)' : '#eff6ff', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)' }}>
                   {initialDesk === 'REIA' ? '☀️ REIA Portal' : initialDesk === 'TRADING' ? '⚡ Power Trading' : initialDesk === 'HYDRO' ? '🌊 Hydro Commercial' : '🔥 Thermal Desk'}
                 </span>
               )}
@@ -264,38 +267,44 @@ export default function Login() {
           </div>
 
           <div style={{ maxWidth: 400, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1 }}>
-            {/* Form Header */}
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <div style={{ display: 'inline-flex', padding: '10px 14px', background: '#ffffff', borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', marginBottom: 14 }}>
-                <img src="/sjvn-logo.png" alt="SJVN Limited" style={{ height: 76, width: 'auto' }} />
-              </div>
-              <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 800, color: isDark ? '#ffffff' : 'var(--slate-900)', letterSpacing: '-0.02em' }}>
+            {/* Form Header with Interactive SJVN Urja Mascot Bot */}
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <SjvnBotMascot
+                inputFocus={inputFocus}
+                showPassword={showPassword}
+                textLength={email.length}
+                isError={Boolean(error)}
+                isLoading={loading}
+                size={135}
+              />
+              <h2 style={{ margin: '8px 0 4px', fontSize: 21, fontWeight: 800, color: isDark ? '#ffffff' : 'var(--slate-900)', letterSpacing: '-0.02em' }}>
                 {initialDesk === 'REIA' ? 'REIA Commercial Portal' : initialDesk === 'TRADING' ? 'Power Trading Desk' : initialDesk === 'HYDRO' ? 'Hydro Commercial Desk' : initialDesk === 'THERMAL' ? 'Thermal Operations Desk' : 'Sign In to Your Account'}
               </h2>
-              <p style={{ color: isDark ? '#94a3b8' : 'var(--slate-500)', fontSize: 13.5, margin: 0 }}>
+              <p style={{ color: isDark ? '#94a3b8' : 'var(--slate-500)', fontSize: 14.5, margin: 0 }}>
                 Enter your official enterprise credentials to continue
               </p>
             </div>
 
             {location.state?.notice && !error && (
-              <div role="status" style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--amber-bg)', border: '1px solid var(--amber)', color: 'var(--text)', borderRadius: 8, fontSize: 13 }}>
+              <div role="status" style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--amber-bg)', border: '1px solid var(--amber)', color: 'var(--text)', borderRadius: 8, fontSize: 14.5 }}>
                 {location.state.notice}
               </div>
             )}
             {error && (
-              <div role="alert" style={{ marginBottom: 16, padding: '10px 14px', backgroundColor: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--red-deep)', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div role="alert" style={{ marginBottom: 16, padding: '10px 14px', backgroundColor: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--red-deep)', borderRadius: 8, fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontWeight: 500 }}>{error}</span>
               </div>
             )}
 
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: isDark ? '#cbd5e1' : 'var(--slate-700)', marginBottom: 6 }}>Work Email</label>
+                <label htmlFor="login-email" style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: isDark ? '#cbd5e1' : 'var(--slate-700)', marginBottom: 6 }}>Work Email</label>
                 <div style={{ position: 'relative' }}>
                   <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
                     <Mail size={16} strokeWidth={2.5} />
                   </div>
                   <input
+                    id="login-email"
                     type="email"
                     required
                     value={email}
@@ -308,16 +317,18 @@ export default function Login() {
                       border: isDark ? '1px solid #1e2430' : '1px solid var(--slate-300)',
                       borderRadius: 8,
                       color: isDark ? '#f8fafc' : 'var(--slate-900)',
-                      fontSize: 14,
+                      fontSize: 15.5,
                       outline: 'none',
                       boxSizing: 'border-box',
                       transition: 'all 0.2s',
                     }}
                     onFocus={(e) => {
+                      setInputFocus('email');
                       e.target.style.borderColor = '#3b82f6';
                       e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.15)';
                     }}
                     onBlur={(e) => {
+                      setInputFocus((prev) => (prev === 'email' ? null : prev));
                       e.target.style.borderColor = isDark ? '#1e2430' : '#cbd5e1';
                       e.target.style.boxShadow = 'none';
                     }}
@@ -328,14 +339,15 @@ export default function Login() {
 
               <div style={{ marginBottom: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: isDark ? '#cbd5e1' : 'var(--slate-700)' }}>Password</label>
-                  <a href="#" onClick={(e) => { e.preventDefault(); setShowForgotModal(true); }} style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-blue)', textDecoration: 'none' }}>Forgot Password?</a>
+                  <label htmlFor="login-password" style={{ fontSize: 14.5, fontWeight: 700, color: isDark ? '#cbd5e1' : 'var(--slate-700)' }}>Password</label>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setShowForgotModal(true); }} style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--on-blue)', textDecoration: 'none' }}>Forgot Password?</a>
                 </div>
                 <div style={{ position: 'relative' }}>
                   <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
                     <Lock size={16} strokeWidth={2.5} />
                   </div>
                   <input
+                    id="login-password"
                     type={showPassword ? "text" : "password"}
                     required
                     value={password}
@@ -348,23 +360,29 @@ export default function Login() {
                       border: isDark ? '1px solid #1e2430' : '1px solid var(--slate-300)',
                       borderRadius: 8,
                       color: isDark ? '#f8fafc' : 'var(--slate-900)',
-                      fontSize: 14,
+                      fontSize: 15.5,
                       outline: 'none',
                       boxSizing: 'border-box',
                       transition: 'all 0.2s',
                     }}
                     onFocus={(e) => {
+                      setInputFocus('password');
                       e.target.style.borderColor = '#3b82f6';
                       e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.15)';
                     }}
                     onBlur={(e) => {
+                      setInputFocus((prev) => (prev === 'password' ? null : prev));
                       e.target.style.borderColor = isDark ? '#1e2430' : '#cbd5e1';
                       e.target.style.boxShadow = 'none';
                     }}
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setShowPassword((prev) => !prev);
+                      setInputFocus('password');
+                    }}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     aria-pressed={showPassword}
                     style={{
@@ -387,7 +405,7 @@ export default function Login() {
                   color: 'white',
                   border: 'none',
                   borderRadius: 8,
-                  fontSize: 14.5,
+                  fontSize: 15.5,
                   fontWeight: 700,
                   cursor: loading ? 'not-allowed' : 'pointer',
                   display: 'flex',
@@ -408,7 +426,7 @@ export default function Login() {
             {/* Discreet Demo Persona Quick Fill Selector */}
             <div style={{ marginTop: 22, paddingTop: 16, borderTop: isDark ? '1px solid #1e293b' : '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <label htmlFor="quick-demo-select" style={{ fontSize: 12, fontWeight: 600, color: isDark ? '#94a3b8' : '#64748b' }}>
+                <label htmlFor="quick-demo-select" style={{ fontSize: 13.5, fontWeight: 600, color: isDark ? '#94a3b8' : '#64748b' }}>
                   ⚡ Quick Demo Login:
                 </label>
                 <select
@@ -422,7 +440,7 @@ export default function Login() {
                   style={{
                     padding: '5px 10px',
                     borderRadius: 6,
-                    fontSize: 12,
+                    fontSize: 13.5,
                     fontWeight: 500,
                     background: isDark ? '#0f172a' : '#f8fafc',
                     border: isDark ? '1px solid #334155' : '1px solid #cbd5e1',
@@ -476,7 +494,7 @@ export default function Login() {
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}>
             <h3 style={{ margin: '0 0 16px 0', color: isDark ? '#f8fafc' : 'var(--slate-900)', fontSize: 20 }}>Reset Password</h3>
-            <p style={{ color: isDark ? '#94a3b8' : 'var(--slate-600)', fontSize: 14, lineHeight: 1.5, marginBottom: 24 }}>
+            <p style={{ color: isDark ? '#94a3b8' : 'var(--slate-600)', fontSize: 15.5, lineHeight: 1.5, marginBottom: 24 }}>
               To reset your password, please enter your registered work email address. We will send you a secure reset link.
             </p>
             <input 
@@ -487,7 +505,7 @@ export default function Login() {
                 background: isDark ? '#000000' : 'var(--surface)',
                 border: isDark ? '1px solid #222834' : '1px solid var(--slate-300)', 
                 color: isDark ? '#f8fafc' : 'var(--slate-900)',
-                borderRadius: '8px', marginBottom: '24px', fontSize: 14, outline: 'none'
+                borderRadius: '8px', marginBottom: '24px', fontSize: 15.5, outline: 'none'
               }}
               onFocus={(e) => { e.target.style.borderColor = '#3b82f6'; e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.15)'; }}
               onBlur={(e) => { e.target.style.borderColor = isDark ? '#222834' : '#cbd5e1'; e.target.style.boxShadow = 'none'; }}
@@ -505,7 +523,7 @@ export default function Login() {
               <button 
                 type="button"
                 onClick={() => {
-                  alert('Password reset link has been sent to your email! (Demo Mode)');
+                  showAlert('Password reset link has been sent to your email! (Demo Mode)');
                   setShowForgotModal(false);
                 }}
                 style={{

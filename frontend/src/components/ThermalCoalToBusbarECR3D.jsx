@@ -145,7 +145,7 @@ export default function ThermalCoalToBusbarECR3D({
                 background: 'rgba(234, 88, 12, 0.15)',
                 color: '#fb923c',
                 border: '1px solid rgba(234, 88, 12, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -154,7 +154,7 @@ export default function ThermalCoalToBusbarECR3D({
                 CERC TARIFF FORM 15
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               Landed Coal Price & GCV ➔ Supercritical Boiler GHR ➔ CERC ECR Engine ➔ Ex-Bus Net Scheduled Settlement
             </div>
           </div>
@@ -168,7 +168,7 @@ export default function ThermalCoalToBusbarECR3D({
               type="button"
               className={`btn btn-xs ${activeStationIdx === idx ? 'btn-primary' : 'btn-ghost'}`}
               style={{
-                fontSize: 12,
+                fontSize: 13.5,
                 padding: '4px 10px',
                 background: activeStationIdx === idx ? 'rgba(234, 88, 12, 0.3)' : 'rgba(255, 255, 255, 0.04)',
                 borderColor: activeStationIdx === idx ? '#ea580c' : 'rgba(255, 255, 255, 0.1)',
@@ -206,24 +206,24 @@ export default function ThermalCoalToBusbarECR3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fb923c', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fb923c', letterSpacing: '0.04em' }}>
               STAGE 1: FUEL INPUT
             </span>
-            <span style={{ fontSize: 12, color: '#a8a29e' }}>Coal & Oil</span>
+            <span style={{ fontSize: 13.5, color: '#a8a29e' }}>Coal & Oil</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Landed Coal & GCV
           </div>
-          <div style={{ fontSize: 12.5, color: '#a8a29e', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#a8a29e', marginTop: 2 }}>
             GCV: {fmtNumber(coalGcv, 0)} kCal/kg
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Landed Coal Price</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Landed Coal Price</div>
             <div style={{ fontSize: 19, fontWeight: 700, color: '#fdba74', fontVariantNumeric: 'tabular-nums' }}>
-              ₹{fmtNumber(coalPrice, 0)} <span style={{ fontSize: 13, fontWeight: 500 }}>/ tonne</span>
+              ₹{fmtNumber(coalPrice, 0)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>/ tonne</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 3 }}>
               Secondary Oil: ₹{fmtNumber(oilPrice, 0)} / kL
             </div>
           </div>
@@ -244,24 +244,24 @@ export default function ThermalCoalToBusbarECR3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 2: THERMODYNAMICS
             </span>
-            <span style={{ fontSize: 12, color: '#a8a29e' }}>Efficiency</span>
+            <span style={{ fontSize: 13.5, color: '#a8a29e' }}>Efficiency</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Station Heat Rate (GHR)
           </div>
-          <div style={{ fontSize: 12.5, color: '#a8a29e', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#a8a29e', marginTop: 2 }}>
             Supercritical Boiler: {fmtNumber(ghr, 0)} kCal/kWh
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Aux Power (APC):</span>
               <span style={{ fontWeight: 600, color: '#f87171' }}>-{auxPct}%</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Transit Loss:</span>
               <span style={{ fontWeight: 600, color: '#fbbf24' }}>-{transitLossPct}%</span>
             </div>
@@ -283,11 +283,11 @@ export default function ThermalCoalToBusbarECR3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#4ade80', letterSpacing: '0.04em' }}>
               STAGE 3: CERC ECR ENGINE
             </span>
             <span style={{
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               background: 'rgba(74, 222, 128, 0.2)',
               color: '#4ade80',
@@ -297,19 +297,19 @@ export default function ThermalCoalToBusbarECR3D({
               REG 43 FORMULA
             </span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Energy Charge Rate
           </div>
-          <div style={{ fontSize: 12.5, color: '#a8a29e', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#a8a29e', marginTop: 2 }}>
             Per kWh Ex-Bus Busbar
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Certified Variable Cost</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Certified Variable Cost</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#4ade80', fontVariantNumeric: 'tabular-nums' }}>
-              ₹{Number(displayEcr).toFixed(3)} <span style={{ fontSize: 13, fontWeight: 500 }}>/ kWh</span>
+              ₹{Number(displayEcr).toFixed(3)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>/ kWh</span>
             </div>
-            <div style={{ fontSize: 12, color: '#38bdf8', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: '#38bdf8', marginTop: 3 }}>
               Coal: ₹{((rawFuelCostPerKwh * 100) / (100 - auxPct)).toFixed(3)} | Oil: ₹{(oilEnergyComponent * 100 / (100 - auxPct)).toFixed(4)}
             </div>
           </div>
@@ -330,24 +330,24 @@ export default function ThermalCoalToBusbarECR3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#facc15', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#facc15', letterSpacing: '0.04em' }}>
               STAGE 4: COMMITTED ENERGY
             </span>
-            <span style={{ fontSize: 12, color: '#a8a29e' }}>ERPC Scheduled</span>
+            <span style={{ fontSize: 13.5, color: '#a8a29e' }}>ERPC Scheduled</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Month Fuel Billing
           </div>
-          <div style={{ fontSize: 12.5, color: '#a8a29e', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#a8a29e', marginTop: 2 }}>
             Ex-Bus: {fmtNumber(scheduledMwh, 0)} MU
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Total Energy Bill</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Total Energy Bill</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#facc15', fontVariantNumeric: 'tabular-nums' }}>
-              ₹{fmtNumber(energyBilledCr, 2)} <span style={{ fontSize: 13, fontWeight: 500 }}>Cr</span>
+              ₹{fmtNumber(energyBilledCr, 2)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>Cr</span>
             </div>
-            <div style={{ fontSize: 12, color: '#4ade80', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: '#4ade80', marginTop: 3 }}>
               Full variable fuel recovery
             </div>
           </div>
@@ -362,7 +362,7 @@ export default function ThermalCoalToBusbarECR3D({
           border: '1px solid rgba(249, 115, 22, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',

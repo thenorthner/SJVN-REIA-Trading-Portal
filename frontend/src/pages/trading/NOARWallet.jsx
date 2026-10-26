@@ -6,6 +6,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { askText } from '../../lib/dialogs.js';
 
 const CATEGORIES = ['ISTS', 'RLDC', 'APPLICATION', 'OTHER'];
 const CATEGORY_LABEL = {
@@ -105,7 +106,7 @@ export default function NOARWallet() {
   // The ledger is append-only: a wrong entry is cancelled by an opposing
   // entry, so the wallet still reconciles against the Grid India statement.
   async function reverse(row) {
-    const reason = window.prompt(`Reverse ${row.txn_no}? An opposing entry will be posted.\n\nReason:`);
+    const reason = (await askText(`Reverse ${row.txn_no}? An opposing entry will be posted.\n\nReason:`));
     if (reason === null) return;
     try {
       await api.noar.reverse(row.id, reason);
@@ -137,7 +138,7 @@ export default function NOARWallet() {
     {
       key: 'reference',
       header: 'Reference',
-      render: (r) => <span style={{ fontSize: 13 }}>{r.reference || '—'}</span>,
+      render: (r) => <span style={{ fontSize: 14.5 }}>{r.reference || '—'}</span>,
     },
     { key: 'amount', header: 'Amount', render: (r) => <SignedAmount type={r.txn_type} amount={r.amount} /> },
     { key: 'balance_after', header: 'Balance', render: (r) => fmtCurrency(r.balance_after) },
@@ -227,8 +228,8 @@ export default function NOARWallet() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="month" tick={{ fontSize: 13 }} />
-                  <YAxis tick={{ fontSize: 13 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                  <XAxis dataKey="month" tick={{ fontSize: 14.5 }} />
+                  <YAxis tick={{ fontSize: 14.5 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                   <Tooltip formatter={(v, name) => [fmtCurrency(v), name]} />
                   <Legend />
                   <Bar dataKey="recharge" name="Recharged" fill="var(--green)" radius={[6, 6, 0, 0]} />
@@ -245,8 +246,8 @@ export default function NOARWallet() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="month" tick={{ fontSize: 13 }} />
-                  <YAxis tick={{ fontSize: 13 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                  <XAxis dataKey="month" tick={{ fontSize: 14.5 }} />
+                  <YAxis tick={{ fontSize: 14.5 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                   <Tooltip formatter={(v) => [fmtCurrency(v), 'Closing balance']} />
                   <Line type="monotone" dataKey="closing_balance" name="Closing balance" stroke="var(--primary)" strokeWidth={2.4} dot={{ r: 3 }} />
                 </LineChart>
@@ -263,8 +264,8 @@ export default function NOARWallet() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={categoryBars} layout="vertical" margin={{ left: 24 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis type="number" tick={{ fontSize: 13 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
-                <YAxis type="category" dataKey="category" tick={{ fontSize: 13.5 }} width={100} />
+                <XAxis type="number" tick={{ fontSize: 14.5 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                <YAxis type="category" dataKey="category" tick={{ fontSize: 15 }} width={100} />
                 <Tooltip formatter={(v, _n, p) => [fmtCurrency(v), CATEGORY_LABEL[p?.payload?.category] || 'Charges']} />
                 <Bar dataKey="amount" name="Paid" radius={[0, 6, 6, 0]} fill="var(--primary)" />
               </BarChart>

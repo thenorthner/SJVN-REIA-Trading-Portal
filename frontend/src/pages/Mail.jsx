@@ -11,6 +11,7 @@ import {
   Table as TableIcon, Download, CheckCheck, AlertTriangle, Info, ShieldAlert, Scale,
 } from 'lucide-react';
 import './Mail-elite.css';
+import { askConfirm } from '../lib/dialogs.js';
 
 const FOLDERS = [
   { key: 'INBOX', label: 'Inbox', icon: Inbox },
@@ -381,7 +382,7 @@ function Compose({ draft, onClose, onSent, onOpenDisclaimer }) {
           background: 'var(--slate-100)',
           border: '1px solid var(--slate-200)',
           borderRadius: '6px',
-          fontSize: '13px',
+          fontSize: '14.5px',
           color: 'var(--slate-500)',
           marginBottom: '12px'
         }}>
@@ -390,7 +391,7 @@ function Compose({ draft, onClose, onSent, onOpenDisclaimer }) {
             <button
               type="button"
               className="btn-link"
-              style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: 'var(--on-blue)' }}
+              style={{ fontSize: '14.5px', padding: 0, textDecoration: 'underline', color: 'var(--on-blue)' }}
               onClick={onOpenDisclaimer}
             >
               Disclaimer
@@ -507,7 +508,7 @@ function SignatureSettings({ value, onClose, onSaved }) {
           />
         </Field>
         <div className="mail-draft-note">Added under every new message, reply and forward. Leave it empty for none.</div>
-        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '13px', color: 'var(--slate-500)' }}>
+        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '14.5px', color: 'var(--slate-500)' }}>
           Note: Quick Connect is an informal operational facility for day-to-day desk queries, not an official legal communication channel.
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
@@ -523,7 +524,7 @@ function DisclaimerModal({ open, onClose }) {
   if (!open) return null;
   return (
     <Modal open onClose={onClose} title="Quick Connect — Operational & Legal Disclaimer" width={600}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, color: 'var(--slate-700)', fontSize: '13.5px', lineHeight: 1.6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, color: 'var(--slate-700)', fontSize: '15px', lineHeight: 1.6 }}>
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -536,7 +537,7 @@ function DisclaimerModal({ open, onClose }) {
         }}>
           <AlertTriangle size={20} style={{ color: 'var(--on-amber)', flexShrink: 0, marginTop: 2 }} />
           <div>
-            <strong style={{ display: 'block', marginBottom: 2, color: 'var(--amber-strong)', fontSize: '14px' }}>
+            <strong style={{ display: 'block', marginBottom: 2, color: 'var(--amber-strong)', fontSize: '15.5px' }}>
               Notice on Non-Legal / Non-Contractual Status
             </strong>
             Quick Connect is strictly an informal in-portal operational coordination facility. It does <strong>NOT</strong> constitute an official, statutory, or legal mode of communication under PPA/PSA contracts, CERC regulations, or Indian contract law.
@@ -544,7 +545,7 @@ function DisclaimerModal({ open, onClose }) {
         </div>
 
         <div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '15.5px', fontWeight: 600, color: 'var(--slate-900)' }}>
             1. Purpose of Quick Connect
           </h4>
           <p style={{ margin: 0 }}>
@@ -553,7 +554,7 @@ function DisclaimerModal({ open, onClose }) {
         </div>
 
         <div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '15.5px', fontWeight: 600, color: 'var(--slate-900)' }}>
             2. Formal &amp; Contractual Notices
           </h4>
           <p style={{ margin: 0 }}>
@@ -562,7 +563,7 @@ function DisclaimerModal({ open, onClose }) {
         </div>
 
         <div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '15.5px', fontWeight: 600, color: 'var(--slate-900)' }}>
             3. Evidentiary Limitation
           </h4>
           <p style={{ margin: 0 }}>
@@ -765,7 +766,7 @@ export default function Mail() {
 
   async function bulk(action, msg) {
     const ids = [...selected];
-    if (action === 'purge' && !window.confirm(`Delete ${ids.length} message${ids.length === 1 ? '' : 's'} for good? This cannot be undone.`)) return;
+    if (action === 'purge' && !(await askConfirm(`Delete ${ids.length} message${ids.length === 1 ? '' : 's'} for good? This cannot be undone.`))) return;
     try {
       const r = await api.mail.bulk(ids, action);
       setNotice(`${r.done} message${r.done === 1 ? '' : 's'} ${msg}.`);
@@ -872,7 +873,7 @@ export default function Mail() {
               alignItems: 'center',
               gap: 6,
               padding: '6px 12px',
-              fontSize: '13.5px',
+              fontSize: '15px',
               fontWeight: 500,
               borderRadius: '6px',
               color: 'var(--slate-600)',
@@ -1078,8 +1079,8 @@ export default function Mail() {
                   {thread.trashed ? (
                     <>
                       <button className="mail-action-btn" title="Restore" onClick={() => act(() => api.mail.restore(thread.id), 'Restored.')}><RotateCcw size={18} /></button>
-                      <button className="mail-action-btn delete" title="Delete forever" onClick={() => {
-                          if (window.confirm('Delete this message for good? This cannot be undone. Everyone else keeps their copy.')) {
+                      <button className="mail-action-btn delete" title="Delete forever" onClick={async () => {
+                          if ((await askConfirm('Delete this message for good? This cannot be undone. Everyone else keeps their copy.'))) {
                             act(() => api.mail.purge(thread.id), 'Deleted for good.');
                           }
                         }}>
@@ -1134,14 +1135,14 @@ export default function Mail() {
               <div style={{
                 margin: '12px 0 8px',
                 textAlign: 'center',
-                fontSize: '13px',
+                fontSize: '14.5px',
                 color: '#94a3b8'
               }}>
                 Quick Connect is an informal operational facility ·{' '}
                 <button
                   type="button"
                   className="btn-link"
-                  style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: 'var(--slate-500)' }}
+                  style={{ fontSize: '14.5px', padding: 0, textDecoration: 'underline', color: 'var(--slate-500)' }}
                   onClick={() => setDisclaimerOpen(true)}
                 >
                   Disclaimer

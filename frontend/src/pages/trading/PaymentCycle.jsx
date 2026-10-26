@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 // Cash curve: inflow above the axis, outflow below, with the running balance
 // drawn over them. Inline SVG so there is no chart dependency to pull in.
 function CashTimeline({ points }) {
-  if (!points.length) return <p style={{ color: 'var(--slate-500)', fontSize: 14 }}>No movement in this period.</p>;
+  if (!points.length) return <p style={{ color: 'var(--slate-500)', fontSize: 15.5 }}>No movement in this period.</p>;
 
   const W = 900, H = 240, PAD = { l: 70, r: 16, t: 16, b: 46 };
   const plotW = W - PAD.l - PAD.r, plotH = H - PAD.t - PAD.b;
@@ -71,7 +72,7 @@ function CashTimeline({ points }) {
           )
         ))}
       </svg>
-      <div style={{ display: 'flex', gap: 18, fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 18, fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#16a34a', marginRight: 5 }} />Collected from buyer</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#dc2626', marginRight: 5 }} />Paid to seller</span>
         <span><span style={{ display: 'inline-block', width: 14, height: 2, background: '#2563eb', marginRight: 5, verticalAlign: 'middle' }} />Running balance</span>
@@ -107,7 +108,7 @@ export default function PaymentCycle() {
       ]);
       setPosition(p); setTimeline(t); setAgeing(a); setSpeed(s); setEntries(e);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to load payment cycle');
+      showAlert(err.response?.data?.error || err.message || 'Failed to load payment cycle');
     } finally {
       setLoading(false);
     }
@@ -134,7 +135,7 @@ export default function PaymentCycle() {
       key: 'payment_date',
       label: 'Paid on',
       // The ledger sometimes records the terms instead of a date; keep that visible.
-      render: r => r.payment_date || (r.payment_note ? <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }} title={r.payment_note}>per terms</span> : '—'),
+      render: r => r.payment_date || (r.payment_note ? <span style={{ fontSize: 15, color: 'var(--slate-500)' }} title={r.payment_note}>per terms</span> : '—'),
     },
     {
       key: 'status',
@@ -162,11 +163,11 @@ export default function PaymentCycle() {
       <Card title="Period">
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>From</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>From</label>
             <input type="date" className="input" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>To</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>To</label>
             <input type="date" className="input" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} />
           </div>
           <button className="btn btn-ghost" onClick={() => setRange({ from: '', to: '' })}>Clear</button>
@@ -205,7 +206,7 @@ export default function PaymentCycle() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
         <Card title={`Ageing of unsettled invoices${ageing ? ` (as of ${ageing.as_of})` : ''}`}>
           {ageing && Object.values(ageing.buckets).every(v => v === 0) ? (
-            <p style={{ color: 'var(--slate-500)', fontSize: 14 }}>Nothing outstanding — every invoice on both legs is settled.</p>
+            <p style={{ color: 'var(--slate-500)', fontSize: 15.5 }}>Nothing outstanding — every invoice on both legs is settled.</p>
           ) : (
             <table className="data-table">
               <thead><tr><th scope="col">Bucket</th><th scope="col">Outstanding</th></tr></thead>

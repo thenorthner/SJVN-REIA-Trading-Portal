@@ -67,8 +67,8 @@ export default function MyDocuments() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <FileText size={22} color="var(--primary)" style={{ marginTop: 2, flexShrink: 0 }} />
           <div>
-            <strong style={{ fontSize: 14 }}>Physical Document Submission Process</strong>
-            <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.55 }}>
+            <strong style={{ fontSize: 15.5 }}>Physical Document Submission Process</strong>
+            <p style={{ margin: '4px 0 0', fontSize: 15, color: 'var(--slate-600)', lineHeight: 1.55 }}>
               All KYC, company registration, and regulatory compliance proofs must be submitted in physical hard-copy form
               directly to the <strong>SJVN REIA Office</strong>. The SJVN Administration team will scan, upload, and verify
               each proof on your company profile. You can monitor the verification status and validity of all documents below.
@@ -80,8 +80,8 @@ export default function MyDocuments() {
       {pct !== null && (
         <Card style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: 15 }}>KYC {pct}% complete</strong>
-            <span style={{ fontSize: 13, color: 'var(--slate-600)' }}>
+            <strong style={{ fontSize: 16 }}>KYC {pct}% complete</strong>
+            <span style={{ fontSize: 14.5, color: 'var(--slate-600)' }}>
               {done} of {required.length} mandatory proofs verified
               {pending.length > 0 ? ` · ${pending.length} to go` : ''}
             </span>
@@ -93,7 +93,7 @@ export default function MyDocuments() {
             <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: pct === 100 ? '#16a34a' : '#2563eb', transition: 'width .3s' }} />
           </div>
           {pending.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 13, color: 'var(--slate-600)' }}>
+            <div style={{ marginTop: 10, fontSize: 14.5, color: 'var(--slate-600)' }}>
               Still needed: {pending.map((c) => c.label).join(' · ')}
             </div>
           )}
@@ -105,15 +105,15 @@ export default function MyDocuments() {
           {requests.map((r) => (
             <div key={r.id} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap' }}>
               <div>
-                <strong style={{ fontSize: 13.5 }}>{r.document_type}</strong>
+                <strong style={{ fontSize: 15 }}>{r.document_type}</strong>
                 {r.due_date && (
-                  <span style={{ marginLeft: 8, fontSize: 13.5, fontWeight: 600, color: r.overdue ? 'var(--red-deep)' : 'var(--amber-strong)' }}>
+                  <span style={{ marginLeft: 8, fontSize: 15, fontWeight: 600, color: r.overdue ? 'var(--red-deep)' : 'var(--amber-strong)' }}>
                     {r.overdue ? 'Was due' : 'Due'} {fmtDate(r.due_date)}
                   </span>
                 )}
-                {r.note && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{r.note}</div>}
+                {r.note && <div style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 2 }}>{r.note}</div>}
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--on-amber)', background: 'var(--t-amber-100)', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-amber)', background: 'var(--t-amber-100)', padding: '4px 10px', borderRadius: 6 }}>
                 Submit physical copy to SJVN REIA desk
               </span>
             </div>
@@ -126,13 +126,13 @@ export default function MyDocuments() {
           {rejected.map((d) => (
             <div key={d.id} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <strong style={{ fontSize: 13.5, marginRight: 8 }}>{d.title}</strong>
+                <strong style={{ fontSize: 15, marginRight: 8 }}>{d.title}</strong>
                 <Badge status="REJECTED" />
-                <div style={{ fontSize: 13.5, color: 'var(--red-deep)', marginTop: 2 }}>
+                <div style={{ fontSize: 15, color: 'var(--red-deep)', marginTop: 2 }}>
                   <strong>SJVN's remark:</strong> {d.verification_notes || 'No remark was given.'}
                 </div>
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--red-deep)', background: 'var(--t-red-100)', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--red-deep)', background: 'var(--t-red-100)', padding: '4px 10px', borderRadius: 6 }}>
                 Submit revised physical copy to SJVN
               </span>
             </div>
@@ -140,10 +140,10 @@ export default function MyDocuments() {
           {dated.map((d) => (
             <div key={d.id} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap' }}>
               <div>
-                <strong style={{ fontSize: 13.5 }}>{d.title}</strong>
+                <strong style={{ fontSize: 15 }}>{d.title}</strong>
                 <div style={{ marginTop: 2 }}><ExpiryTag doc={d} /></div>
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--on-amber)', background: 'var(--t-amber-100)', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-amber)', background: 'var(--t-amber-100)', padding: '4px 10px', borderRadius: 6 }}>
                 Submit renewed copy to SJVN
               </span>
             </div>
@@ -163,10 +163,10 @@ export default function MyDocuments() {
                 }}
               >
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: 13 }}>{item.label}</strong>
+                  <strong style={{ fontSize: 14.5 }}>{item.label}</strong>
                   {item.is_mandatory
-                    ? <span style={{ fontSize: 13, color: 'var(--red-deep)' }}>Required</span>
-                    : <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>Optional</span>}
+                    ? <span style={{ fontSize: 14.5, color: 'var(--red-deep)' }}>Required</span>
+                    : <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>Optional</span>}
                 </div>
                 <Badge
                   status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'}
@@ -176,7 +176,7 @@ export default function MyDocuments() {
             ))}
           </div>
           {pending.length > 0 && (
-            <p style={{ margin: '12px 0 0', fontSize: 13.5, color: 'var(--amber-strong)' }}>
+            <p style={{ margin: '12px 0 0', fontSize: 15, color: 'var(--amber-strong)' }}>
               {pending.length} mandatory {pending.length === 1 ? 'clearance' : 'clearances'} awaiting verified proof from SJVN desk.
             </p>
           )}

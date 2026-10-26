@@ -116,7 +116,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
       <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-exchange">Exchange</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-exchange">Exchange</label>
             <select id="gdam-ob-exchange" className="input" value={exchange} onChange={(e) => setExchange(e.target.value)}>
               <option value="">All</option>
               <option value="IEX">IEX</option>
@@ -125,15 +125,15 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-client">Client</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-client">Client</label>
             <PortfolioSelect id="gdam-ob-client" includeAll allLabel="All clients" value={clientId} onChange={setClientId} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-from">From</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-from">From</label>
             <input id="gdam-ob-from" type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-to">To</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 600, marginBottom: 5 }} htmlFor="gdam-ob-to">To</label>
             <input id="gdam-ob-to" type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <button type="button" className="btn btn-outline" onClick={load}>Search</button>
@@ -146,7 +146,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>{product} Obligation</h3>
-          <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>Cleared bid blocks — exchange PDFs are not stored</span>
+          <span style={{ fontSize: 15, color: 'var(--slate-600)' }}>Cleared bid blocks — exchange PDFs are not stored</span>
         </div>
         {error && <div style={{ padding: 12, color: 'var(--red-deep)', background: 'var(--t-red-50)', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
         {loading ? (
@@ -161,7 +161,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-100)' }}>
             <div>
               <h3 style={{ margin: 0 }}>{detail.client_name}</h3>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 5 }}>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 5 }}>
                 {detail.exchange} · {detail.delivery_date} · {fmtNumber(detail.cleared_mwh, 3)} MWh · ₹{fmtNumber(detail.trade_value, 2)}
               </div>
             </div>
@@ -173,7 +173,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
             ) : !detailBlocks?.length ? (
               <div style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>No blocks on this day.</div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                 <thead>
                   <tr style={{ background: '#343a40', color: '#fff' }}>
                     <th scope="col" style={{ padding: 8, textAlign: 'left' }}>Time</th>

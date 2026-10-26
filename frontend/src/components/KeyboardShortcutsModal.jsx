@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Keyboard, X, Search, Eye, Volume2, Moon, Globe, ArrowDownUp, CornerDownLeft, Command, ShieldCheck } from 'lucide-react';
 import { useGigw } from '../gigw/GigwContext.jsx';
 
@@ -101,30 +101,48 @@ const SHORTCUT_GROUPS = [
   }
 ];
 
-export default function KeyboardShortcutsModal({ open, onClose }) {
+export default function KeyboardShortcutsModal({ open: controlledOpen, onClose: controlledOnClose }) {
   const { lang } = useGigw();
   const modalRef = useRef(null);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  const isControlled = controlledOpen !== undefined;
+  const isOpen = isControlled ? controlledOpen : internalOpen;
+
+  const handleClose = () => {
+    if (isControlled) {
+      controlledOnClose?.();
+    } else {
+      setInternalOpen(false);
+    }
+  };
 
   useEffect(() => {
-    if (!open) return;
+    const handleOpen = () => setInternalOpen(true);
+    window.addEventListener(SHORTCUTS_OPEN_EVENT, handleOpen);
+    return () => window.removeEventListener(SHORTCUTS_OPEN_EVENT, handleOpen);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     function handleKeyDown(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        handleClose();
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [isOpen]);
 
-  if (!open) return null;
+  if (!isOpen) return null;
 
   return (
     <div 
       className="shortcuts-modal-overlay" 
-      onClick={onClose}
+      onClick={handleClose}
       role="presentation"
     >
       <div 

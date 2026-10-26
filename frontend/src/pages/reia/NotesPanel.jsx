@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../api/client.js';
 import { Badge, Field, fmtCurrency } from '../../components/ui.jsx';
+import { askText } from '../../lib/dialogs.js';
 
 // Debit and credit notes on one invoice.
 //
@@ -29,7 +30,10 @@ export function isOwnNote(note, user) {
   return note.created_by_id ? note.created_by_id === user.id : note.created_by === user.name;
 }
 
-export default function NotesPanel({ invoice, user, canWrite, onChanged }) {
+// Phase B.2: the maker (or Finance) raises and applies a note; the checker (or
+// Finance) approves, rejects or cancels it. A caller that passes only canWrite
+// gets both, as before.
+export default function NotesPanel({ invoice, user, canWrite, canMake = canWrite, canCheck = canWrite, onChanged }) {
   const [notes, setNotes] = useState([]);
   const [form, setForm] = useState(null);
   const [err, setErr] = useState('');
@@ -91,7 +95,7 @@ export default function NotesPanel({ invoice, user, canWrite, onChanged }) {
     <>
       <div className="section-title" style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Debit / Credit Notes</span>
-        {canWrite && (
+        {canMake && (
           <button type="button" className="btn btn-xs btn-outline" onClick={() => { setForm(form ? null : { ...EMPTY }); setErr(''); }}>
             {form ? 'Close' : '+ Raise Note'}
           </button>
@@ -101,7 +105,7 @@ export default function NotesPanel({ invoice, user, canWrite, onChanged }) {
       {err && <div className="form-error">{err}</div>}
 
       {notes.length > 0 ? (
-        <table className="data-table" style={{ width: '100%', fontSize: 13, marginBottom: 8 }}>
+        <table className="data-table" style={{ width: '100%', fontSize: 14.5, marginBottom: 8 }}>
           <thead>
             <tr><th>Note</th><th>Type</th><th>Reason</th><th className="text-right">Amount</th><th>Status</th><th /></tr>
           </thead>
@@ -140,30 +144,30 @@ export default function NotesPanel({ invoice, user, canWrite, onChanged }) {
                     {n.rejected_reason && <div className="inline-note">{n.rejected_reason}</div>}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    {canWrite && n.status === 'DRAFT' && !mine && (
+                    {canCheck && n.status === 'DRAFT' && !mine && (
                       <>
                         <button type="button" className="btn btn-xs btn-primary" disabled={busy}
                           onClick={() => act(() => api.notes.approve(n.id))}>Approve</button>{' '}
                         <button type="button" className="btn btn-xs btn-ghost" disabled={busy}
-                          onClick={() => {
-                            const reason = window.prompt('Why is this note rejected?');
+                          onClick={async () => {
+                            const reason = (await askText('Why is this note rejected?'));
                             if (reason) act(() => api.notes.reject(n.id, reason));
                           }}>Reject</button>
                       </>
                     )}
-                    {canWrite && n.status === 'DRAFT' && mine && <span className="inline-note">awaiting another approver</span>}
+                    {canCheck && n.status === 'DRAFT' && mine && <span className="inline-note">awaiting another approver</span>}
                     {['ISSUED', 'SETTLED'].includes(n.status) && (
                       <button type="button" className="btn btn-xs btn-ghost" onClick={() => downloadPdf(n)}>PDF</button>
                     )}
-                    {canWrite && n.unapplied_credit > 0 && (
+                    {canMake && n.unapplied_credit > 0 && (
                       <button type="button" className="btn btn-xs btn-ghost" onClick={() => startApply(n)}>Apply credit</button>
                     )}
-                    {canWrite && !['CANCELLED', 'REJECTED'].includes(n.status) && (
+                    {canCheck && !['CANCELLED', 'REJECTED'].includes(n.status) && (
                       <button type="button" className="btn btn-xs btn-ghost" disabled={busy}
-                        onClick={() => {
-                          const reason = window.prompt(n.status === 'DRAFT'
+                        onClick={async () => {
+                          const reason = (await askText(n.status === 'DRAFT'
                             ? 'Withdraw this draft? Say why:'
-                            : 'Cancel this issued note? Its effect is reversed. Say why:');
+                            : 'Cancel this issued note? Its effect is reversed. Say why:'));
                           if (reason) act(() => api.notes.cancel(n.id, reason));
                         }}>Cancel</button>
                     )}

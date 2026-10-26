@@ -24,8 +24,8 @@ export default function DeskTasksPanel({ desk, canWrite }) {
         {data.rows.map((t) => (
           <div key={t.id} style={{ borderLeft: '3px solid var(--amber-strong)', paddingLeft: 10 }}>
             <div style={{ fontWeight: 600 }}>{t.task_no} · {t.title}</div>
-            <div style={{ fontSize: 13, color: 'var(--slate-600)', margin: '2px 0 4px' }}>{t.detail}</div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-600)', margin: '2px 0 4px' }}>{t.detail}</div>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
               {t.dispute_no} · {t.invoice_no} · raised {fmtDate(t.created_at)}
               {canWrite && (
                 <>

@@ -22,7 +22,7 @@ export default function ThemeToggle({ variant = 'header', showLabel = false, cla
           background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
           border: isDark ? '1px solid rgba(255, 255, 255, 0.16)' : '1px solid rgba(0, 0, 0, 0.12)',
           color: isDark ? '#f8fafc' : 'var(--slate-900)',
-          fontSize: 12.5,
+          fontSize: 14,
           fontWeight: 600,
           cursor: 'pointer',
           transition: 'all 0.2s ease',
@@ -66,7 +66,7 @@ export default function ThemeToggle({ variant = 'header', showLabel = false, cla
         <Moon size={18} color="#3b82f6" strokeWidth={2.2} />
       )}
       {showLabel && (
-        <span style={{ marginLeft: 6, fontSize: 13, fontWeight: 500 }}>
+        <span style={{ marginLeft: 6, fontSize: 14.5, fontWeight: 500 }}>
           {isDark ? 'Light Mode' : 'Dark Mode'}
         </span>
       )}

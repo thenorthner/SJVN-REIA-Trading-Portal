@@ -94,7 +94,7 @@ export default function TradingClients() {
       label: 'Actions',
       render: r => (
         <Link to={`/trading/clients/${r.id}`}>
-          <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 13.5 }}>View Profile</button>
+          <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 15 }}>View Profile</button>
         </Link>
       )
     }
@@ -170,7 +170,7 @@ export default function TradingClients() {
                 </Field>
               </div>
             </div>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
               Authorised signatories and exchange registrations are added from the client's profile after onboarding.
             </p>
             <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card } from '../../components/ui.jsx';
 import { useNavigate } from 'react-router-dom';
+import { showAlert, askConfirm } from '../../lib/dialogs.js';
 
 const RECIPIENT_GROUPS = [
   {
@@ -103,7 +104,7 @@ export default function InboxMailList() {
 
   async function handleDelete() {
     if (selectedMessages.length === 0) return;
-    if (!window.confirm(`Delete ${selectedMessages.length} message(s)?`)) return;
+    if (!(await askConfirm(`Delete ${selectedMessages.length} message(s)?`))) return;
 
     try {
       for (const msgId of selectedMessages) {
@@ -113,7 +114,7 @@ export default function InboxMailList() {
       fetchInbox(); // Refresh
     } catch (error) {
       console.error('Delete error', error);
-      alert('Error hiding messages');
+      showAlert('Error hiding messages');
     }
   }
 
@@ -168,10 +169,10 @@ export default function InboxMailList() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>Group Filters</h3>
           </div>
-          <div style={{ fontSize: 13.5, marginBottom: 10, color: 'var(--slate-500)' }}>
+          <div style={{ fontSize: 15, marginBottom: 10, color: 'var(--slate-500)' }}>
             <span style={{ cursor: 'pointer', color: 'blue' }} onClick={() => { /* expand all */ }}>Open all</span> | <span style={{ cursor: 'pointer', color: 'blue' }} onClick={() => { /* collapse all */ }}>Close all</span>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--slate-600)' }}>Groups are shown below:</p>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-600)' }}>Groups are shown below:</p>
           <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
             {RECIPIENT_GROUPS.map(group => (
               <TreeCheckbox key={group.id} node={group} selected={selectedGroups} toggle={toggleGroup} />

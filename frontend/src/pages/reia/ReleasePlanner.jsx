@@ -10,7 +10,8 @@ import { fmtDate } from '../../datetime.js';
 // what can be released now — so Finance releases in one pass.
 export default function ReleasePlanner() {
   const { user } = useAuth();
-  const canRelease = ['FINANCE_USER', ...ROLE_GROUPS.REIA_WRITE].includes(user?.role);
+  // Paying a generator out is Finance's or the REIA checker's (Phase B.2).
+  const canRelease = ['FINANCE_USER', ...ROLE_GROUPS.REIA_CHECK].includes(user?.role);
   const [p, setP] = useState(null);
   const [form, setForm] = useState(null);
   const [popup, setPopup] = useState(null);
@@ -44,11 +45,11 @@ export default function ReleasePlanner() {
       <Card>
         <Table
           columns={[
-            { key: 'invoice_no', header: 'Developer bill', render: (r) => <><strong>{r.invoice_no}</strong><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.developer} · {r.contract_no} · {r.billing_period}</div></> },
+            { key: 'invoice_no', header: 'Developer bill', render: (r) => <><strong>{r.invoice_no}</strong><div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{r.developer} · {r.contract_no} · {r.billing_period}</div></> },
             { key: 'due', header: 'Due', render: (r) => (r.due_date ? fmtDate(r.due_date) : '—') },
             { key: 'open', header: 'Open', render: (r) => fmtCurrency(r.open) },
-            { key: 'realized', header: 'Realised from buyers', render: (r) => <>{fmtCurrency(r.realized)}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.linked_psa_bills} PSA bill{r.linked_psa_bills === 1 ? '' : 's'} · {fmtCurrency(r.released)} released</div></> },
-            { key: 'now', header: 'Releasable now', render: (r) => (r.blocked ? <span style={{ color: 'var(--red-deep)', fontSize: 13 }}>{r.blocked}</span> : <strong>{fmtCurrency(r.releasable_now)}</strong>) },
+            { key: 'realized', header: 'Realised from buyers', render: (r) => <>{fmtCurrency(r.realized)}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.linked_psa_bills} PSA bill{r.linked_psa_bills === 1 ? '' : 's'} · {fmtCurrency(r.released)} released</div></> },
+            { key: 'now', header: 'Releasable now', render: (r) => (r.blocked ? <span style={{ color: 'var(--red-deep)', fontSize: 14.5 }}>{r.blocked}</span> : <strong>{fmtCurrency(r.releasable_now)}</strong>) },
             { key: 'act', header: '', render: (r) => (canRelease && r.releasable_now > 0 ? <button type="button" className="btn btn-primary btn-sm" onClick={() => setForm({ row: r, amount: r.releasable_now, date: new Date().toISOString().slice(0, 10), reference: '' })}>Release</button> : null) },
           ]}
           rows={p?.rows || []}

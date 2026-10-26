@@ -126,7 +126,7 @@ export default function HydroStations() {
             { key: 'capacity_mw', header: 'Capacity', render: (s) => (s.capacity_mw ? `${num(s.capacity_mw, 0)} MW` : '—') },
             { key: 'project_type', header: 'Type', render: (s) => (s.project_type === 'PSP' ? 'Pumped storage' : 'Hydro') },
             { key: 'tenure', header: 'Tenure', render: (s) => `${s.tenure_start || '—'} → ${s.tenure_end || '—'}` },
-            { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge type="success">Ready</Badge> : <span style={{ fontSize: 13.5, color: 'var(--amber-strong)' }}>Missing: {s.missing.join(', ')}</span>) },
+            { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge type="success">Ready</Badge> : <span style={{ fontSize: 15, color: 'var(--amber-strong)' }}>Missing: {s.missing.join(', ')}</span>) },
           ]}
           rows={stations}
           emptyMessage="No hydro station is on the platform."
@@ -171,7 +171,7 @@ export default function HydroStations() {
                 { key: 'normative_aux', header: 'Aux %', render: (t) => num(t.normative_aux) },
                 { key: 'ecr_excess_rate', header: 'Beyond design ₹/kWh', render: (t) => num(t.ecr_excess_rate, 4) },
                 { key: 'order_ref', header: 'Order', render: (t) => t.order_ref || '—' },
-                { key: 'updated', header: 'Set by', render: (t) => <span style={{ fontSize: 12.5 }}>{t.updated_by || '—'}<div style={{ color: 'var(--text-light)' }}>{String(t.updated_at || '').slice(0, 10)}</div></span> },
+                { key: 'updated', header: 'Set by', render: (t) => <span style={{ fontSize: 14 }}>{t.updated_by || '—'}<div style={{ color: 'var(--text-light)' }}>{String(t.updated_at || '').slice(0, 10)}</div></span> },
                 { key: 'edit', header: '', render: (t) => (canWrite ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => setForm({ financial_year: t.financial_year, annual_afc: t.annual_afc ?? '', napaf_percent: t.napaf_percent ?? '', annual_design_energy_mwh: t.annual_design_energy_mwh ?? '', normative_aux: t.normative_aux ?? '', ecr_excess_rate: t.ecr_excess_rate ?? '', order_ref: t.order_ref || '' })}>Revise</button> : null) },
               ]}
               rows={tariffs}

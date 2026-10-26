@@ -4,6 +4,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { showAlert, askConfirm } from '../../lib/dialogs.js';
 
 const EMPTY_FORM = { period_type: 'MONTHLY', period: '', auto_generate: true, reference_no: '', notes: '' };
 const EMPTY_LINE = {
@@ -40,7 +41,7 @@ function AnnualRollUp({ canWrite, onDone }) {
     <Card title="Annual return (roll-up of the monthlies)">
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
         <select value={fy} onChange={(e) => setFy(e.target.value)} aria-label="Financial year">{years.map((y) => <option key={y} value={y}>FY {y}</option>)}</select>
-        {pos && <span style={{ fontSize: 13 }}>
+        {pos && <span style={{ fontSize: 14.5 }}>
           {12 - pos.not_filed.length}/12 monthlies filed · {fmtNumber(pos.sum.total_volume_mu, 4)} MU · margin ₹{fmtNumber(pos.sum.trading_margin, 0)}
           {pos.annual ? <> · Annual {pos.annual.form_no} <Badge status={pos.annual.status} /></> : ' · no annual return yet'}
           {pos.differences?.length > 0 && <span style={{ color: 'var(--red-strong, #b91c1c)' }}> · {pos.differences.length} figure(s) differ from the monthlies</span>}
@@ -56,8 +57,8 @@ function AnnualRollUp({ canWrite, onDone }) {
             }}>{pos.annual ? 'Rebuild annual' : 'Roll up annual'}</button>
         )}
       </div>
-      {pos && !pos.ready && <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>Waiting on: {pos.not_filed.join(', ')}</div>}
-      {msg && <div style={{ fontSize: 13, marginTop: 6 }}>{msg}</div>}
+      {pos && !pos.ready && <div style={{ fontSize: 14, color: 'var(--slate-500)' }}>Waiting on: {pos.not_filed.join(', ')}</div>}
+      {msg && <div style={{ fontSize: 14.5, marginTop: 6 }}>{msg}</div>}
     </Card>
   );
 }
@@ -77,7 +78,7 @@ export default function CERCFormIV() {
         `SJVN_Regulatory_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
       );
     } catch (err) {
-      alert(err.message || 'Could not generate the regulatory report.');
+      showAlert(err.message || 'Could not generate the regulatory report.');
     } finally {
       setReportBusy(false);
     }
@@ -211,7 +212,7 @@ export default function CERCFormIV() {
   }
 
   async function deleteLine(line) {
-    if (!window.confirm(`Remove line ${line.line_no} (${line.seller_name} → ${line.buyer_name})?`)) return;
+    if (!(await askConfirm(`Remove line ${line.line_no} (${line.seller_name} → ${line.buyer_name})?`))) return;
     runOnDetail(() => api.formIv.deleteLine(line.id), 'Failed to remove the line.');
   }
 
@@ -247,7 +248,7 @@ export default function CERCFormIV() {
     { key: 'line_no', header: '#' },
     { key: 'seller_name', header: 'Seller' },
     { key: 'buyer_name', header: 'Buyer' },
-    { key: 'period', header: 'Period', render: (l) => <span style={{ fontSize: 13 }}>{l.period_from} → {l.period_to}</span> },
+    { key: 'period', header: 'Period', render: (l) => <span style={{ fontSize: 14.5 }}>{l.period_from} → {l.period_to}</span> },
     { key: 'quantum_mu', header: 'MU', render: (l) => fmtNumber(l.quantum_mu, 2) },
     { key: 'purchase_rate', header: 'Purchase', render: (l) => (l.purchase_rate > 0 ? rate(l.purchase_rate) : <span style={{ color: 'var(--red)' }}>missing</span>) },
     { key: 'sale_rate', header: 'Sale', render: (l) => rate(l.sale_rate) },
@@ -407,11 +408,11 @@ export default function CERCFormIV() {
               <button
                 className="btn btn-outline"
                 title="One sheet per form (IV-A, IV-B, …) in the layout filed with the Commission"
-                onClick={() => api.reports.cercAnnexuresXlsx(detail.period_type, detail.period).catch((err) => alert(err.message || 'Could not build the Form-IV workbook.'))}
+                onClick={() => api.reports.cercAnnexuresXlsx(detail.period_type, detail.period).catch((err) => showAlert(err.message || 'Could not build the Form-IV workbook.'))}
               >
                 CERC Excel (annexures)
               </button>
-              <button className="btn btn-outline" onClick={() => api.formIv.downloadPdf(detail.id, detail.form_no).catch((err) => alert(err.message || 'Could not generate the Form-IV PDF.'))}>Download PDF</button>
+              <button className="btn btn-outline" onClick={() => api.formIv.downloadPdf(detail.id, detail.form_no).catch((err) => showAlert(err.message || 'Could not generate the Form-IV PDF.'))}>Download PDF</button>
               {editable && blockers.length === 0 && (
                 <button className="btn btn-primary" disabled={busy} onClick={() => runOnDetail(() => api.formIv.submit(detail.id, {}), 'Failed to submit the filing.')}>
                   Mark Submitted to CERC

@@ -64,7 +64,7 @@ export default function HydroBillSend({ bill, canWrite, onClose }) {
 
   return (
     <Modal open={!!bill} onClose={onClose} title={`Send ${bill?.bill_no || ''} to beneficiaries`} width={860}>
-      <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+      <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
         Each beneficiary is emailed its own bill — its page first, then the station bill it is worked
         from. An address typed here is kept for that beneficiary&apos;s next bill.
       </p>
@@ -118,7 +118,7 @@ export default function HydroBillSend({ bill, canWrite, onClose }) {
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{l.beneficiary_name}</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{l.bill_ref}</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{l.bill_ref}</div>
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtCurrency(l.total_charges)}</td>
                   <td>
@@ -130,10 +130,10 @@ export default function HydroBillSend({ bill, canWrite, onClose }) {
                       onChange={(e) => setTyped({ ...typed, [l.line_id]: e.target.value })}
                     />
                     {l.source === 'ENTITY' && (
-                      <div style={{ fontSize: 13, color: 'var(--text-light)' }}>from the beneficiary&apos;s entity record</div>
+                      <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>from the beneficiary&apos;s entity record</div>
                     )}
                   </td>
-                  <td style={{ fontSize: 13.5 }}>
+                  <td style={{ fontSize: 15 }}>
                     {l.last_delivery ? (
                       <>
                         <span className={`badge badge-${STATUS_TONE[l.last_delivery.status] || 'gray'}`}>
@@ -164,7 +164,7 @@ export default function HydroBillSend({ bill, canWrite, onClose }) {
         )}
         <button type="button" className="btn" onClick={onClose}>Close</button>
         {missing.length > 0 && (
-          <span style={{ fontSize: 13.5, color: 'var(--danger, #b91c1c)' }}>
+          <span style={{ fontSize: 15, color: 'var(--danger, #b91c1c)' }}>
             No address for {missing.map((l) => l.beneficiary_name).join(', ')} — type one or untick.
           </span>
         )}

@@ -37,7 +37,7 @@ function DocType({ row }) {
   return (
     <span style={{ color: tone.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
       {row.display_type}
-      <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>
+      <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 14.5, marginLeft: 6 }}>
         {tone.label}
       </span>
     </span>
@@ -143,7 +143,7 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
   const lps = account?.lps;
 
   const columns = [
-    { key: 'doc_no', header: 'Doc', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.doc_no}</span> },
+    { key: 'doc_no', header: 'Doc', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15 }}>{r.doc_no}</span> },
     { key: 'display_type', header: 'Type', render: (r) => <DocType row={r} /> },
     { key: 'doc_date', header: 'Date' },
     {
@@ -163,7 +163,7 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
         ? <span style={{ fontWeight: r.outstanding > 0 ? 600 : 400 }}>{fmtCurrency(r.outstanding)}</span>
         : (r.unapplied > 0 ? <span style={{ color: 'var(--blue, #2b6cb0)' }}>{fmtCurrency(r.unapplied)} unapplied</span> : '—')),
     },
-    { key: 'clr_doc', header: 'CLR doc', render: (r) => (r.clr_doc ? <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>{r.clr_doc}</span> : '—') },
+    { key: 'clr_doc', header: 'CLR doc', render: (r) => (r.clr_doc ? <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14.5 }}>{r.clr_doc}</span> : '—') },
     { key: 'clr_date', header: 'CLR date', render: (r) => r.clr_date || '—' },
     {
       key: 'status',
@@ -248,10 +248,10 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
             gap: 12,
           }}>
             <div>
-              <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14, marginBottom: 4 }}>
+              <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 15.5, marginBottom: 4 }}>
                 No Issued Bills Yet for this Station
               </div>
-              <div style={{ color: 'var(--text-light)', fontSize: 13, maxWidth: 640, lineHeight: 1.5 }}>
+              <div style={{ color: 'var(--text-light)', fontSize: 14.5, maxWidth: 640, lineHeight: 1.5 }}>
                 Beneficiary running accounts (PB debit documents) are created automatically as soon as a station bill is <strong>Approved and Issued</strong>. Once issued, each beneficiary&apos;s allocation share, outstanding balance, and payment ledger appear here.
               </div>
             </div>
@@ -338,7 +338,7 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
       <Modal open={!!payForm} onClose={() => setPayForm(null)} title={`Record a payment from ${beneficiary}`}>
         {payForm && (
           <form onSubmit={doPay}>
-            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
               The payment is set against the oldest outstanding bill first. Anything beyond what is
               owed stays on the account as an advance rather than being treated as settled.
             </p>
@@ -385,7 +385,7 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
 
       <Modal open={!!reversing} onClose={() => setReversing(null)} title={`Reverse ${reversing?.doc_no || ''}`}>
         <form onSubmit={doReverse}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             The payment is not deleted: it stays on the account with a counter-entry beside it, and
             any bill it had cleared reopens.
           </p>

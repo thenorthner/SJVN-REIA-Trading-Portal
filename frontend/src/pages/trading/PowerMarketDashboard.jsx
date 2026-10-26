@@ -61,8 +61,8 @@ function DailyMarket() {
                     <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
+                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
                 <Tooltip labelFormatter={shortDate} formatter={(v) => [`₹${Number(v).toFixed(2)}/kWh`, 'Day price']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                 <Area type="monotone" dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorMcp)" isAnimationActive={false} />
               </AreaChart>
@@ -78,8 +78,8 @@ function DailyMarket() {
                       <stop offset="95%" stopColor="var(--green)" stopOpacity={0.6}/>
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={64} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} width={64} axisLine={false} tickLine={false} />
                   <Tooltip labelFormatter={shortDate} formatter={(v) => [`${Number(v).toLocaleString('en-IN')} MWh`, 'Cleared']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
                   <Bar dataKey="energy_mwh" name="Cleared MWh" fill="url(#colorEnergy)" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </BarChart>

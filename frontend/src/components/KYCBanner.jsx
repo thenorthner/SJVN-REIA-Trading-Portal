@@ -13,7 +13,7 @@ const bar = (tone) => ({
   display: 'flex',
   alignItems: 'center',
   gap: '12px',
-  fontSize: '14px',
+  fontSize: '15.5px',
   fontWeight: '500',
 });
 
@@ -119,7 +119,7 @@ export default function KYCBanner() {
             <Link
               to={docsPath}
               style={{
-                fontSize: '12.5px',
+                fontSize: '14px',
                 fontWeight: '600',
                 color: isRejected ? 'var(--red-deep)' : 'var(--amber-strong)',
                 textDecoration: 'underline',
@@ -139,7 +139,7 @@ export default function KYCBanner() {
                 alignItems: 'center',
                 gap: '5px',
                 padding: '4px 11px',
-                fontSize: '12px',
+                fontSize: '13.5px',
                 fontWeight: '700',
                 borderRadius: '6px',
                 cursor: 'pointer',
@@ -170,7 +170,7 @@ export default function KYCBanner() {
             <Link
               to={docsPath}
               style={{
-                fontSize: '12.5px',
+                fontSize: '14px',
                 fontWeight: '600',
                 color: expired.length || sentBack.length ? 'var(--red-deep)' : 'var(--amber-strong)',
                 textDecoration: 'underline',
@@ -190,7 +190,7 @@ export default function KYCBanner() {
                 alignItems: 'center',
                 gap: '5px',
                 padding: '4px 11px',
-                fontSize: '12px',
+                fontSize: '13.5px',
                 fontWeight: '700',
                 borderRadius: '6px',
                 cursor: 'pointer',

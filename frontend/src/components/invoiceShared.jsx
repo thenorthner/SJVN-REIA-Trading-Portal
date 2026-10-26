@@ -60,7 +60,7 @@ export function InvoiceStatusCell({ row, showValidation = false }) {
         <span
           title={`Overdue ${row.days_past_due || row.days_overdue} day(s) · accruing LPS`}
           style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--red-deep)', background: 'var(--t-red-100)',
+            fontSize: 14.5, fontWeight: 600, color: 'var(--red-deep)', background: 'var(--t-red-100)',
             border: '1px solid var(--t-red-line)', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap',
           }}
         >
@@ -89,9 +89,9 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
         <table className="detail-table" style={{ width: '100%' }}>
           <thead>
             <tr style={{ background: 'var(--slate-50)' }}>
-              <th scope="col" style={{ padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--slate-600)' }}>Code</th>
-              <th scope="col" style={{ padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--slate-600)' }}>Description</th>
-              <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 14, color: 'var(--slate-600)' }}>Value</th>
+              <th scope="col" style={{ padding: '10px 14px', textAlign: 'left', fontSize: 15.5, color: 'var(--slate-600)' }}>Code</th>
+              <th scope="col" style={{ padding: '10px 14px', textAlign: 'left', fontSize: 15.5, color: 'var(--slate-600)' }}>Description</th>
+              <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 15.5, color: 'var(--slate-600)' }}>Value</th>
             </tr>
           </thead>
           <tbody>
@@ -106,9 +106,9 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
                       : {}
                 }
               >
-                <td style={{ padding: '8px 14px', fontFamily: 'monospace', fontSize: 13.5, color: 'var(--on-blue)' }}>{item.code}</td>
-                <td style={{ padding: '8px 14px', fontSize: 14.5 }}>{item.label}</td>
-                <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 14.5, fontFamily: 'monospace' }}>
+                <td style={{ padding: '8px 14px', fontFamily: 'monospace', fontSize: 15, color: 'var(--on-blue)' }}>{item.code}</td>
+                <td style={{ padding: '8px 14px', fontSize: 15.5 }}>{item.label}</td>
+                <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 15.5, fontFamily: 'monospace' }}>
                   {formatBreakdownValue(item)}
                 </td>
               </tr>
@@ -198,7 +198,7 @@ export function InvoiceFinancialStrip({ invoice }) {
       <div className="detail-item">
         <span className="detail-label">
           Disputed Amount
-          <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
             Held from payable — LPS does not apply on this portion while open
           </div>
         </span>
@@ -208,7 +208,7 @@ export function InvoiceFinancialStrip({ invoice }) {
         <div className="detail-item">
           <span className="detail-label">
             Early Pay Rebate
-            <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 14.5, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
               Earned by each payment on the part of the bill it settles early, at the contract&apos;s rate
             </div>
           </span>
@@ -218,7 +218,7 @@ export function InvoiceFinancialStrip({ invoice }) {
       <div className="detail-item">
         <span className="detail-label">
           Late Pay Surcharge (LPS)
-          <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
             {lpsRate} on the undisputed amount unpaid past the due date{grace} — to date
           </div>
         </span>
@@ -227,13 +227,13 @@ export function InvoiceFinancialStrip({ invoice }) {
       <div className="detail-item">
         <span className="detail-label">
           Settled So Far
-          <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
             {invoice.settlement && invoice.settlement.credit_applied > 0
               ? `Cash ${fmtCurrency(invoice.settlement.cash_received)} · credit notes ${fmtCurrency(invoice.settlement.credit_applied)}`
               : 'Payments, tax and other deductions, and credit notes recorded on this bill'}
           </div>
           {invoice.settlement?.label && (
-            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 3 }}>{invoice.settlement.label}</div>
+            <div style={{ fontSize: 14.5, fontWeight: 600, marginTop: 3 }}>{invoice.settlement.label}</div>
           )}
         </span>
         <span className="detail-value" style={{ color: 'var(--success)', fontSize: 16 }}>-{fmtCurrency(settled)}</span>
@@ -241,7 +241,7 @@ export function InvoiceFinancialStrip({ invoice }) {
       <div className="detail-item">
         <span className="detail-label">
           Balance Payable Now
-          <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
             What is left after everything above{Number(invoice.disputed_amount) > 0 ? ' — the disputed part is held out until it is decided' : ''}
           </div>
         </span>
@@ -307,7 +307,7 @@ export function ValidationCompareModal({
           {validationResult.tolerances && (
             <div className="detail-item">
               <span className="detail-label">Tolerances</span>
-              <span className="detail-value" style={{ fontSize: 14 }}>
+              <span className="detail-value" style={{ fontSize: 15.5 }}>
                 Qty ±{validationResult.tolerances.qty_pct}% · Amt ±₹{validationResult.tolerances.amount_abs} / {validationResult.tolerances.amount_pct}%
               </span>
             </div>
@@ -323,7 +323,7 @@ export function ValidationCompareModal({
             showed only a "NO COUNTERPART" badge — the reason, and what to do
             about it, were in the server's refusal but never on screen. */}
         {validationResult.status === 'NO_COUNTERPART' && (
-          <div className="inline-note" role="status" style={{ marginTop: 16, fontSize: 14.5 }}>
+          <div className="inline-note" role="status" style={{ marginTop: 16, fontSize: 15.5 }}>
             No system counterpart invoice found for this contract and billing period.{' '}
             {perspective === 'seller'
               ? 'SJVN has not raised its own invoice for this month yet, so there is nothing to compare yours against. Validate again once it has.'
@@ -334,24 +334,24 @@ export function ValidationCompareModal({
           <table className="detail-table" style={{ width: '100%', marginTop: 18 }}>
             <thead>
               <tr style={{ background: 'var(--slate-50)' }}>
-                <th scope="col" style={{ padding: '10px 14px', textAlign: 'left', fontSize: 14 }}>Field</th>
-                <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 14 }}>{claimLabel}</th>
-                <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 14 }}>System</th>
-                <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 14 }}>Diff</th>
-                <th scope="col" style={{ padding: '10px 14px', textAlign: 'center', fontSize: 14 }}>Match</th>
+                <th scope="col" style={{ padding: '10px 14px', textAlign: 'left', fontSize: 15.5 }}>Field</th>
+                <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 15.5 }}>{claimLabel}</th>
+                <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 15.5 }}>System</th>
+                <th scope="col" style={{ padding: '10px 14px', textAlign: 'right', fontSize: 15.5 }}>Diff</th>
+                <th scope="col" style={{ padding: '10px 14px', textAlign: 'center', fontSize: 15.5 }}>Match</th>
               </tr>
             </thead>
             <tbody>
               {validationResult.lines.map((line) => (
                 <tr key={line.field}>
-                  <td style={{ padding: '8px 14px', fontSize: 14.5 }}>{line.label}</td>
-                  <td style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 14 }}>
+                  <td style={{ padding: '8px 14px', fontSize: 15.5 }}>{line.label}</td>
+                  <td style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 15.5 }}>
                     {line.kind === 'qty' ? fmtNumber(line.seller) : fmtCurrency(line.seller)}
                   </td>
-                  <td style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 14 }}>
+                  <td style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 15.5 }}>
                     {line.kind === 'qty' ? fmtNumber(line.system) : fmtCurrency(line.system)}
                   </td>
-                  <td style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 14 }}>
+                  <td style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 15.5 }}>
                     {line.diff != null
                       ? (line.kind === 'qty' ? fmtNumber(line.diff) : fmtCurrency(line.diff))
                       : '—'}
@@ -366,7 +366,7 @@ export function ValidationCompareModal({
           </table>
         )}
         {validationResult.status === 'NO_COUNTERPART' && (
-          <p style={{ marginTop: 14, color: 'var(--text-light)', fontSize: 14.5 }}>
+          <p style={{ marginTop: 14, color: 'var(--text-light)', fontSize: 15.5 }}>
             {perspective === 'seller'
               ? 'No SJVN system invoice exists yet for this period. Validation will run automatically once one is generated.'
               : 'No system-generated invoice found for this contract and billing period. Generate one first, then re-validate.'}

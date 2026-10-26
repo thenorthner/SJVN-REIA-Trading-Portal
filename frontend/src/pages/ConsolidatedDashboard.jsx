@@ -191,7 +191,7 @@ export default function ConsolidatedDashboard() {
           <div className="elite-hero-metric-card">
             <div className="elite-hero-metric-label">Contracted RE Capacity</div>
             <div className="elite-hero-metric-val">
-              {fmtNumber(data.reiaContractedCapacity)} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>MW</span>
+              {fmtNumber(data.reiaContractedCapacity)} <span style={{ fontSize: 14.5, fontWeight: 500, color: '#94a3b8' }}>MW</span>
             </div>
             <div className="elite-hero-metric-sub">
               {capacityProgress.toFixed(1)}% of 20 GW Target ({fmtNumber(data.targetCapacity)} MW)
@@ -210,7 +210,7 @@ export default function ConsolidatedDashboard() {
           <div className="elite-hero-metric-card" style={{ borderColor: data.totalUnresolvedExposure > 500000 ? 'rgba(239, 68, 68, 0.25)' : undefined }}>
             <div className="elite-hero-metric-label">Cross-Module Exposure</div>
             <div className="elite-hero-metric-val" style={{ color: data.totalUnresolvedExposure > 500000 ? '#fca5a5' : '#f8fafc' }}>
-              ₹{(data.totalUnresolvedExposure / 1e7).toFixed(2)} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>Cr</span>
+              ₹{(data.totalUnresolvedExposure / 1e7).toFixed(2)} <span style={{ fontSize: 14.5, fontWeight: 500, color: '#94a3b8' }}>Cr</span>
             </div>
             <div className="elite-hero-metric-sub">
               {data.totalUnresolvedExposure > 500000 ? 'Disputed & overdue exposure pending resolution' : 'Contained within operational threshold'}
@@ -253,7 +253,7 @@ export default function ConsolidatedDashboard() {
             <div style={{ width: '100%', backgroundColor: 'var(--slate-200)', borderRadius: 8, height: 24, overflow: 'hidden' }}>
               <div style={{ width: `${capacityProgress}%`, backgroundColor: 'var(--primary)', height: '100%', transition: 'width 0.5s ease' }} />
             </div>
-            <p style={{ textAlign: 'right', marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>{capacityProgress.toFixed(1)}% achieved</p>
+            <p style={{ textAlign: 'right', marginTop: 8, fontSize: 14.5, color: 'var(--text-muted)' }}>{capacityProgress.toFixed(1)}% achieved</p>
           </div>
         </Card>
       </div>
@@ -301,8 +301,8 @@ export default function ConsolidatedDashboard() {
                     <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.6}/>
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="name" tick={{ fontSize: 13.5 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 13.5 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 15 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 15 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => fmtCurrency(v)} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                 <Legend />
                 <Bar dataKey="Value" fill="url(#colorValue)" radius={[6, 6, 0, 0]} />
@@ -330,7 +330,7 @@ export default function ConsolidatedDashboard() {
             <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: 'var(--slate-900)', letterSpacing: '-0.02em' }}>
               Reports &amp; Dashboards
             </h2>
-            <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: 'var(--slate-500)' }}>
+            <p style={{ margin: '6px 0 0 0', fontSize: '15.5px', color: 'var(--slate-500)' }}>
               Access and download key operational reports across all modules.
             </p>
           </div>
@@ -355,7 +355,7 @@ export default function ConsolidatedDashboard() {
         </div>
 
         {reportError && (
-          <div style={{ color: 'var(--red-deep)', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+          <div style={{ color: 'var(--red-deep)', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, padding: '10px 14px', fontSize: 14.5, marginBottom: 16 }}>
             {reportError}
           </div>
         )}
@@ -367,7 +367,7 @@ export default function ConsolidatedDashboard() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {SECTION_ICONS[grp.vertical]}
               </div>
-              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)', letterSpacing: '0.1px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--primary)', letterSpacing: '0.1px' }}>
                 {grp.label}
               </span>
             </div>
@@ -408,10 +408,10 @@ export default function ConsolidatedDashboard() {
                   </div>
 
                   {/* Title & Blurb */}
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--slate-900)', marginBottom: '6px', lineHeight: 1.3 }}>
+                  <div style={{ fontSize: '15.5px', fontWeight: 700, color: 'var(--slate-900)', marginBottom: '6px', lineHeight: 1.3 }}>
                     {r.title}
                   </div>
-                  <div style={{ fontSize: '13.5px', color: 'var(--slate-500)', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
+                  <div style={{ fontSize: '15px', color: 'var(--slate-500)', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
                     {r.blurb}
                   </div>
 
@@ -431,7 +431,7 @@ export default function ConsolidatedDashboard() {
                       border: '1px solid var(--slate-300)',
                       background: 'var(--surface)',
                       color: 'var(--slate-900)',
-                      fontSize: '13.5px',
+                      fontSize: '15px',
                       fontWeight: 500,
                       cursor: busyReport === r.path ? 'not-allowed' : 'pointer',
                       opacity: busyReport === r.path ? 0.6 : 1,

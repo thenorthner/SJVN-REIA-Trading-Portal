@@ -143,7 +143,7 @@ export default function HydroWaterToWirePipeline3D({
                 background: 'rgba(2, 132, 199, 0.15)',
                 color: '#38bdf8',
                 border: '1px solid rgba(2, 132, 199, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -152,7 +152,7 @@ export default function HydroWaterToWirePipeline3D({
                 CERC HYDRO TARIFF REGULATION
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               Physical Hydrology Inflow → Auxiliary & 13% Free Power Gate → CERC Two-Part Settlement (AFC & ECR)
             </div>
           </div>
@@ -167,7 +167,7 @@ export default function HydroWaterToWirePipeline3D({
                 type="button"
                 className={`btn btn-xs ${activeStationIdx === idx ? 'btn-primary' : 'btn-ghost'}`}
                 style={{
-                  fontSize: 13,
+                  fontSize: 14.5,
                   fontWeight: 600,
                   color: activeStationIdx === idx ? '#ffffff' : '#94a3b8',
                 }}
@@ -204,24 +204,24 @@ export default function HydroWaterToWirePipeline3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 1: HYDROLOGY
             </span>
-            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>{stationDisplayName.split(' ')[0]} {stationDisplayName.split(' ')[1] || 'Intake'}</span>
+            <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{stationDisplayName.split(' ')[0]} {stationDisplayName.split(' ')[1] || 'Intake'}</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Dam Inflow & Head
           </div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Head: ~{fallback.dam_head_m} m | Gross MWh
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Gross Generation</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Gross Generation</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
-              {fmtNumber(grossMwh, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>MWh</span>
+              {fmtNumber(grossMwh, 1)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>MWh</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 3 }}>
               Annual DE: {fmtNumber(annualDesignEnergy / 1000, 0)} MU
             </div>
           </div>
@@ -242,27 +242,27 @@ export default function HydroWaterToWirePipeline3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#c084fc', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#c084fc', letterSpacing: '0.04em' }}>
               STAGE 2: AUX & FREE POWER
             </span>
-            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>HP Home State</span>
+            <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>HP Home State</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Normative Deductions
           </div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Aux: -{auxPct}% ({fmtNumber(auxMwh, 1)} MWh)
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>Free Power (13% HP):</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#f87171' }}>-{fmtNumber(freePowerMwh, 1)} MWh</span>
+              <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Free Power (13% HP):</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#f87171' }}>-{fmtNumber(freePowerMwh, 1)} MWh</span>
             </div>
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 6, paddingTop: 6 }}>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>Net Saleable Ex-Bus (E3)</div>
+              <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Net Saleable Ex-Bus (E3)</div>
               <div style={{ fontSize: 19, fontWeight: 700, color: '#c084fc', fontVariantNumeric: 'tabular-nums' }}>
-                {fmtNumber(saleableMwh, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>MWh</span>
+                {fmtNumber(saleableMwh, 1)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>MWh</span>
               </div>
             </div>
           </div>
@@ -283,11 +283,11 @@ export default function HydroWaterToWirePipeline3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#4ade80', letterSpacing: '0.04em' }}>
               STAGE 3: TWO-PART TARIFF
             </span>
             <span style={{
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               background: hasIncentive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
               color: hasIncentive ? '#4ade80' : '#facc15',
@@ -297,19 +297,19 @@ export default function HydroWaterToWirePipeline3D({
               PAFM {pafm}% ≥ {napaf}%
             </span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Capacity & Energy Split
           </div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             100% AFC Recovery Achieved
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Capacity (AFC/12):</span>
               <span style={{ fontWeight: 600, color: '#f8fafc' }}>{fmtCurrency(capCharge)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Energy Charge:</span>
               <span style={{ fontWeight: 600, color: '#f8fafc' }}>{fmtCurrency(energyCharge + excessEnergyCharge)}</span>
             </div>
@@ -331,24 +331,24 @@ export default function HydroWaterToWirePipeline3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
               STAGE 4: COMMITTED BILL
             </span>
-            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>NRPC Certified</span>
+            <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>NRPC Certified</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
             Net Month Invoice
           </div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Ready for Discom Allocation
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Total Monthly Demand</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Total Monthly Demand</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
               {fmtCurrency(totalBilled)}
             </div>
-            <div style={{ fontSize: 12, color: '#4ade80', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: '#4ade80', marginTop: 3 }}>
               Effective: ₹{((totalBilled / (saleableMwh * 1000 || 1))).toFixed(3)} / kWh
             </div>
           </div>
@@ -363,7 +363,7 @@ export default function HydroWaterToWirePipeline3D({
           border: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',
@@ -402,7 +402,7 @@ export default function HydroWaterToWirePipeline3D({
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: 12,
-        fontSize: 13,
+        fontSize: 14.5,
         color: '#94a3b8',
         position: 'relative',
         zIndex: 2,

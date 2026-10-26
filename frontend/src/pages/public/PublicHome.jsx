@@ -6,7 +6,7 @@ import {
   Users, FileText, BarChart3, Scale, Award, Globe, 
   ExternalLink, HelpCircle, AlertCircle, FileCheck, Landmark, Check,
   Layers, TrendingUp, Sparkles, Leaf, Bell, Target,
-  Map, LayoutGrid
+  Map, LayoutGrid, Quote
 } from 'lucide-react';
 import PublicShell from './PublicShell.jsx';
 import IndiaAssetMap from '../../components/IndiaAssetMap.jsx';
@@ -21,7 +21,7 @@ import { openVisionModal } from '../../components/VisionModal.jsx';
 /**
  * SJVN Integrated Energy Commerce & REIA Public Portal
  * Matches the official sovereign design layout.
- * Fully compliant with GoI GIGW 3.0, UX4G, and DPDP Act 2023.
+ * Built to GIGW 3.0, DBIM v3 and the DPDP Act 2023.
  */
 
 const HERO_STATS = [
@@ -49,6 +49,73 @@ const HERO_STATS = [
     icon: FileCheck,
     colorClass: 'metric-icon-orange'
   },
+];
+
+const NATIONAL_INITIATIVES = [
+  {
+    nameEn: 'Ministry of Power',
+    nameHi: 'विद्युत मंत्रालय',
+    descEn: 'Administrative ministry governing power generation & transmission',
+    descHi: 'विद्युत उत्पादन एवं पारेषण का प्रशासनिक मंत्रालय',
+    url: 'https://powermin.gov.in',
+    domain: 'powermin.gov.in'
+  },
+  {
+    nameEn: 'Ministry of New & Renewable Energy (MNRE)',
+    nameHi: 'नवीन और नवीकरणीय ऊर्जा मंत्रालय',
+    descEn: 'National nodal agency designating SJVN as REIA',
+    descHi: 'राष्ट्रीय नोडल मंत्रालय जिसने एसजेवीएन को REIA नामित किया',
+    url: 'https://mnre.gov.in',
+    domain: 'mnre.gov.in'
+  },
+  {
+    nameEn: 'Central Electricity Regulatory Commission (CERC)',
+    nameHi: 'केंद्रीय विद्युत विनियामक आयोग',
+    descEn: 'Statutory electricity market regulation & tariff orders',
+    descHi: 'वैधानिक विद्युत बाज़ार नियमन एवं टैरिफ आदेश',
+    url: 'https://cercind.gov.in',
+    domain: 'cercind.gov.in'
+  },
+  {
+    nameEn: 'Central Electricity Authority (CEA)',
+    nameHi: 'केंद्रीय विद्युत प्राधिकरण',
+    descEn: 'Technical standards and national power grid planning',
+    descHi: 'तकनीकी मानक एवं राष्ट्रीय विद्युत ग्रिड नियोजन',
+    url: 'https://cea.nic.in',
+    domain: 'cea.nic.in'
+  },
+  {
+    nameEn: 'National Portal of India',
+    nameHi: 'भारत का राष्ट्रीय पोर्टल',
+    descEn: 'Single window access to GoI public services & information',
+    descHi: 'भारत सरकार की सभी सार्वजनिक सेवाओं का एकल प्रवेश द्वार',
+    url: 'https://www.india.gov.in',
+    domain: 'india.gov.in'
+  },
+  {
+    nameEn: 'Digital India',
+    nameHi: 'डिजिटल इंडिया',
+    descEn: 'Flagship programme transforming India into a digitally empowered society',
+    descHi: 'भारत को डिजिटल रूप से सशक्त समाज में बदलने का प्रमुख कार्यक्रम',
+    url: 'https://www.digitalindia.gov.in',
+    domain: 'digitalindia.gov.in'
+  },
+  {
+    nameEn: 'MyGov: Meri Sarkar',
+    nameHi: 'माईगॉव: मेरी सरकार',
+    descEn: 'Citizen engagement platform for participatory governance',
+    descHi: 'सहभागी शासन हेतु नागरिक संवाद एवं विचार मंच',
+    url: 'https://www.mygov.in',
+    domain: 'mygov.in'
+  },
+  {
+    nameEn: 'Mission LiFE',
+    nameHi: 'मिशन लाइफ (पर्यावरण अनुकूल जीवनशैली)',
+    descEn: 'Global initiative for mass action to protect the environment',
+    descHi: 'पर्यावरण संरक्षण हेतु जनभागीदारी की वैश्विक पहल',
+    url: 'https://missionlife-moefcc.nic.in',
+    domain: 'missionlife-moefcc.nic.in'
+  }
 ];
 
 const OPERATING_DESKS = [
@@ -129,6 +196,18 @@ export default function PublicHome() {
   const { t, lang } = useGigw();
   const { user } = useAuth() || {};
   const [assetViewMode, setAssetViewMode] = useState('MAP'); // 'MAP' | 'CARDS'
+  const [bannerCircular, setBannerCircular] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/circulars/banner')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.circular) {
+          setBannerCircular(data.circular);
+        }
+      })
+      .catch((err) => console.warn('[BANNER] Failed to load banner circular:', err));
+  }, []);
 
   useEffect(() => {
     const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -160,12 +239,12 @@ export default function PublicHome() {
       <OfflineBanner />
       {/* Panoramic Hydroelectric Dam Hero Section with Crisp Static Background */}
       <section className="gigw-hero-panoramic" aria-labelledby="panoramic-hero-title">
-        {/* Crisp static panoramic dam picture (AVIF / WebP / PNG fallback) */}
+        {/* Static panoramic dam picture. DBIM v3 s.6.1.1 caps a banner at 500 KB:
+            AVIF 197 KB, WebP 454 KB; the 3.7 MB PNG is not served. */}
         <picture className="gigw-hero-panoramic-picture" aria-hidden="true">
-          <source srcSet="/images/sjvn-hero-panoramic.avif" type="image/avif" />
-          <source srcSet="/images/sjvn-hero-panoramic.webp" type="image/webp" />
+          <source srcSet="/images/sjvn-hero-panoramic.avif?v=njhps" type="image/avif" />
           <img
-            src="/images/sjvn-hero-panoramic.png"
+            src="/images/sjvn-hero-panoramic.webp?v=njhps"
             alt="Panoramic aerial view of SJVN Nathpa Jhakri Dam Spillway and Hydro Power Station"
             className="gigw-hero-panoramic-img"
             width="1920"
@@ -312,12 +391,20 @@ export default function PublicHome() {
                 <p className="gigw-desk-desc">{t(`pub.desk.${d.key}.desc`)}</p>
 
                 <div className="gigw-desk-features">
-                  <strong>{t('pub.caps')}</strong>
-                  <ul>
+                  <div className="gigw-desk-features-header">
+                    <div className="gigw-features-title-wrap">
+                      <span className="gigw-features-status-dot" style={{ backgroundColor: d.color }} aria-hidden="true" />
+                      <strong className="gigw-features-title">{t('pub.caps')}</strong>
+                    </div>
+                    <span className="gigw-features-count-badge" aria-label="5 Core Capabilities">5</span>
+                  </div>
+                  <ul className="gigw-features-list">
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <li key={n}>
-                        <Check size={14} className="feature-check" />
-                        <span>{t(`pub.desk.${d.key}.f${n}`)}</span>
+                      <li key={n} className="gigw-feature-item">
+                        <span className="feature-check-badge" aria-hidden="true">
+                          <Check size={11} strokeWidth={2.8} />
+                        </span>
+                        <span className="feature-text">{t(`pub.desk.${d.key}.f${n}`)}</span>
                       </li>
                     ))}
                   </ul>
@@ -429,17 +516,89 @@ export default function PublicHome() {
           <div className="bulletin-left">
             <span className="bulletin-tag">
               <Bell size={13} />
-              <span>{lang === 'hi' ? 'ताज़ा सूचना' : 'LATEST DISCLOSURE'}</span>
+              <span>
+                {lang === 'hi' 
+                  ? 'ताज़ा सूचना' 
+                  : lang === 'gu'
+                  ? 'તાજી સૂચના'
+                  : lang === 'mr'
+                  ? 'ताजी सूचना'
+                  : 'LATEST DISCLOSURE'}
+              </span>
             </span>
             <span className="bulletin-text">
-              {lang === 'hi' 
-                ? 'REIA 1200 MW ISTS सौर ऊर्जा निविदा (Tranche-I) शुद्धिपत्र एवं मासिक CERC Form-IV नियामक विवरणिका उपलब्ध।'
-                : 'REIA 1,200 MW ISTS Solar Bidding (Tranche-I) Corrigendum & Monthly CERC Form-IV Trading Disclosures published.'}
+              {bannerCircular
+                ? (lang === 'hi' && bannerCircular.title_hi
+                    ? bannerCircular.title_hi
+                    : bannerCircular.title_en)
+                : (lang === 'hi'
+                    ? 'निविदाएं, शुद्धिपत्र एवं नियामक प्रकटीकरण सार्वजनिक परिपत्र पृष्ठ पर उपलब्ध हैं।'
+                    : 'Tenders, corrigenda and statutory disclosures are available on the Public Circulars page.')}
             </span>
           </div>
-          <Link to="/disclaimer" className="bulletin-link">
-            <span>{lang === 'hi' ? 'सभी सार्वजनिक सूचनाएँ देखें →' : 'View Public Circulars →'}</span>
+          <Link to="/circulars" className="bulletin-link">
+            <span>
+              {lang === 'hi' 
+                ? 'सभी सार्वजनिक सूचनाएँ देखें →' 
+                : lang === 'gu'
+                ? 'બધી જાહેર સૂચનાઓ જુઓ →'
+                : lang === 'mr'
+                ? 'सर्व सार्वजनिक सूचना पहा →'
+                : 'View Public Circulars →'}
+            </span>
           </Link>
+        </div>
+
+        {/* DBIM Annexure A.4.1.2 item iv: Sector Specific Quote of Hon'ble Prime Minister */}
+        <div className="gigw-pm-quote-section reveal-fade-up">
+          <div className="gigw-pm-quote-card" role="region" aria-labelledby="pm-quote-heading">
+            <div className="gigw-pm-quote-header">
+              <span id="pm-quote-heading" className="gigw-pm-quote-badge">
+                <Quote size={13} style={{ transform: 'rotate(180deg)' }} aria-hidden="true" />
+                <span>{t('pub.quote.eyebrow')}</span>
+              </span>
+              <span className="gigw-pm-quote-context-pill">
+                {t('pub.quote.context')}
+              </span>
+            </div>
+
+            <div className="gigw-pm-quote-body">
+              <Quote size={34} color="#d97706" style={{ flexShrink: 0, opacity: 0.35, marginTop: -4 }} aria-hidden="true" />
+              <blockquote>
+                “{t('pub.quote.text')}”
+              </blockquote>
+            </div>
+
+            <div className="gigw-pm-quote-author-row">
+              <div className="gigw-pm-author-info">
+                <div className="gigw-pm-author-avatar">
+                  <img 
+                    src="/images/pm-narendra-modi.jpg" 
+                    alt={t('pub.quote.author')}
+                    className="gigw-pm-photo-img"
+                    width="58"
+                    height="58"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="gigw-pm-author-details">
+                  <span className="gigw-pm-author-name">{t('pub.quote.author')}</span>
+                  <span className="gigw-pm-author-desig">{t('pub.quote.designation')}</span>
+                </div>
+              </div>
+              <a 
+                href="https://www.pmindia.gov.in" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="gigw-pm-quote-source-tag"
+                aria-label="Prime Minister's Office Portal pmindia.gov.in (opens in a new tab)"
+              >
+                <span>pmindia.gov.in</span>
+                <ExternalLink size={12} aria-hidden="true" />
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* 4 Compliance & Trust Pillars */}
@@ -473,6 +632,49 @@ export default function PublicHome() {
             </div>
           </div>
         </div>
+
+        {/* DBIM Annexure A.4.1.2 item xiv: National Initiatives & Government Portals */}
+        <section className="gigw-initiatives-section" aria-labelledby="initiatives-title">
+          <div className="gigw-initiatives-header">
+            <div className="gigw-initiatives-eyebrow">
+              <Landmark size={12} aria-hidden="true" />
+              <span>{t('pub.initiatives.eyebrow')}</span>
+            </div>
+            <h2 id="initiatives-title" className="gigw-initiatives-title">
+              {t('pub.initiatives.title')}
+            </h2>
+            <p className="gigw-initiatives-sub">
+              {t('pub.initiatives.sub')}
+            </p>
+          </div>
+
+          <div className="gigw-initiatives-grid">
+            {NATIONAL_INITIATIVES.map((item) => (
+              <a
+                key={item.domain}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="gigw-initiative-card"
+                aria-label={`${lang === 'hi' ? item.nameHi : item.nameEn} - ${item.domain} (opens in a new tab)`}
+              >
+                <div>
+                  <div className="gigw-initiative-title">
+                    {lang === 'hi' ? item.nameHi : item.nameEn}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                    {lang === 'hi' ? item.descHi : item.descEn}
+                  </div>
+                </div>
+                <div className="gigw-initiative-domain">
+                  <span>{item.domain}</span>
+                  <ExternalLink size={12} aria-hidden="true" />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
       </section>
     </PublicShell>
   );

@@ -62,10 +62,10 @@ export default function LiveMarketTicker() {
 
   const getExchangeColor = (exchange) => {
     switch (exchange) {
-      case 'IEX': return { bg: '#e0f2fe', text: '#0369a1', border: '#bae6fd', badge: '#0284c7' };
-      case 'PXIL': return { bg: '#ffedd5', text: '#c2410c', border: '#fed7aa', badge: '#ea580c' };
-      case 'HPX': return { bg: '#dcfce7', text: '#15803d', border: '#bbf7d0', badge: '#16a34a' };
-      default: return { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1', badge: '#64748b' };
+      case 'IEX': return { bg: '#e0f2fe', text: '#0369a1', border: '#bae6fd', badge: '#0369a1' };
+      case 'PXIL': return { bg: '#ffedd5', text: '#c2410c', border: '#fed7aa', badge: '#c2410c' };
+      case 'HPX': return { bg: '#dcfce7', text: '#15803d', border: '#bbf7d0', badge: '#15803d' };
+      default: return { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1', badge: '#475569' };
     }
   };
 

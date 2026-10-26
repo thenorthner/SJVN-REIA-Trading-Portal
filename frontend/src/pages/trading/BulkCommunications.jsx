@@ -3,6 +3,7 @@ import { api } from '../../api/client.js';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { PageHeader, Card, Tabs, Tab } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const MODULES = {
   toolbar: [
@@ -169,11 +170,11 @@ export default function BulkCommunications() {
   async function handleSend(e) {
     e.preventDefault();
     if (!subject.trim() || !bodyHtml.trim() || selectedGroups.length === 0) {
-      alert("Please fill in the subject, message body, and select at least one recipient group.");
+      showAlert("Please fill in the subject, message body, and select at least one recipient group.");
       return;
     }
     if (!channels.email && !channels.inApp) {
-      alert("Please select at least one dispatch channel (Email or In-App).");
+      showAlert("Please select at least one dispatch channel (Email or In-App).");
       return;
     }
 
@@ -207,7 +208,7 @@ export default function BulkCommunications() {
         msg += `Email: Dispatched to ${emailCount} recipient(s) via ${emailMode}.\n`;
       }
 
-      alert(msg);
+      showAlert(msg);
       setSubject('');
       setBodyHtml('');
       setSelectedGroups([]);
@@ -215,7 +216,7 @@ export default function BulkCommunications() {
       setChannels({ email: true, inApp: true });
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.error || 'Error sending broadcast');
+      showAlert(err.response?.data?.error || 'Error sending broadcast');
     } finally {
       setIsSending(false);
     }
@@ -288,7 +289,7 @@ export default function BulkCommunications() {
                   className="input"
                 />
                 {files.length > 0 && (
-                  <div style={{ marginTop: 5, fontSize: 13.5, color: 'var(--slate-500)' }}>
+                  <div style={{ marginTop: 5, fontSize: 15, color: 'var(--slate-500)' }}>
                     {files.length} file(s) selected
                   </div>
                 )}
@@ -369,7 +370,7 @@ export default function BulkCommunications() {
                       <td>
                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                           {channels.map(ch => (
-                            <span key={ch} style={{ background: 'var(--border)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>
+                            <span key={ch} style={{ background: 'var(--border)', padding: '2px 6px', borderRadius: 4, fontSize: 14.5 }}>
                               {ch}
                             </span>
                           ))}

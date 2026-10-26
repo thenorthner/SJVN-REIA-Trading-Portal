@@ -90,7 +90,7 @@ export default function ThermalStations() {
             { key: 'contract_no', header: 'PPA' },
             { key: 'capacity_mw', header: 'Capacity', render: (s) => `${s.capacity_mw} MW` },
             { key: 'tenure', header: 'Tenure', render: (s) => `${s.tenure_start} → ${s.tenure_end}` },
-            { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge status="ACTIVE" label="Ready" /> : <span style={{ fontSize: 13.5, color: 'var(--amber-strong)' }}>Missing: {s.missing.join(', ')}</span>) },
+            { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge status="ACTIVE" label="Ready" /> : <span style={{ fontSize: 15, color: 'var(--amber-strong)' }}>Missing: {s.missing.join(', ')}</span>) },
           ]}
           rows={stations}
           emptyMessage="No thermal station set up yet. Onboard the generating company under Thermal → Stakeholders, approve it, then set up the station here."
@@ -143,7 +143,7 @@ export default function ThermalStations() {
             </div>
             <button type="button" className="btn btn-secondary" onClick={previewEcr}>Work out ECR ({tariffs[0].financial_year} norms)</button>
             {ecr && <p style={{ marginTop: 10 }}>ECR = <strong>₹{ecr.ecr}/kWh</strong> — [(GHR − SFC × CVSF) × LPPF / CVPF + SFC × LPSFi] × 100 / (100 − AUX), with CVPF = {ecr.cvpf_kcal_per_kg} kCal/kg (GCV as received less {ecr.gcv_storage_loss_kcal})</p>}
-            <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: 15, color: 'var(--text-muted)' }}>
               Then raise the month's bill under <Link to="/thermal/billing">Monthly Bills &amp; Approval</Link>.
             </p>
           </Card>
@@ -170,7 +170,7 @@ export default function ThermalStations() {
               <Field label="Rebate window (days)"><input type="number" value={setup.rebate_days} onChange={(e) => setSetup({ ...setup, rebate_days: e.target.value })} /></Field>
               <Field label="LPS (% per annum)"><input type="number" step="0.01" value={setup.lps_annual_pct} onChange={(e) => setSetup({ ...setup, lps_annual_pct: e.target.value })} placeholder="blank = LPS Rules" /></Field>
             </div>
-            {gencos.length === 0 && <p style={{ color: 'var(--amber-strong)', fontSize: 13 }}>No approved generating company under Thermal yet — onboard one in <Link to="/thermal/stakeholders">Stakeholders</Link>.</p>}
+            {gencos.length === 0 && <p style={{ color: 'var(--amber-strong)', fontSize: 14.5 }}>No approved generating company under Thermal yet — onboard one in <Link to="/thermal/stakeholders">Stakeholders</Link>.</p>}
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setSetup(null)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Set up</button>

@@ -103,13 +103,13 @@ export default function PxilOrderCreation() {
     <div style={{ padding: 20, maxWidth: 920, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>PXIL</div>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>PXIL</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Pxil Order Creation</h1>
         </div>
-        <Link to="/trading/pxil/summary" style={{ color: 'var(--on-blue)', fontSize: 13 }}>Order Summary →</Link>
+        <Link to="/trading/pxil/summary" style={{ color: 'var(--on-blue)', fontSize: 14.5 }}>Order Summary →</Link>
       </div>
 
-      <p style={{ color: 'var(--red-strong)', fontSize: 13, margin: '0 0 12px' }}>
+      <p style={{ color: 'var(--red-strong)', fontSize: 14.5, margin: '0 0 12px' }}>
         Note* : All fields are mandatory to be filled.
       </p>
 
@@ -185,8 +185,8 @@ export default function PxilOrderCreation() {
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Side *</div>
-            <label style={{ marginRight: 20, fontSize: 14 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 8 }}>Side *</div>
+            <label style={{ marginRight: 20, fontSize: 15.5 }}>
               <input
                 type="radio"
                 name="pxil-side"
@@ -195,7 +195,7 @@ export default function PxilOrderCreation() {
               />{' '}
               Seller
             </label>
-            <label style={{ fontSize: 14 }}>
+            <label style={{ fontSize: 15.5 }}>
               <input
                 type="radio"
                 name="pxil-side"
@@ -207,10 +207,10 @@ export default function PxilOrderCreation() {
           </div>
 
           {error && (
-            <div role="alert" style={{ marginTop: 16, color: 'var(--red-deep)', fontSize: 13 }}>{error}</div>
+            <div role="alert" style={{ marginTop: 16, color: 'var(--red-deep)', fontSize: 14.5 }}>{error}</div>
           )}
           {success && (
-            <div role="status" style={{ marginTop: 16, color: 'var(--on-green-2)', fontSize: 13 }}>
+            <div role="status" style={{ marginTop: 16, color: 'var(--on-green-2)', fontSize: 14.5 }}>
               Order created: <strong>{success.reference_no}</strong> ({success.id}).{' '}
               <Link to="/trading/pxil/summary">View summary</Link>
             </div>

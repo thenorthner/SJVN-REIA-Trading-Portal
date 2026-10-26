@@ -36,8 +36,8 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
       .catch((err) => setLoadError(err.response?.data?.error || 'Could not load the verification checklist.'));
   }, [invoiceId]);
 
-  if (loadError) return <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{loadError}</div>;
-  if (!data) return <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading verification…</div>;
+  if (loadError) return <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{loadError}</div>;
+  if (!data) return <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>Loading verification…</div>;
 
   const writable = canWrite && data.editable;
   const setTech = (key, patch) => { setSaved(false); setData((d) => ({
@@ -95,7 +95,7 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         <strong>Verification Status:</strong>
         <Badge status={STATUS_TONE[data.verification_status] || 'PENDING'} label={data.started ? data.verification_status.replace(/_/g, ' ') : (data.verification_status === 'FAILED' ? 'FAILED (automatic check)' : 'NOT STARTED')} />
-        {data.verified_by && <span style={{ fontSize: 13.5, color: 'var(--text-light)' }}>by {data.verified_by}</span>}
+        {data.verified_by && <span style={{ fontSize: 15, color: 'var(--text-light)' }}>by {data.verified_by}</span>}
       </div>
       {canWrite && !data.editable && (
         <p className="inline-note">The checklist is worked while the bill is with SJVN for a decision; it is read-only now.</p>
@@ -111,20 +111,20 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
         {data.technical.map((t) => (
           <div key={t.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid var(--border, var(--border))' }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 600 }}>
                 {t.label}
                 {t.auto === 'FAILED' && t.status !== 'FAILED' && (
                   <span style={{ fontWeight: 400, color: 'var(--text-light)' }}> · automatic check: {t.auto}</span>
                 )}
               </div>
-              {t.hint && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{t.hint}</div>}
+              {t.hint && <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{t.hint}</div>}
               {writable ? (
                 <input
                   aria-label={`${t.label} note`}
                   placeholder={needsReason(t) ? 'Reason for clearing the failed check (required)' : 'Note (optional)'}
                   value={t.note || ''}
                   onChange={(e) => setTech(t.key, { note: e.target.value })}
-                  style={{ marginTop: 4, width: '100%', fontSize: 13.5, padding: '2px 6px', borderColor: needsReason(t) && !String(t.note || '').trim() ? 'var(--red)' : undefined }}
+                  style={{ marginTop: 4, width: '100%', fontSize: 15, padding: '2px 6px', borderColor: needsReason(t) && !String(t.note || '').trim() ? 'var(--red)' : undefined }}
                 />
               ) : (t.note && <div className="audit-muted">{t.note}</div>)}
             </div>
@@ -184,7 +184,7 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
           <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
             {saving ? 'Saving…' : 'Save Verification'}
           </button>
-          {saved && <span style={{ fontSize: 13, color: 'var(--green)' }}>Verification saved.</span>}
+          {saved && <span style={{ fontSize: 14.5, color: 'var(--green)' }}>Verification saved.</span>}
         </div>
       )}
     </div>

@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 // Purchase and sale rate over time. The point of the chart is the gap between the
 // two lines: the purchase rate swings widely while the margin stays flat, so the
 // two should track each other exactly.
 function RateTrend({ points }) {
-  if (!points.length) return <p style={{ color: 'var(--slate-500)', fontSize: 14 }}>No settled days in this period.</p>;
+  if (!points.length) return <p style={{ color: 'var(--slate-500)', fontSize: 15.5 }}>No settled days in this period.</p>;
 
   const W = 900, H = 260, PAD = { l: 56, r: 16, t: 16, b: 44 };
   const plotW = W - PAD.l - PAD.r, plotH = H - PAD.t - PAD.b;
@@ -44,7 +45,7 @@ function RateTrend({ points }) {
           )
         ))}
       </svg>
-      <div style={{ display: 'flex', gap: 18, fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 18, fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>
         <span><span style={{ display: 'inline-block', width: 14, height: 2, background: '#dc2626', marginRight: 5, verticalAlign: 'middle' }} />Purchase rate (paid to seller)</span>
         <span><span style={{ display: 'inline-block', width: 14, height: 2, background: '#16a34a', marginRight: 5, verticalAlign: 'middle' }} />Sale rate (billed to buyer)</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#2563eb', opacity: 0.3, marginRight: 5 }} />Trading margin</span>
@@ -73,7 +74,7 @@ export default function MarginAssurance() {
       ]);
       setCheck(c); setTrend(t); setExceptions(e);
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to load margin assurance');
+      showAlert(err.response?.data?.error || err.message || 'Failed to load margin assurance');
     } finally {
       setLoading(false);
     }
@@ -123,11 +124,11 @@ export default function MarginAssurance() {
       <Card title="Period">
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>From</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>From</label>
             <input type="date" className="input" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>To</label>
+            <label style={{ display: 'block', fontSize: 14.5, marginBottom: 4 }}>To</label>
             <input type="date" className="input" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} />
           </div>
           <button className="btn btn-ghost" onClick={() => setRange({ from: '', to: '' })}>Clear</button>
@@ -156,7 +157,7 @@ export default function MarginAssurance() {
 
       <Card title="Purchase and sale rate, day by day">
         <RateTrend points={trend} />
-        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
           The purchase rate is market-linked and moves daily; the margin does not. An even band between the two lines is
           what a healthy book looks like — a widening or pinching band is a pricing error worth chasing.
         </p>
@@ -170,7 +171,7 @@ export default function MarginAssurance() {
 
       <Card title={`Receipt exceptions (${exceptions.length})`}>
         <Table columns={exceptionColumns} rows={exceptions} loading={loading} emptyMessage="Every receipt matched what was billed." />
-        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 10 }}>
           Days where the money received did not match the bill. These are small and were never chased in the ledger —
           a TDS adjustment and bank rounding — but they are the list to work through.
         </p>

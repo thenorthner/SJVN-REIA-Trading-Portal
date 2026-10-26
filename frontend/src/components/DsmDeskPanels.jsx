@@ -31,10 +31,10 @@ export function DsmStatementSync({ canWrite, onChanged }) {
     <Card title={`NRPC statements against the register — ${d.totals.to_raise} to raise`}>
       <Table
         columns={[
-          { key: 'week', header: 'Week', render: (r) => <>{r.financial_year} W{r.week_no}{r.revision ? ` ${r.revision}` : ''}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{fmtDate(r.week_start)} → {fmtDate(r.week_end)}</div></> },
-          { key: 'station', header: 'Station', render: (r) => <>{r.entity_name}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
+          { key: 'week', header: 'Week', render: (r) => <>{r.financial_year} W{r.week_no}{r.revision ? ` ${r.revision}` : ''}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{fmtDate(r.week_start)} → {fmtDate(r.week_end)}</div></> },
+          { key: 'station', header: 'Station', render: (r) => <>{r.entity_name}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
           { key: 'statement_amount', header: 'Statement', render: (r) => (r.statement_amount == null ? '—' : <span>{fmtCurrency(Math.abs(r.statement_amount))} {r.statement_amount >= 0 ? 'receivable' : 'payable'}</span>) },
-          { key: 'billed', header: 'Billed so far', render: (r) => <>{fmtCurrency(Math.abs(r.billed_so_far))}<div style={{ fontSize: 12.5 }}>{r.bills.map((b) => b.invoice_no).join(', ')}</div></> },
+          { key: 'billed', header: 'Billed so far', render: (r) => <>{fmtCurrency(Math.abs(r.billed_so_far))}<div style={{ fontSize: 14 }}>{r.bills.map((b) => b.invoice_no).join(', ')}</div></> },
           { key: 'delta', header: 'Delta', render: (r) => (r.delta ? <strong style={{ color: 'var(--amber-strong)' }}>{fmtCurrency(Math.abs(r.delta))} {r.delta > 0 ? 'more from the pool' : 'back to the pool'}</strong> : '—') },
           { key: 'state', header: '', render: (r) => (
             <div>
@@ -59,11 +59,11 @@ export function DsmPoolTracker() {
     <Card title={`NRPC pool — ${fmtCurrency(x.receivable_outstanding)} to come in, ${fmtCurrency(x.payable_outstanding)} to pay · late interest ${t.rate_pct_per_day}% a day`}>
       <Table
         columns={[
-          { key: 'invoice_no', header: 'Pool bill', render: (r) => <>{r.invoice_no}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.contract_no}{r.week ? ` · ${r.week}` : ''}</div></> },
+          { key: 'invoice_no', header: 'Pool bill', render: (r) => <>{r.invoice_no}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.contract_no}{r.week ? ` · ${r.week}` : ''}</div></> },
           { key: 'flow', header: 'Flow', render: (r) => (r.flow === 'RECEIVABLE' ? 'Pool pays SJVN' : 'SJVN pays the pool') },
           { key: 'amount', header: 'Amount', render: (r) => fmtCurrency(r.amount) },
           { key: 'due', header: 'NRPC due', render: (r) => (r.due_date ? fmtDate(r.due_date) : '—') },
-          { key: 'paid', header: 'Paid / UTR', render: (r) => <>{fmtCurrency(r.paid)}<div style={{ fontSize: 12.5 }}>{r.utrs.join(', ') || '—'}</div></> },
+          { key: 'paid', header: 'Paid / UTR', render: (r) => <>{fmtCurrency(r.paid)}<div style={{ fontSize: 14 }}>{r.utrs.join(', ') || '—'}</div></> },
           { key: 'late', header: 'Late', render: (r) => (r.days_late ? <span style={{ color: 'var(--red-deep)' }}>{r.days_late} days</span> : '—') },
           { key: 'interest', header: 'Interest', render: (r) => (r.late_interest ? fmtCurrency(r.late_interest) : '—') },
         ]}

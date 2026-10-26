@@ -276,7 +276,7 @@ export default function HydroReaRun({ onDone }) {
             alignItems: 'center',
             gap: 6,
             padding: '5px 12px',
-            fontSize: '13.5px',
+            fontSize: '15px',
             fontWeight: 500,
             borderRadius: '6px',
             color: 'var(--slate-600)',
@@ -310,7 +310,7 @@ export default function HydroReaRun({ onDone }) {
             gap: '8px',
             padding: '7px 16px',
             borderRadius: '8px',
-            fontSize: '13.5px',
+            fontSize: '15px',
             fontWeight: 600,
             border: 'none',
             cursor: 'pointer',
@@ -333,7 +333,7 @@ export default function HydroReaRun({ onDone }) {
             gap: '8px',
             padding: '7px 16px',
             borderRadius: '8px',
-            fontSize: '13.5px',
+            fontSize: '15px',
             fontWeight: 600,
             border: 'none',
             cursor: 'pointer',
@@ -387,10 +387,10 @@ export default function HydroReaRun({ onDone }) {
                 }}>
                   <FileUp size={28} />
                 </div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--slate-900)' }}>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--slate-900)' }}>
                   Click to select or drag & drop REA PDF here
                 </div>
-                <div style={{ fontSize: '13px', color: 'var(--slate-500)' }}>
+                <div style={{ fontSize: '14.5px', color: 'var(--slate-500)' }}>
                   Supports official NRPC Regional Energy Account PDF files (e.g., REA0826_P.pdf, REA0826_F.pdf)
                 </div>
               </div>
@@ -407,10 +407,10 @@ export default function HydroReaRun({ onDone }) {
                     <FileText size={24} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--slate-900)' }}>
+                    <div style={{ fontSize: '15.5px', fontWeight: 700, color: 'var(--slate-900)' }}>
                       {selectedFile.name}
                     </div>
-                    <div style={{ fontSize: '12.5px', color: 'var(--slate-500)' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--slate-500)' }}>
                       Size: {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                       {detectedMonth && (
                         <span style={{
@@ -433,7 +433,7 @@ export default function HydroReaRun({ onDone }) {
                     type="button"
                     className="btn btn-sm btn-outline"
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ fontSize: '12.5px' }}
+                    style={{ fontSize: '14px' }}
                   >
                     Change File
                   </button>
@@ -489,7 +489,7 @@ export default function HydroReaRun({ onDone }) {
               <span>{running ? 'Processing REA PDF and drafting…' : 'Process REA PDF and draft bills'}</span>
             </button>
           </div>
-          <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'var(--text-light)' }}>
+          <p style={{ margin: '8px 0 0', fontSize: '14.5px', color: 'var(--text-light)' }}>
             The PDF will be parsed for Table D2 Gross Scheduled Generation, normative PAFM %, and multi-state beneficiary allocations.
           </p>
         </form>
@@ -502,7 +502,7 @@ export default function HydroReaRun({ onDone }) {
             <textarea
               id="rea-links" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)}
               placeholder="https://nrpc.gov.in/allfile/…REA0826_P.pdf"
-              style={{ width: '100%', fontFamily: 'monospace', fontSize: 13.5 }}
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: 15 }}
             />
           </Field>
           {linkMonths.length > 0 && (
@@ -524,7 +524,7 @@ export default function HydroReaRun({ onDone }) {
               {running ? 'Fetching REA and drafting…' : 'Fetch REA and draft bills'}
             </button>
           </div>
-          <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>
+          <p style={{ margin: '6px 0 0', fontSize: 15, color: 'var(--text-light)' }}>
             Leave the months blank to bill exactly the months of the pasted links. Start from the first unbilled month of the financial year.
           </p>
         </form>
@@ -587,9 +587,9 @@ export default function HydroReaRun({ onDone }) {
           title="Bills from Regional Energy Account — Instructions & Process Guide"
           width={600}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '13.5px', lineHeight: 1.6, color: 'var(--slate-700)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '15px', lineHeight: 1.6, color: 'var(--slate-700)' }}>
             <div style={{ background: 'var(--t-blue-50)', border: '1px solid var(--t-blue-100)', borderRadius: 8, padding: '12px 14px' }}>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: 'var(--on-blue)', fontWeight: 600 }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '15.5px', color: 'var(--on-blue)', fontWeight: 600 }}>
                 Purpose & Scope
               </h4>
               <p style={{ margin: 0 }}>
@@ -598,7 +598,7 @@ export default function HydroReaRun({ onDone }) {
             </div>
 
             <div>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '15.5px', fontWeight: 600, color: 'var(--slate-900)' }}>
                 Option 1: Upload REA PDF Directly
               </h4>
               <p style={{ margin: 0 }}>
@@ -607,7 +607,7 @@ export default function HydroReaRun({ onDone }) {
             </div>
 
             <div>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '15.5px', fontWeight: 600, color: 'var(--slate-900)' }}>
                 Option 2: Copy REA PDF Links from NRPC
               </h4>
               <ol style={{ margin: 0, paddingLeft: 20 }}>
@@ -619,7 +619,7 @@ export default function HydroReaRun({ onDone }) {
             </div>
 
             <div>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '15.5px', fontWeight: 600, color: 'var(--slate-900)' }}>
                 Date Range & Billing Sequence
               </h4>
               <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -628,7 +628,7 @@ export default function HydroReaRun({ onDone }) {
               </ul>
             </div>
 
-            <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '10px 14px', fontSize: '13.5px', color: 'var(--slate-500)' }}>
+            <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '10px 14px', fontSize: '15px', color: 'var(--slate-500)' }}>
               <strong>Automatic Sweep:</strong> The same run happens automatically after each scheduled REA scan. This desk form is reserved for manual PDF uploads, or for months the automated scan could not reach.
             </div>
           </div>

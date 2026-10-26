@@ -6,11 +6,13 @@ import { Badge, Modal, Field } from './ui.jsx';
 import { DOCUMENT_TAXONOMY } from '../constants/documentTaxonomy.js';
 import { ROLE_GROUPS } from '../roles.js';
 import { fmtDate, fmtDateTime } from '../datetime.js';
+import { showAlert, askConfirm } from '../lib/dialogs.js';
 
 // Sellers, buyers and trading clients send documents in; everyone else at SJVN
 // reads them, and the REIA desk reviews them. Mirrors routes/documents.js.
 export const isOutsideRole = (role) => /^(SELLER|BUYER|TRADING_CLIENT)/.test(role || '');
-export const canReviewDocuments = (role) => [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE].includes(role);
+// Phase B.2: on the REIA desk the checker reviews documents the maker took in.
+export const canReviewDocuments = (role) => [...ROLE_GROUPS.REIA_CHECK, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE].includes(role);
 
 /** Where a document stands, as a badge: the review status, or Expired once its date has passed. */
 export function DocStatus({ doc }) {
@@ -20,19 +22,19 @@ export function DocStatus({ doc }) {
   if (st === 'REJECTED') return <Badge status="REJECTED" />;
   if (st === 'DRAFT') return <Badge status="DRAFT" />;
   if (st === 'PENDING') return <Badge status="PENDING" label="Awaiting SJVN" />;
-  return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>Not Required</span>;
+  return <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>Not Required</span>;
 }
 
 /** The validity date, with how close it is when that matters. */
 export function ExpiryTag({ doc }) {
-  if (!doc.expiry_date) return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>—</span>;
+  if (!doc.expiry_date) return <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>—</span>;
   const d = doc.days_to_expiry;
   const tone = doc.expiry_state === 'EXPIRED' ? { bg: '#fef2f2', fg: '#b91c1c' } : { bg: '#fffbeb', fg: '#b45309' };
   return (
     <div>
-      <div style={{ fontSize: 13 }}>{fmtDate(doc.expiry_date)}</div>
+      <div style={{ fontSize: 14.5 }}>{fmtDate(doc.expiry_date)}</div>
       {doc.expiry_state && (
-        <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: tone.bg, color: tone.fg }}>
+        <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 8px', borderRadius: 999, fontSize: 14.5, fontWeight: 700, background: tone.bg, color: tone.fg }}>
           {doc.expiry_state === 'EXPIRED'
             ? `Expired ${-d} day${d === -1 ? '' : 's'} ago`
             : d === 0 ? 'Expires today' : `Expiring in ${d} day${d === 1 ? '' : 's'}`}
@@ -47,14 +49,14 @@ export function ExtractedChecks({ extracted }) {
   if (!extracted) return null;
   if (!extracted.readable && !extracted.checks?.length) {
     return (
-      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', background: 'var(--slate-50, var(--slate-50))', padding: '8px 10px', borderRadius: 6 }}>
+      <div style={{ fontSize: 15, color: 'var(--slate-500)', background: 'var(--slate-50, var(--slate-50))', padding: '8px 10px', borderRadius: 6 }}>
         No text could be read from this file (a scan or a picture), so its PAN / GSTIN was not checked automatically. Check it by eye.
       </div>
     );
   }
   const found = [...(extracted.pan || []).map((v) => `PAN ${v}`), ...(extracted.gstin || []).map((v) => `GSTIN ${v}`)];
   return (
-    <div style={{ fontSize: 13.5, background: 'var(--slate-50, var(--slate-50))', padding: '8px 10px', borderRadius: 6 }}>
+    <div style={{ fontSize: 15, background: 'var(--slate-50, var(--slate-50))', padding: '8px 10px', borderRadius: 6 }}>
       <div style={{ color: 'var(--slate-600)' }}>
         Read from the file: {found.length ? found.join(' · ') : 'no PAN or GSTIN found'}
       </div>
@@ -84,7 +86,7 @@ export async function downloadAllDocuments(params) {
     const { blob, fileName } = await api.documents.zip(params);
     saveBlob(blob, fileName);
   } catch (err) {
-    alert(await parseErrorBlob(err, 'Could not download the documents'));
+    showAlert(await parseErrorBlob(err, 'Could not download the documents'));
   }
 }
 
@@ -246,7 +248,7 @@ function ExcelViewer({ blob, fileName }) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>
         <div style={{ fontSize: 18, marginBottom: 8 }}>📊 Loading spreadsheet...</div>
-        <div style={{ fontSize: 13.5 }}>Parsing workbook sheets and formulas</div>
+        <div style={{ fontSize: 15 }}>Parsing workbook sheets and formulas</div>
       </div>
     );
   }
@@ -278,7 +280,7 @@ function ExcelViewer({ blob, fileName }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, background: 'var(--bg, var(--slate-50))', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, var(--slate-200))' }}>
         {/* Sheet Tabs */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
+          <span style={{ fontSize: 14.5, fontWeight: 700, textTransform: 'none', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
             Sheets ({sheets.length}):
           </span>
           {sheets.map((s) => (
@@ -288,7 +290,7 @@ function ExcelViewer({ blob, fileName }) {
               onClick={() => handleSheetChange(s)}
               style={{
                 padding: '4px 10px',
-                fontSize: 13.5,
+                fontSize: 15,
                 fontWeight: 600,
                 borderRadius: 6,
                 border: activeSheet === s ? '1px solid var(--primary, #0284c7)' : '1px solid var(--border, var(--slate-300))',
@@ -312,7 +314,7 @@ function ExcelViewer({ blob, fileName }) {
             onChange={(e) => setSearch(e.target.value)}
             style={{
               padding: '5px 10px',
-              fontSize: 13.5,
+              fontSize: 15,
               borderRadius: 6,
               border: '1px solid var(--border, var(--slate-300))',
               background: 'var(--surface, var(--surface))',
@@ -320,7 +322,7 @@ function ExcelViewer({ blob, fileName }) {
               width: 190
             }}
           />
-          <span style={{ fontSize: 13, color: 'var(--text-light, #64748b)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 14.5, color: 'var(--text-light, #64748b)', whiteSpace: 'nowrap' }}>
             {filteredData.length} rows • {maxCols} cols
           </span>
         </div>
@@ -335,7 +337,7 @@ function ExcelViewer({ blob, fileName }) {
         background: 'var(--surface, var(--surface))',
         boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)'
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, fontFamily: 'inherit' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15, fontFamily: 'inherit' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg, var(--slate-100))' }}>
             <tr>
               <th style={{
@@ -345,7 +347,7 @@ function ExcelViewer({ blob, fileName }) {
                 borderBottom: '2px solid var(--border, var(--slate-300))',
                 background: 'var(--bg, var(--slate-200))',
                 color: 'var(--text-light, #64748b)',
-                fontSize: 13,
+                fontSize: 14.5,
                 textAlign: 'center',
                 fontWeight: 700,
                 position: 'sticky',
@@ -361,7 +363,7 @@ function ExcelViewer({ blob, fileName }) {
                   borderBottom: '2px solid var(--border, var(--slate-300))',
                   background: 'var(--bg, var(--slate-100))',
                   color: 'var(--text, #1e293b)',
-                  fontSize: 13,
+                  fontSize: 14.5,
                   fontWeight: 700,
                   textAlign: 'left',
                   whiteSpace: 'nowrap'
@@ -391,7 +393,7 @@ function ExcelViewer({ blob, fileName }) {
                     borderBottom: '1px solid var(--border, var(--slate-200))',
                     background: 'var(--bg, var(--slate-100))',
                     color: 'var(--text-light, #64748b)',
-                    fontSize: 13,
+                    fontSize: 14.5,
                     textAlign: 'center',
                     fontWeight: 600,
                     position: 'sticky',
@@ -543,10 +545,10 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
       {!state.loading && !state.error && state.kind === 'other' && (
         <div style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
             Preview isn't available for this file type
           </div>
-          <div style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 14.5 }}>
             Use the button below to download and view the file locally.
           </div>
         </div>
@@ -555,7 +557,7 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
         <div className="form-actions" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             {state.name && (
-              <span style={{ fontSize: 13.5, color: 'var(--text-light, #64748b)' }}>
+              <span style={{ fontSize: 15, color: 'var(--text-light, #64748b)' }}>
                 {state.name}
               </span>
             )}
@@ -667,7 +669,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                     <div style={{ maxWidth: 260, whiteSpace: 'normal', wordWrap: 'break-word' }}>
                       <DocStatus doc={doc} />
                       {doc.verification_status === 'REJECTED' && doc.verification_notes && (
-                        <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--red-deep)', lineHeight: 1.35 }}>
+                        <div style={{ marginTop: 4, fontSize: 15, color: 'var(--red-deep)', lineHeight: 1.35 }}>
                           <strong>SJVN's remark:</strong> {doc.verification_notes}
                         </div>
                       )}
@@ -709,12 +711,12 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                         <button 
                           className="btn btn-primary btn-sm" 
                           onClick={async () => {
-                            if (window.confirm('Submit this document to SJVN for verification?')) {
+                            if ((await askConfirm('Submit this document to SJVN for verification?'))) {
                               try {
                                 await api.documents.submitL2(doc.latest_version_id);
                                 changed();
                               } catch (e) {
-                                alert(e.response?.data?.error || 'Failed to submit');
+                                showAlert(e.response?.data?.error || 'Failed to submit');
                               }
                             }
                           }}
@@ -777,7 +779,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   // but SJVN_ADMIN / REIA_MAKER / REIA_CHECKER / IT_SUPER_ADMIN are fully empowered
   // to onboard stakeholders directly and upload their regulatory verification documents.
   const isInternal = !isOutsideRole(user?.role);
-  const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'IT_SUPER_ADMIN'].includes(user?.role);
+  const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_MAKER', 'IT_SUPER_ADMIN'].includes(user?.role);
   const filterTypes = (list) => (isInternal && !canAdminDirectUpload ? list.filter((t) => t.category !== 'VERIFY') : list);
 
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);
@@ -820,7 +822,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
       setShowAddDocType(false);
       setNewTypeLabel('');
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to create document type');
+      showAlert(err.response?.data?.error || err.message || 'Failed to create document type');
     } finally {
       setNewTypeSaving(false);
     }
@@ -869,10 +871,10 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
     return (
       <Modal open={open} onClose={onClose} title="Upload Document">
         <div style={{ padding: '8px 0 16px' }}>
-          <p style={{ fontSize: 14, color: 'var(--slate-700)', margin: '0 0 8px' }}>
+          <p style={{ fontSize: 15.5, color: 'var(--slate-700)', margin: '0 0 8px' }}>
             There are no documents for you to upload here.
           </p>
-          <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-500)', margin: 0 }}>
             The documents required for this section are <strong>VERIFY-category</strong> and must be uploaded
             by the stakeholder (Seller / Buyer) or an SJVN Admin.
           </p>
@@ -889,7 +891,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
     if (!file || (!existing && !title)) return;
     
     if (file.size > 10 * 1024 * 1024) {
-      alert('The selected document exceeds the maximum allowed size of 10MB. Please compress the file and try again.');
+      showAlert('The selected document exceeds the maximum allowed size of 10MB. Please compress the file and try again.');
       return;
     }
 
@@ -914,11 +916,11 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
       const r = await api.documents.upload(formData);
       // Say straight away if the file does not agree with the company record.
       const wrong = (r.extracted?.checks || []).filter((c) => !c.ok);
-      if (wrong.length) alert(`Uploaded. Please note:\n\n${wrong.map((c) => `• ${c.text}`).join('\n')}\n\nSJVN's reviewer will see the same note.`);
+      if (wrong.length) showAlert(`Uploaded. Please note:\n\n${wrong.map((c) => `• ${c.text}`).join('\n')}\n\nSJVN's reviewer will see the same note.`);
       onSuccess();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.error || 'Upload failed');
+      showAlert(err.response?.data?.error || 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -928,13 +930,13 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
     <Modal open={open} onClose={onClose} title={existing ? `New version — ${existing.title}` : 'Upload Document'}>
       <form onSubmit={handleSubmit}>
         {existing && (
-          <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--slate-600)' }}>
+          <p style={{ margin: '0 0 12px', fontSize: 14.5, color: 'var(--slate-600)' }}>
             This replaces version {existing.version_number} of <strong>{existing.title}</strong>. The earlier
             versions stay on record{existing.category === 'VERIFY' ? ', and the new one goes to SJVN for verification' : ''}.
           </p>
         )}
         {existing?.verification_status === 'REJECTED' && existing.verification_notes && (
-          <div className="alert alert-error" style={{ fontSize: 13 }}>
+          <div className="alert alert-error" style={{ fontSize: 14.5 }}>
             <strong>Why the last one was rejected:</strong> {existing.verification_notes}
           </div>
         )}
@@ -957,7 +959,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
                 <button
                   type="button"
                   className="btn btn-xs btn-outline"
-                  style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                  style={{ padding: '1px 8px', fontSize: 12.5, fontWeight: 600 }}
                   onClick={() => setShowAddDocType((prev) => !prev)}
                 >
                   {showAddDocType ? 'Cancel New Type' : '+ Add New Type'}
@@ -985,7 +987,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
           </select>
           {showAddDocType && (
             <div style={{ marginTop: 8, padding: 12, background: 'var(--slate-50)', borderRadius: 6, border: '1px solid var(--slate-300)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>
                 Add New Document Type to {moduleName} Master
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -1015,12 +1017,12 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             </div>
           )}
           {presetLocked && (
-            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
               Linked to this regulatory approval — type is fixed.
             </div>
           )}
           {activeDef?.reason && !showAddDocType && (
-            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
               <i>Why is this needed?</i> {activeDef.reason}
             </div>
           )}
@@ -1030,7 +1032,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             <option value="RECORD">Record Only (No approval workflow)</option>
             <option value="VERIFY">Verify (Requires SJVN Admin approval)</option>
           </select>
-          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
             This is strictly enforced by the platform's cross-module document taxonomy rules.
           </div>
         </Field>
@@ -1095,13 +1097,13 @@ export function ReviewModal({ open, doc, onClose, onSuccess }) {
   return (
     <Modal open={open} onClose={onClose} title="Review Document" width={740}>
       {actionError && (
-        <div style={{ padding: '9px 14px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, color: 'var(--red-deep)', fontSize: 13, marginBottom: 16 }}>
+        <div style={{ padding: '9px 14px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, color: 'var(--red-deep)', fontSize: 14.5, marginBottom: 16 }}>
           ⚠️ {actionError}
         </div>
       )}
       <div style={{ marginBottom: 16 }}>
         <strong>{doc.title}</strong> (v{doc.version_number})
-        <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+        <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
           {doc.entity_name ? `${doc.entity_name} · ` : ''}{doc.document_type} · uploaded {fmtDateTime(doc.uploaded_at || doc.created_at)}
           {doc.uploaded_by_name ? ` by ${doc.uploaded_by_name}` : ''}
         </div>
@@ -1191,17 +1193,17 @@ function HistoryModal({ doc, onClose }) {
                   <td><strong>v{v.version_number}</strong></td>
                   <td>
                     {fmtDateTime(v.created_at)}
-                    <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{v.uploaded_by_name || '—'}</div>
+                    <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{v.uploaded_by_name || '—'}</div>
                   </td>
                   <td style={{ maxWidth: 240 }}>
                     <DocStatus doc={v} />
                     {v.verification_notes && (
-                      <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--red-deep)' }}>{v.verification_notes}</div>
+                      <div style={{ marginTop: 4, fontSize: 15, color: 'var(--red-deep)' }}>{v.verification_notes}</div>
                     )}
                   </td>
                   <td>
                     {v.verified_at ? fmtDateTime(v.verified_at) : '—'}
-                    {v.verified_by_name && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{v.verified_by_name}</div>}
+                    {v.verified_by_name && <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{v.verified_by_name}</div>}
                   </td>
                   <td>{v.expiry_date ? fmtDate(v.expiry_date) : '—'}</td>
                   <td>

@@ -59,7 +59,7 @@ function PaymentAdvice({ paymentId, onClose }) {
             <div className="detail-item"><span className="detail-label">Bill value</span><span className="detail-value">{fmtCurrency(p.invoice_total)}</span></div>
           </div>
           <div className="section-title" style={{ marginTop: 16 }}>How the payment is made up</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
             <tbody>
               {line('Amount of the bill settled by this payment', fmtCurrency(p.gross_settled))}
               {line(`Less: tax deducted at source${p.tds_section ? ` (section ${p.tds_section})` : ''}`, p.tds_amount ? `− ${fmtCurrency(p.tds_amount)}` : '—')}
@@ -70,7 +70,7 @@ function PaymentAdvice({ paymentId, onClose }) {
               </tr>
             </tbody>
           </table>
-          <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.5 }}>
+          <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 15, color: 'var(--slate-600)', lineHeight: 1.5 }}>
             {p.rebate_amount > 0 && <li>Early-payment rebate of {fmtCurrency(p.rebate_amount)} was allowed on this payment and reduces what remains payable on the bill.</li>}
             <li>Settled on this bill before this payment: {fmtCurrency(p.settled_before)}; after it: {fmtCurrency(p.settled_after)} of {fmtCurrency(p.invoice_total)}.</li>
             {!p.breakup_known && <li>This payment was recorded before deductions were itemised, so the deduction shows as a single amount. Ask SJVN Finance for its make-up.</li>}
@@ -174,7 +174,7 @@ function Certificates({ entityId }) {
                   <td>{c.certificate_no || '—'}</td>
                   <td style={{ textAlign: 'right' }}>{c.awaited ? '—' : fmtCurrency(c.tds_amount)}</td>
                   <td style={{ textAlign: 'right', color: differs ? 'var(--red-deep)' : 'inherit', fontWeight: differs ? 700 : 400 }} title={differs ? 'Differs from the certificate' : undefined}>{fmtCurrency(c.tds_deducted)}</td>
-                  <td>{c.awaited ? '—' : <>{fmtDate(c.updated_at || c.created_at)}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{c.uploaded_by_name || ''}</div></>}</td>
+                  <td>{c.awaited ? '—' : <>{fmtDate(c.updated_at || c.created_at)}<div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{c.uploaded_by_name || ''}</div></>}</td>
                   <td>
                     {c.awaited
                       ? <Badge status="PENDING" label={data.party_side === 'BUYER' ? (data.can_file ? 'Not yet filed' : 'Awaited from the buyer') : 'Awaited from SJVN Finance'} />
@@ -315,13 +315,13 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
             {s.outstanding.length === 0 ? (
               <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-light)' }}>Nothing is outstanding.</div>
             ) : s.ageing.map((a) => (
-              <div key={a.key} style={{ display: 'grid', gridTemplateColumns: '170px 1fr 150px 190px', gap: 12, alignItems: 'center', padding: '6px 0', fontSize: 13 }}>
+              <div key={a.key} style={{ display: 'grid', gridTemplateColumns: '170px 1fr 150px 190px', gap: 12, alignItems: 'center', padding: '6px 0', fontSize: 14.5 }}>
                 <span>{a.label}</span>
                 <div style={{ height: 14, borderRadius: 999, background: 'var(--slate-100, var(--slate-100))', overflow: 'hidden' }}>
                   <div style={{ width: `${(a.amount / maxBucket) * 100}%`, height: '100%', background: tones[a.key] }} />
                 </div>
                 <strong style={{ textAlign: 'right' }}>{fmtCurrency(a.amount)}</strong>
-                <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>{a.invoices} bill{a.invoices === 1 ? '' : 's'}{a.accrued_lps > 0 ? ` · LPS ${fmtCurrency(a.accrued_lps)}` : ''}</span>
+                <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>{a.invoices} bill{a.invoices === 1 ? '' : 's'}{a.accrued_lps > 0 ? ` · LPS ${fmtCurrency(a.accrued_lps)}` : ''}</span>
               </div>
             ))}
             {s.due_soon.length > 0 && (
@@ -344,7 +344,7 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
                   {!s.outstanding.length && <tr><td colSpan={9} className="empty-cell">Every bill has been settled.</td></tr>}
                   {s.outstanding.map((o) => (
                     <tr key={o.invoice_id}>
-                      <td><strong>{o.invoice_no}</strong>{o.disputed > 0 && <div style={{ fontSize: 13.5, color: 'var(--red-deep)' }}>{fmtCurrency(o.disputed)} under dispute</div>}</td>
+                      <td><strong>{o.invoice_no}</strong>{o.disputed > 0 && <div style={{ fontSize: 15, color: 'var(--red-deep)' }}>{fmtCurrency(o.disputed)} under dispute</div>}</td>
                       <td>{o.contract_no}</td><td>{o.billing_period}</td><td>{o.due_date ? fmtDate(o.due_date) : '—'}</td>
                       <td style={{ textAlign: 'right' }}>{fmtCurrency(o.billed)}</td><td style={{ textAlign: 'right' }}>{fmtCurrency(o.paid)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCurrency(o.balance)}</td>
@@ -367,7 +367,7 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
               <option value="">All entries</option>
               {Object.entries(TYPE).map(([k, [label]]) => <option key={k} value={k}>{label}</option>)}
             </select>
-            {notes > 0 && <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>Debit notes {fmtCurrency(s.totals.debit_notes)} · Credit notes {fmtCurrency(s.totals.credit_notes)}</span>}
+            {notes > 0 && <span style={{ fontSize: 15, color: 'var(--slate-600)' }}>Debit notes {fmtCurrency(s.totals.debit_notes)} · Credit notes {fmtCurrency(s.totals.credit_notes)}</span>}
           </div>
           <div className="table-wrap">
             <table className="data-table" style={{ margin: 0 }}>
@@ -388,9 +388,9 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
                   return (
                     <tr key={`${e.type}-${e.ref}-${e.date}-${i}`}>
                       <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.date)}</td>
-                      <td><span style={{ padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, color: fg, background: bg, whiteSpace: 'nowrap' }}>{label}</span></td>
+                      <td><span style={{ padding: '1px 8px', borderRadius: 999, fontSize: 14.5, fontWeight: 700, color: fg, background: bg, whiteSpace: 'nowrap' }}>{label}</span></td>
                       <td>{e.ref}</td>
-                      <td>{e.particulars}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{e.invoice_no !== e.ref ? `${e.invoice_no} · ` : ''}{e.contract_no}</div></td>
+                      <td>{e.particulars}<div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{e.invoice_no !== e.ref ? `${e.invoice_no} · ` : ''}{e.contract_no}</div></td>
                       <td style={{ textAlign: 'right' }}>{e.debit ? fmtCurrency(e.debit) : ''}</td>
                       <td style={{ textAlign: 'right' }}>{e.credit ? fmtCurrency(e.credit) : ''}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(e.balance)}</td>
@@ -429,7 +429,7 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
                 {payments.map((p) => (
                   <tr key={p.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.date)}</td>
-                    <td>{p.invoice_no}{p.credit_note && <div style={{ fontSize: 13.5, color: 'var(--on-blue)' }}>Credit note adjustment</div>}</td>
+                    <td>{p.invoice_no}{p.credit_note && <div style={{ fontSize: 15, color: 'var(--on-blue)' }}>Credit note adjustment</div>}</td>
                     <td>{p.contract_no}</td><td>{p.ref}</td>
                     <td style={{ textAlign: 'right' }}>{fmtCurrency(p.net + p.tds + p.other)}</td>
                     <td style={{ textAlign: 'right', color: p.tds ? 'var(--red-deep)' : 'inherit' }}>{p.tds ? `− ${fmtCurrency(p.tds)}` : '—'}</td>

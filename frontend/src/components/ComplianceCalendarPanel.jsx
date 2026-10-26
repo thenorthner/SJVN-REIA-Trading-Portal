@@ -53,7 +53,7 @@ export default function ComplianceCalendarPanel() {
                     {i.overdue ? `${-i.days_left} day(s) overdue` : i.days_left === 0 ? 'Today' : `in ${i.days_left} day(s)`}
                   </td>
                   <td><Badge status={KIND_TONE[i.kind] || 'DRAFT'} label={i.kind_label} /> {i.link ? <Link to={i.link}>{i.title}</Link> : i.title}</td>
-                  <td style={{ fontSize: 13 }}>{i.detail}</td>
+                  <td style={{ fontSize: 14.5 }}>{i.detail}</td>
                 </tr>
               ))}
             </tbody>

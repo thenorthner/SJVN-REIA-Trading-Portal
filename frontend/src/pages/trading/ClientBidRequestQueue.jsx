@@ -144,7 +144,7 @@ export default function ClientBidRequestQueue() {
       <Modal open={!!placing} onClose={() => setPlacing(null)} title="Record the bid placed" width={600}>
         {placing && (
           <>
-            <div style={{ display: 'grid', gap: 6, fontSize: 13, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gap: 6, fontSize: 14.5, marginBottom: 12 }}>
               <div><strong>{placing.client_name}</strong> asked to {placing.side === 'BUY' ? 'buy' : 'sell'} {fmtNumber(placing.quantum_mw)} MW</div>
               <div>{placing.exchange} · {placing.product}, delivery {fmtDate(placing.delivery_date)}</div>
               {placing.notes && <div>Note from the client: {placing.notes}</div>}

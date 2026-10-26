@@ -18,12 +18,12 @@ export default function DisputeImpactPanel({ invoice }) {
         {d.net_payable != null && line('Net payable now', <strong>{fmtCurrency(d.net_payable)}</strong>)}
       </div>
       {d.open_disputes.length > 0 && (
-        <div style={{ fontSize: 13.5, marginTop: 8 }}>
+        <div style={{ fontSize: 15, marginTop: 8 }}>
           {d.open_disputes.map((x) => <div key={x.id}>{x.dispute_no} — {String(x.status).replace(/_/g, ' ').toLowerCase()}{x.contested ? ', contested' : ''} · {fmtCurrency(x.amount)}</div>)}
         </div>
       )}
       {(d.notes_pending.length > 0 || d.notes_issued.length > 0) && (
-        <div style={{ fontSize: 13.5, marginTop: 6 }}>
+        <div style={{ fontSize: 15, marginTop: 6 }}>
           {d.notes_pending.map((n) => <div key={n.id}>{n.note_type === 'CREDIT' ? 'Credit' : 'Debit'} note (draft) {fmtCurrency(n.amount)} — {n.reason}</div>)}
           {d.notes_issued.map((n) => <div key={n.id}>{n.note_no}: {n.note_type === 'CREDIT' ? 'credit' : 'debit'} {fmtCurrency(n.amount)}{n.note_type === 'CREDIT' ? `, ${fmtCurrency(n.applied)} applied` : ''}</div>)}
         </div>

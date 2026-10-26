@@ -26,7 +26,7 @@ function saveBlob(blob, name) {
 /** The clock as a short tag, for a list. */
 export function SlaTag({ sla, sjvn = false }) {
   if (!sla) return null;
-  if (sla.stage === 'DONE') return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>{sla.label}</span>;
+  if (sla.stage === 'DONE') return <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>{sla.label}</span>;
   const tone = sla.stage === 'CONTESTED' ? ['#f5f3ff', '#6d28d9']
     : sla.breached ? ['#fef2f2', '#b91c1c']
       : sla.stage === 'RESPONSE' || sla.owner === 'SUBMITTER' ? ['#eff6ff', '#1d4ed8']
@@ -36,7 +36,7 @@ export function SlaTag({ sla, sjvn = false }) {
       : sla.breached ? `Overdue ${Math.max(1, -sla.days_left)}d`
         : sla.days_left === undefined ? '—'
           : `${sla.owner === 'SUBMITTER' ? 'Reply awaited · ' : ''}${sla.days_left}d left`;
-  return <span title={sla.label} style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{text}</span>;
+  return <span title={sla.label} style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 14.5, fontWeight: 700, background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{text}</span>;
 }
 
 export default function DisputeExtrasPanel({ disputeId, onChanged }) {
@@ -78,7 +78,7 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
   const { sla, lps_estimate: lps, resolution: r, group } = x;
   const red = sla.breached && sla.stage !== 'RESPONSE' && sla.stage !== 'DONE';
   const clock = sla.stage === 'DONE' ? null : (
-    <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13.5, fontWeight: 600, border: `1px solid ${red ? '#fca5a5' : sla.stage === 'CONTESTED' ? '#c4b5fd' : 'var(--t-blue-line)'}`, background: red ? 'var(--t-red-50)' : sla.stage === 'CONTESTED' ? 'var(--t-blue-50)' : 'var(--t-blue-50)', color: red ? 'var(--red-deep)' : sla.stage === 'CONTESTED' ? 'var(--on-blue)' : 'var(--on-blue)' }}>
+    <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 15, fontWeight: 600, border: `1px solid ${red ? '#fca5a5' : sla.stage === 'CONTESTED' ? '#c4b5fd' : 'var(--t-blue-line)'}`, background: red ? 'var(--t-red-50)' : sla.stage === 'CONTESTED' ? 'var(--t-blue-50)' : 'var(--t-blue-50)', color: red ? 'var(--red-deep)' : sla.stage === 'CONTESTED' ? 'var(--on-blue)' : 'var(--on-blue)' }}>
       {sla.label}{sla.due ? <span style={{ fontWeight: 400 }}> · due {fmtDateTime(sla.due)}</span> : ''}
       {red && <span style={{ fontWeight: 400 }}> — escalated</span>}
     </div>
@@ -90,7 +90,7 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
       {clock}
 
       {lps.base > 0 && (
-        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main, var(--slate-50))', fontSize: 13 }}>
+        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main, var(--slate-50))', fontSize: 14.5 }}>
           <strong>Late payment surcharge on the amount in question: {fmtCurrency(lps.amount)}</strong>
           {lps.running && lps.per_day > 0 && <span style={{ color: 'var(--amber-strong)', fontWeight: 600 }}> · growing by {fmtCurrency(lps.per_day)} a day</span>}
           <div style={{ color: 'var(--slate-600)', marginTop: 2 }}>
@@ -103,7 +103,7 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
       )}
 
       {group && (
-        <div style={{ marginTop: 10, fontSize: 13 }}>
+        <div style={{ marginTop: 10, fontSize: 14.5 }}>
           <strong>Linked disputes — {group.ref}:</strong> {group.title} · {group.disputes.length} bills · {fmtCurrency(group.total)} in all
           <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
             {group.disputes.map((g) => (
@@ -121,17 +121,17 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
               ? <Badge status={r.response === 'ACCEPTED' ? 'ACTIVE' : 'REJECTED'} label={r.response === 'ACCEPTED' ? 'Accepted by submitter' : r.response === 'CONTESTED' ? 'Contested' : 'Withdrawn'} />
               : <Badge status="PENDING" label="Awaiting submitter's answer" />}
           </div>
-          <div style={{ fontSize: 13, marginTop: 4 }}>
+          <div style={{ fontSize: 14.5, marginTop: 4 }}>
             Accepted {fmtCurrency(r.accepted_amount)} · not accepted {fmtCurrency(r.not_accepted)}
             {r.notes ? <div style={{ marginTop: 4 }}>{r.notes}</div> : null}
           </div>
           {r.response && (
-            <div style={{ fontSize: 13, marginTop: 8, color: r.response === 'ACCEPTED' ? 'var(--on-green-2)' : 'var(--on-blue)' }}>
+            <div style={{ fontSize: 14.5, marginTop: 8, color: r.response === 'ACCEPTED' ? 'var(--on-green-2)' : 'var(--on-blue)' }}>
               <strong>{r.response === 'ACCEPTED' ? 'Accepted' : `Not accepted — ${fmtCurrency(r.contested_amount)} taken to ${r.forum_label}`}</strong> by {r.response_by} on {fmtDateTime(r.response_at)}
               {r.response_note ? ` — ${r.response_note}` : ''}
             </div>
           )}
-          {r.escalation_outcome && <div style={{ fontSize: 13, marginTop: 6 }}><strong>How it ended:</strong> {r.escalation_outcome}</div>}
+          {r.escalation_outcome && <div style={{ fontSize: 14.5, marginTop: 6 }}><strong>How it ended:</strong> {r.escalation_outcome}</div>}
 
           {x.can.respond && !form && (
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

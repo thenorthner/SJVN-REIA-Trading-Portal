@@ -49,15 +49,15 @@ export default function LedgerImport() {
       />
 
       <Card title="Run an import">
-        <p style={{ fontSize: 14, color: 'var(--slate-600)', marginBottom: 16 }}>
+        <p style={{ fontSize: 15.5, color: 'var(--slate-600)', marginBottom: 16 }}>
           The import is repeatable — anything already on the platform is skipped or updated rather than duplicated,
           so running it twice is safe.
         </p>
 
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 300px' }}>
-            <h4 style={{ fontSize: 14, marginBottom: 8 }}>Use the bundled workbook</h4>
-            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 12 }}>
+            <h4 style={{ fontSize: 15.5, marginBottom: 8 }}>Use the bundled workbook</h4>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 12 }}>
               Reads the ledger shipped with the deployment. This is the usual path on a fresh server.
             </p>
             <WriteOnly><button className="btn btn-primary" disabled={busy} onClick={() => run(false)}>
@@ -66,8 +66,8 @@ export default function LedgerImport() {
           </div>
 
           <div style={{ flex: '1 1 300px' }}>
-            <h4 style={{ fontSize: 14, marginBottom: 8 }}>Or upload a newer workbook</h4>
-            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 12 }}>
+            <h4 style={{ fontSize: 15.5, marginBottom: 8 }}>Or upload a newer workbook</h4>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 12 }}>
               Point at an updated .xlsx to bring in later months.
             </p>
             <input
@@ -75,7 +75,7 @@ export default function LedgerImport() {
               type="file"
               accept=".xlsx"
               onChange={e => setFile(e.target.files?.[0] || null)}
-              style={{ display: 'block', marginBottom: 10, fontSize: 13 }}
+              style={{ display: 'block', marginBottom: 10, fontSize: 14.5 }}
             />
             <button className="btn btn-secondary" disabled={busy || !file} onClick={() => run(true)}>
               {busy ? 'Importing…' : 'Import uploaded file'}
@@ -84,7 +84,7 @@ export default function LedgerImport() {
         </div>
 
         {error && (
-          <div style={{ marginTop: 16, padding: 12, background: 'var(--t-red-50)', color: 'var(--red-deep)', borderRadius: 6, fontSize: 14 }}>
+          <div style={{ marginTop: 16, padding: 12, background: 'var(--t-red-50)', color: 'var(--red-deep)', borderRadius: 6, fontSize: 15.5 }}>
             {error}
           </div>
         )}
@@ -109,7 +109,7 @@ export default function LedgerImport() {
                   <tr key={key}>
                     <td>{label}</td>
                     <td><strong>{report[key] ?? 0}</strong></td>
-                    <td style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{meaning}</td>
+                    <td style={{ fontSize: 15, color: 'var(--slate-500)' }}>{meaning}</td>
                   </tr>
                 ))}
               </tbody>
@@ -117,12 +117,12 @@ export default function LedgerImport() {
           </Card>
 
           <Card title="Data corrections applied">
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginBottom: 12 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginBottom: 12 }}>
               Two defects in the source workbook are corrected on the way in, and reported here rather than applied silently.
             </p>
             <div style={{ marginBottom: 14 }}>
               <Badge type="primary">Always applied</Badge>
-              <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 6 }}>
+              <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginTop: 6 }}>
                 Numeric date cells are day/month swapped — the dates were typed DD/MM/YYYY into a workbook reading
                 MM/DD/YYYY, so 1 April was stored as 4 January. Every such cell is decoded and swapped back.
               </p>

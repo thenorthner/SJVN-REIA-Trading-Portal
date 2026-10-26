@@ -4,6 +4,7 @@ import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { showAlert, askConfirm } from '../../lib/dialogs.js';
 
 const EMPTY_FORM = { seller_id: '', start_date: '', end_date: '', quantum_mw: '', expected_tariff: '' };
 
@@ -104,7 +105,7 @@ export default function PreTradeBoard() {
   }
 
   async function handleActionConsent(consentId, action) {
-    if (!window.confirm(`Are you sure you want to ${action} this consent?`)) return;
+    if (!(await askConfirm(`Are you sure you want to ${action} this consent?`))) return;
     try {
       if (action === 'confirm') {
         await api.preTrade.confirmConsent(consentId);
@@ -113,7 +114,7 @@ export default function PreTradeBoard() {
       }
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to process consent action.');
+      showAlert(err.response?.data?.error || 'Failed to process consent action.');
     }
   }
 
@@ -153,7 +154,7 @@ export default function PreTradeBoard() {
                   <div>
                     <strong>{fmtNumber(left)} MW</strong>
                     {left !== r.quantum_mw && (
-                      <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>of {fmtNumber(r.quantum_mw)} declared</div>
+                      <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>of {fmtNumber(r.quantum_mw)} declared</div>
                     )}
                   </div>
                 );
@@ -167,18 +168,18 @@ export default function PreTradeBoard() {
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {r.consents.map(c => (
-                      <div key={c.id} style={{ fontSize: 13.5, border: '1px solid var(--slate-200)', padding: '4px 8px', borderRadius: 4, background: 'var(--slate-50)' }}>
+                      <div key={c.id} style={{ fontSize: 15, border: '1px solid var(--slate-200)', padding: '4px 8px', borderRadius: 4, background: 'var(--slate-50)' }}>
                         <div><strong>{c.buyer_name}</strong>: {c.quantum_mw} MW @ ₹{c.offered_tariff || r.expected_tariff}</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                            <Badge color={c.status === 'CONFIRMED' ? '#10b981' : c.status === 'REJECTED' ? '#ef4444' : '#f59e0b'}>{c.status}</Badge>
                            {c.status === 'PENDING' && (isTRADING || isSeller) && (
                              <div style={{ display: 'flex', gap: 4 }}>
-                                <button style={{ fontSize: 12.5, padding: '2px 4px', cursor: 'pointer', background: '#10b981', color: '#fff', border: 'none', borderRadius: 2 }} onClick={() => handleActionConsent(c.id, 'confirm')}>Confirm</button>
-                                <button style={{ fontSize: 12.5, padding: '2px 4px', cursor: 'pointer', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 2 }} onClick={() => handleActionConsent(c.id, 'reject')}>Reject</button>
+                                <button style={{ fontSize: 14, padding: '2px 4px', cursor: 'pointer', background: '#10b981', color: '#fff', border: 'none', borderRadius: 2 }} onClick={() => handleActionConsent(c.id, 'confirm')}>Confirm</button>
+                                <button style={{ fontSize: 14, padding: '2px 4px', cursor: 'pointer', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 2 }} onClick={() => handleActionConsent(c.id, 'reject')}>Reject</button>
                              </div>
                            )}
                            {c.status === 'CONFIRMED' && c.linked_transaction_id && (
-                               <span style={{ fontSize: 12.5, color: 'var(--on-blue)' }}>Tx: {c.linked_transaction_id}</span>
+                               <span style={{ fontSize: 14, color: 'var(--on-blue)' }}>Tx: {c.linked_transaction_id}</span>
                            )}
                         </div>
                       </div>
@@ -188,7 +189,7 @@ export default function PreTradeBoard() {
             } },
             { key: 'actions', header: 'Actions', render: (r) => (
                (isBuyer || isTRADING) && (r.status === 'OPEN' || r.status === 'PARTIALLY_BOOKED') ? (
-                  <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: 13.5 }} onClick={() => setConsentTarget(r)}>
+                  <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: 15 }} onClick={() => setConsentTarget(r)}>
                     Submit Consent
                   </button>
                ) : null
@@ -245,7 +246,7 @@ export default function PreTradeBoard() {
       {/* Submit Consent Modal */}
       {consentTarget && (
         <Modal open onClose={() => { setConsentTarget(null); setError(''); }} title={`Submit Consent to ${consentTarget.seller_name}`}>
-          <div style={{ marginBottom: 16, padding: 12, background: 'var(--slate-50)', borderRadius: 6, fontSize: 14 }}>
+          <div style={{ marginBottom: 16, padding: 12, background: 'var(--slate-50)', borderRadius: 6, fontSize: 15.5 }}>
              <div><strong>Available Period:</strong> {consentTarget.start_date} to {consentTarget.end_date}</div>
              <div>
                <strong>Uncommitted MW:</strong> {fmtNumber(remainingMw(consentTarget))} MW

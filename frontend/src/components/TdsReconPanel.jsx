@@ -25,7 +25,7 @@ export default function TdsReconPanel() {
     <Card title="TDS vs Form 16A reconciliation">
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <select value={fy} onChange={(e) => setFy(e.target.value)} aria-label="Financial year">{years.map((y) => <option key={y} value={y}>FY {y}</option>)}</select>
-        {data && <span style={{ fontSize: 13 }}>Withheld {fmtCurrency(data.totals.deducted)} · certified {fmtCurrency(data.totals.certified)} · {data.totals.matched} matched, {data.totals.awaited + data.totals.overdue} awaited ({data.totals.overdue} overdue), {data.totals.short + data.totals.excess} mismatched</span>}
+        {data && <span style={{ fontSize: 14.5 }}>Withheld {fmtCurrency(data.totals.deducted)} · certified {fmtCurrency(data.totals.certified)} · {data.totals.matched} matched, {data.totals.awaited + data.totals.overdue} awaited ({data.totals.overdue} overdue), {data.totals.short + data.totals.excess} mismatched</span>}
         <button type="button" className="btn btn-outline btn-sm" onClick={async () => {
           try {
             const blob = await api.tdsRecon.exportXlsx(fy);
@@ -41,12 +41,12 @@ export default function TdsReconPanel() {
             <tbody>
               {data.rows.map((r) => (
                 <tr key={`${r.entity_id}-${r.party_side}-${r.quarter}`}>
-                  <td>{r.entity_name}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.party_side === 'BUYER' ? 'Buyer withholds on SJVN' : 'SJVN withholds on developer'}</div></td>
-                  <td>{r.quarter}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>16A due {fmtDate(r.certificate_due)}</div></td>
+                  <td>{r.entity_name}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.party_side === 'BUYER' ? 'Buyer withholds on SJVN' : 'SJVN withholds on developer'}</div></td>
+                  <td>{r.quarter}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>16A due {fmtDate(r.certificate_due)}</div></td>
                   <td>{r.by_section['194Q'] ? fmtCurrency(r.by_section['194Q']) : '—'}</td>
                   <td>{r.by_section['194C'] ? fmtCurrency(r.by_section['194C']) : '—'}</td>
                   <td>{fmtCurrency(r.deducted)}</td>
-                  <td>{r.certificate ? <>{fmtCurrency(r.certificate.amount)}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.certificate.certificate_no || ''}</div></> : '—'}</td>
+                  <td>{r.certificate ? <>{fmtCurrency(r.certificate.amount)}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.certificate.certificate_no || ''}</div></> : '—'}</td>
                   <td>{r.difference == null ? '—' : fmtCurrency(r.difference)}</td>
                   <td><Badge status={STATE[r.state][0]} label={STATE[r.state][1]} /></td>
                   <td>

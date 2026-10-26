@@ -128,11 +128,11 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
     { key: 'beneficiary_name', header: 'Beneficiary' },
     { key: 'against', header: 'Against', render: (n) => n.against_doc_no || 'Oldest open bills' },
     { key: 'amount', header: 'Amount', render: (n) => fmtCurrency(n.amount) },
-    { key: 'reason', header: 'Reason', render: (n) => <div><div>{n.reason_label}</div><div style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>{n.remarks}</div></div> },
+    { key: 'reason', header: 'Reason', render: (n) => <div><div>{n.reason_label}</div><div style={{ fontSize: 15, color: 'var(--text-muted)' }}>{n.remarks}</div></div> },
     { key: 'status', header: 'Status', render: (n) => (
       <div>
         <Badge status={STATUS_TONE[n.status]} label={n.status} />
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
+        <div style={{ fontSize: 14.5, color: 'var(--text-muted)', marginTop: 3 }}>
           Raised by {n.created_by_name || '—'} on {fmtDate(n.note_date)}
           {n.approved_by_name && n.status !== 'DRAFT' ? ` · ${n.status.toLowerCase()} by ${n.approved_by_name}` : ''}
           {n.ledger_doc_no ? ` · ledger ${n.ledger_doc_no}` : ''}
@@ -189,7 +189,7 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
           <option value="REJECTED">Rejected</option>
           <option value="CANCELLED">Withdrawn</option>
         </select>
-        {pending > 0 && <span style={{ alignSelf: 'center', fontSize: 13, color: 'var(--amber-strong)' }}>{pending} awaiting approval</span>}
+        {pending > 0 && <span style={{ alignSelf: 'center', fontSize: 14.5, color: 'var(--amber-strong)' }}>{pending} awaiting approval</span>}
       </div>
 
       <Card>
@@ -232,7 +232,7 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
               <textarea rows={3} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })}
                 placeholder="e.g. Difference on revised REA for June 2026 issued by NRPC on 12.09.2026" />
             </Field>
-            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            <p style={{ fontSize: 15, color: 'var(--text-muted)', margin: '4px 0 0' }}>
               {form.note_type === 'DEBIT'
                 ? 'On approval this becomes its own bill on the account, due as per the PPA payment terms, and carries late payment surcharge if paid late.'
                 : 'On approval this is set against the chosen bill (or the oldest open ones). It is not money received and earns no rebate; anything it cannot clear stays on the account as credit.'}

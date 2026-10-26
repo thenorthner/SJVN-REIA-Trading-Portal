@@ -94,7 +94,7 @@ function toForm(c) {
 
 function DetailRow({ label, value }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--slate-100)', fontSize: 13 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--slate-100)', fontSize: 14.5 }}>
       <div style={{ color: 'var(--slate-600)', fontWeight: 600 }}>{label}</div>
       <div>{value === null || value === undefined || value === '' ? '—' : value}</div>
     </div>
@@ -264,10 +264,10 @@ export default function ExchangeContractDetail() {
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Exchange Contracts</div>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>Exchange Contracts</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>{form.loa_no || id}</h1>
         </div>
-        <div style={{ display: 'flex', gap: 24, fontSize: 13 }}>
+        <div style={{ display: 'flex', gap: 24, fontSize: 14.5 }}>
           <div><strong>Region:</strong> {form.region || '—'}</div>
           <div><strong>Product Point:</strong> {form.product || '—'}</div>
           <div><strong>Bidding Type:</strong> {form.bidding_type || '—'}</div>
@@ -330,7 +330,7 @@ export default function ExchangeContractDetail() {
                 <Field label="Buyer/Seller?" required>
                   <div style={{ display: 'flex', gap: 16, height: 36, alignItems: 'center' }}>
                     {['Buyer', 'Seller'].map((opt) => (
-                      <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                      <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                         <input type="radio" name="side" checked={form.side === opt} onChange={() => set('side', opt)} />
                         {opt}
                       </label>
@@ -340,7 +340,7 @@ export default function ExchangeContractDetail() {
                 <Field label="Carry Over" required>
                   <div style={{ display: 'flex', gap: 16, height: 36, alignItems: 'center' }}>
                     {['Yes', 'No'].map((opt) => (
-                      <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                      <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                         <input type="radio" name="carry_over" checked={form.carry_over === opt} onChange={() => set('carry_over', opt)} />
                         {opt}
                       </label>
@@ -378,7 +378,7 @@ export default function ExchangeContractDetail() {
                 <Field label="Is source of energy renewable?">
                   <div style={{ display: 'flex', gap: 16, height: 36, alignItems: 'center' }}>
                     {['Yes', 'No'].map((opt) => (
-                      <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                      <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                         <input type="radio" name="is_renewable" checked={form.is_renewable === opt} onChange={() => set('is_renewable', opt)} />
                         {opt}
                       </label>
@@ -405,7 +405,7 @@ export default function ExchangeContractDetail() {
 
           <FormSection title="Order Details">
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontSize: 14.5 }}>
                 <thead style={{ background: '#101a2e', color: '#fff' }}>
                   <tr>
                     <th colSpan="2" style={{ padding: 8, textAlign: 'center' }}>Date</th>
@@ -418,7 +418,7 @@ export default function ExchangeContractDetail() {
                       <button type="button" style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px' }} onClick={addScheduleRow}>+</button>
                     </th>}
                   </tr>
-                  <tr style={{ background: '#7eb3de', fontSize: 13, fontWeight: 500 }}>
+                  <tr style={{ background: '#7eb3de', fontSize: 14.5, fontWeight: 500 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
                     <th style={{ padding: '4px 8px' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>
@@ -534,7 +534,7 @@ export default function ExchangeContractDetail() {
           </FormSection>
 
           {error && (
-            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>
               {error}
             </div>
           )}
@@ -566,7 +566,7 @@ export default function ExchangeContractDetail() {
             <h2 style={{ margin: 0, fontSize: 18 }}>Settlement &amp; Billing</h2>
             <Link to="/billing/view-bills" className="btn btn-sm btn-outline">View Bills →</Link>
           </div>
-          <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--slate-500)' }}>
+          <p style={{ margin: '0 0 14px', fontSize: 14.5, color: 'var(--slate-500)' }}>
             Cleared exchange bids for this contract, priced the same way as Generate Bill / View Bills.
           </p>
 
@@ -592,9 +592,9 @@ export default function ExchangeContractDetail() {
           </div>
 
           {settleBusy && !settlement ? (
-            <p style={{ color: 'var(--slate-500)', fontSize: 13 }}>Computing the settled position…</p>
+            <p style={{ color: 'var(--slate-500)', fontSize: 14.5 }}>Computing the settled position…</p>
           ) : !settlement ? (
-            <p style={{ color: 'var(--slate-500)', fontSize: 13 }}>Could not load settlement — check that cleared bids exist for this contract.</p>
+            <p style={{ color: 'var(--slate-500)', fontSize: 14.5 }}>Could not load settlement — check that cleared bids exist for this contract.</p>
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
@@ -607,9 +607,9 @@ export default function ExchangeContractDetail() {
                   ['Client position', `₹${fmtNumber(settlement.money?.client_energy_position)}`, settlement.side === 'Buyer' ? 'buy-side' : 'sell-side'],
                 ].map(([label, value, sub]) => (
                   <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
-                    <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
                     <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
-                    <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{sub}</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>{sub}</div>
                   </div>
                 ))}
               </div>
@@ -618,7 +618,7 @@ export default function ExchangeContractDetail() {
                 <Badge type={(settlement.cleared?.cleared_mwh ?? 0) > 0 ? 'success' : 'warning'}>
                   {(settlement.cleared?.cleared_mwh ?? 0) > 0 ? 'FINAL' : 'NO CLEARANCE'}
                 </Badge>
-                <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>
+                <span style={{ fontSize: 15, color: 'var(--slate-600)' }}>
                   {settlement.cleared?.bids ?? 0} bid(s)
                   {settlement.cleared?.days ? ` · ${settlement.cleared.days} day(s)` : ''}
                   {settlement.cleared?.period_from ? ` · ${settlement.cleared.period_from} to ${settlement.cleared.period_to}` : ''}
@@ -627,7 +627,7 @@ export default function ExchangeContractDetail() {
               </div>
 
               {settlement.warnings?.length > 0 && (
-                <ul style={{ margin: '0 0 12px 18px', fontSize: 13.5, color: 'var(--on-amber)' }}>
+                <ul style={{ margin: '0 0 12px 18px', fontSize: 15, color: 'var(--on-amber)' }}>
                   {settlement.warnings.map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               )}
@@ -644,14 +644,14 @@ export default function ExchangeContractDetail() {
 
               {billMsg && (
                 <div style={{
-                  marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
+                  marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 14.5,
                   background: billMsg.ok ? 'var(--t-green-50)' : 'var(--t-red-50)',
                   border: `1px solid ${billMsg.ok ? 'var(--t-green-line)' : 'var(--t-red-line)'}`,
                   color: billMsg.ok ? 'var(--on-green)' : 'var(--on-red)',
                 }}>
                   {billMsg.text}
                   {billMsg.warnings?.length > 0 && (
-                    <ul style={{ margin: '6px 0 0 18px', fontSize: 13.5 }}>
+                    <ul style={{ margin: '6px 0 0 18px', fontSize: 15 }}>
                       {billMsg.warnings.map((w, i) => <li key={i}>{w}</li>)}
                     </ul>
                   )}
@@ -659,9 +659,9 @@ export default function ExchangeContractDetail() {
               )}
 
               <div style={{ marginTop: 18 }}>
-                <strong style={{ fontSize: 13 }}>Bills raised against this contract</strong>
+                <strong style={{ fontSize: 14.5 }}>Bills raised against this contract</strong>
                 {contractInvoices.length === 0 ? (
-                  <p style={{ color: 'var(--slate-500)', fontSize: 13, marginTop: 6 }}>None yet.</p>
+                  <p style={{ color: 'var(--slate-500)', fontSize: 14.5, marginTop: 6 }}>None yet.</p>
                 ) : (
                   <div style={{ marginTop: 8 }}>
                     <Table

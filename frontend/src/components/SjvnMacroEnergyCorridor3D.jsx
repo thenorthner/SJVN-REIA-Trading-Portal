@@ -99,7 +99,7 @@ export default function SjvnMacroEnergyCorridor3D({
             </svg>
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
                 SJVN Fleet-Wide Hydro-Thermal Macro Energy Corridor
               </span>
@@ -107,7 +107,7 @@ export default function SjvnMacroEnergyCorridor3D({
                 background: 'rgba(29, 78, 216, 0.2)',
                 color: '#60a5fa',
                 border: '1px solid rgba(29, 78, 216, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -116,14 +116,14 @@ export default function SjvnMacroEnergyCorridor3D({
                 EXECUTIVE FLEET STREAM
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               {fleet.map((s) => `${s.name} (${s.capacity_mw} MW)`).join(' + ') || 'No stations on record'} ➔ Grid Injection ➔ Revenue Realization
             </div>
           </div>
         </div>
 
         {/* Fleet Filter Tabs */}
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {[
             { id: 'ALL', label: `All Fleet (${fmtNumber(mwOf(), 0)} MW)` },
             { id: 'HYDRO', label: `Hydro Fleet (${fmtNumber(mwOf('HYDRO'), 0)} MW)` },
@@ -134,7 +134,7 @@ export default function SjvnMacroEnergyCorridor3D({
               type="button"
               className={`btn btn-xs ${filterVertical === tab.id ? 'btn-primary' : 'btn-ghost'}`}
               style={{
-                fontSize: 12,
+                fontSize: 13.5,
                 padding: '4px 10px',
                 background: filterVertical === tab.id ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.04)',
                 borderColor: filterVertical === tab.id ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)',
@@ -172,22 +172,22 @@ export default function SjvnMacroEnergyCorridor3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 1: GENERATION FLEET
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>{filteredStations.length} Units</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>{filteredStations.length} Units</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Live Installed Capacity</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Live Installed Capacity</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Average PAFM: {kpis?.avgPafmPct != null ? `${kpis.avgPafmPct}%` : '—'}
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Installed Capacity</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Installed Capacity</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
-              {fmtNumber(totalCapacityMw, 0)} <span style={{ fontSize: 13, fontWeight: 500 }}>MW</span>
+              {fmtNumber(totalCapacityMw, 0)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>MW</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 3 }}>
               {filteredStations.length} station{filteredStations.length === 1 ? '' : 's'} on record
             </div>
           </div>
@@ -208,22 +208,22 @@ export default function SjvnMacroEnergyCorridor3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#c084fc', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#c084fc', letterSpacing: '0.04em' }}>
               STAGE 2: GRID INJECTION
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>Monthly Scheduled</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Monthly Scheduled</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Ex-Bus Energy Supply</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Ex-Bus Energy Supply</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             NRPC & ERPC Certified REA
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Gross Energy Scheduled</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Gross Energy Scheduled</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: '#c084fc', fontVariantNumeric: 'tabular-nums' }}>
-              {fmtNumber(totalGenMu, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>MU</span>
+              {fmtNumber(totalGenMu, 1)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>MU</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 3 }}>
               Latest billed month · Hydro: {fmtNumber(muOf('HYDRO'), 1)} MU{mwOf('THERMAL') > 0 ? ` | Thermal: ${fmtNumber(muOf('THERMAL'), 1)} MU` : ''}
             </div>
           </div>
@@ -244,22 +244,22 @@ export default function SjvnMacroEnergyCorridor3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
               STAGE 3: COMMERCIAL DEMAND
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>Monthly Billed</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>Monthly Billed</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Two-Part Tariff Revenue</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Two-Part Tariff Revenue</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Capacity + Energy Charges
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Total Monthly Demand</div>
+            <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Total Monthly Demand</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
-              ₹{fmtNumber(totalBillingCr, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>Cr</span>
+              ₹{fmtNumber(totalBillingCr, 1)} <span style={{ fontSize: 14.5, fontWeight: 500 }}>Cr</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 3 }}>
               Latest billed month · {kpis?.beneficiariesCount ?? 0} beneficiaries
             </div>
           </div>
@@ -280,11 +280,11 @@ export default function SjvnMacroEnergyCorridor3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#4ade80', letterSpacing: '0.04em' }}>
               STAGE 4: CASH REALIZATION
             </span>
             <span style={{
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               background: 'rgba(74, 222, 128, 0.2)',
               color: '#4ade80',
@@ -294,17 +294,17 @@ export default function SjvnMacroEnergyCorridor3D({
               {avgCollectionEff != null ? `${avgCollectionEff.toFixed(1)}% RECOVERY` : 'NOT BILLED'}
             </span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Collections & Aging</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Collections & Aging</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Realized: ₹{fmtNumber(totalRealizedCr, 1)} Cr
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Realized Collections:</span>
               <span style={{ fontWeight: 700, color: '#4ade80' }}>₹{fmtNumber(totalRealizedCr, 1)} Cr</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Overdue (past due date):</span>
               <span style={{ fontWeight: 700, color: totalOverdueCr > 0 ? '#f87171' : '#4ade80' }}>
                 ₹{fmtNumber(totalOverdueCr, 1)} Cr
@@ -322,7 +322,7 @@ export default function SjvnMacroEnergyCorridor3D({
         position: 'relative',
         zIndex: 2,
       }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 10 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: '#94a3b8', marginBottom: 10 }}>
           SJVN Operating Units Breakdown:
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
@@ -340,9 +340,9 @@ export default function SjvnMacroEnergyCorridor3D({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc' }}>{st.name}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{st.name}</span>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 6px',
                   borderRadius: 4,
@@ -352,7 +352,7 @@ export default function SjvnMacroEnergyCorridor3D({
                   {st.capacity_mw} MW
                 </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8', marginTop: 4 }}>
                 <span>{st.latest_month ? `Billed ${st.latest_month}: ₹${fmtNumber(st.monthly_billing_cr, 1)} Cr` : 'Not billed yet'}</span>
                 <span style={{ color: st.overdue_dues_cr > 0 ? '#f87171' : '#4ade80' }}>
                   {st.overdue_dues_cr > 0 ? `Overdue: ₹${fmtNumber(st.overdue_dues_cr, 1)} Cr` : 'Nothing overdue'}
@@ -371,7 +371,7 @@ export default function SjvnMacroEnergyCorridor3D({
           border: '1px solid rgba(59, 130, 246, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',

@@ -11,6 +11,7 @@ import { ThermalBillForm, ThermalBillSummary } from './ThermalBillForm.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { fmtDate } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
+import { triggerUrjaCelebration } from '../../components/UrjaCelebration.jsx';
 import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab,
   fmtCurrency, fmtNumber,
@@ -77,7 +78,7 @@ function BillBlock({ title, children }) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{
-        fontWeight: 600, fontSize: 13, padding: '6px 0', marginBottom: 4,
+        fontWeight: 600, fontSize: 14.5, padding: '6px 0', marginBottom: 4,
         borderBottom: '1px solid var(--border)',
       }}>{title}</div>
       <table className="data-table" style={{ width: '100%' }}>
@@ -101,7 +102,7 @@ function StationBillSheet({ bill }) {
     <div>
       <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 300, background: 'var(--slate-50)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Charge Breakdown</h4>
+          <h4 style={{ fontSize: 14.5, marginBottom: 16, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Charge Breakdown</h4>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -109,23 +110,23 @@ function StationBillSheet({ bill }) {
                   {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                 </Pie>
                 <Tooltip formatter={(val) => fmtCurrency(val)} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 13.5 }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 15 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 300, background: 'var(--slate-50)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Energy Schedule (MWh)</h4>
+          <h4 style={{ fontSize: 14.5, marginBottom: 16, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Energy Schedule (MWh)</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', justifyContent: 'center', paddingBottom: 20 }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-light)' }}>Total Ex-Bus</span>
+                <span style={{ fontSize: 14.5, color: 'var(--text-light)' }}>Total Ex-Bus</span>
                 <span style={{ fontWeight: 600 }}>{fmtNumber(bill.e1_ex_bus_scheduled_kwh / 1000, 1)}</span>
              </div>
              <div style={{ background: 'var(--border)', height: 8, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
                 <div style={{ width: `${(bill.e3_saleable_scheduled_kwh / bill.e1_ex_bus_scheduled_kwh) * 100}%`, background: 'var(--primary)', height: '100%' }} />
                 <div style={{ width: `${(bill.e2_free_power_kwh / bill.e1_ex_bus_scheduled_kwh) * 100}%`, background: 'var(--green)', height: '100%' }} />
              </div>
-             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15 }}>
                 <span style={{ color: 'var(--primary)' }}>Saleable: {fmtNumber(bill.e3_saleable_scheduled_kwh / 1000, 1)}</span>
                 <span style={{ color: 'var(--green)' }}>Free (Home): {fmtNumber(bill.e2_free_power_kwh / 1000, 1)}</span>
              </div>
@@ -224,7 +225,7 @@ function BeneficiarySheet({ lines, bill }) {
         <span>
           {r.beneficiary_name}
           {r.parent_state && (
-            <span style={{ color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>· {r.parent_state}</span>
+            <span style={{ color: 'var(--text-light)', fontSize: 14.5, marginLeft: 6 }}>· {r.parent_state}</span>
           )}
         </span>
       ),
@@ -270,11 +271,11 @@ function BeneficiarySheet({ lines, bill }) {
     <div>
       {lines.length > 0 && (
         <div style={{ marginBottom: 24, height: 260, background: 'var(--slate-50)', padding: '16px 20px', borderRadius: 12, border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Top Beneficiaries by Total Charge</h4>
+          <h4 style={{ fontSize: 14.5, marginBottom: 12, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Top Beneficiaries by Total Charge</h4>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
               <XAxis type="number" hide />
-              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
+              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} />
               <Tooltip formatter={(val) => fmtCurrency(val)} cursor={{ fill: 'var(--slate-200)' }} />
               <Bar dataKey="value" fill="var(--primary)" radius={[0, 4, 4, 0]} barSize={16} />
             </BarChart>
@@ -371,7 +372,7 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
 
   return (
     <div>
-      <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 0 }}>
+      <p style={{ color: 'var(--text-light)', fontSize: 14.5, marginTop: 0 }}>
         Only the REA percentage is held as master data. The free energy to the home state is carved
         out of that state&apos;s own share, and the remainder is scaled back to 100% so it can carry
         the station&apos;s charges — which is why the two right-hand columns are derived here rather
@@ -408,7 +409,7 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
       {canWrite && editing && (
         <form onSubmit={save} style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
           {err && <div className="alert alert-error" role="alert">{err}</div>}
-          <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 0 }}>
+          <p style={{ color: 'var(--text-light)', fontSize: 14.5, marginTop: 0 }}>
             Paste the REA allocation sheet — one beneficiary per line, name and percentage separated
             by a tab (a copy straight out of Excel works). Use the percentage that includes equity
             and free power, after any Sale of Rights share has been reallocated. Add a third column
@@ -433,7 +434,7 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
           <Field label="Allocation sheet" required htmlFor="hb-paste">
             <textarea
               id="hb-paste" rows={10} value={paste} onChange={(e) => setPaste(e.target.value)} required
-              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
+              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14.5, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
               placeholder={'CHANDIGARH\t1.714551\nTPDDL\t2.905400\tDELHI\nGoHP*\t34.000000'}
             />
           </Field>
@@ -451,18 +452,18 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
                 {parsed.closesOn100 ? ' — closes on 100%' : ' — must close on 100% before a bill can be raised'}
               </div>
               {parsed.rows.some((r) => r.is_home_state) ? (
-                <div style={{ color: 'var(--text-light)', fontSize: 13.5 }}>
+                <div style={{ color: 'var(--text-light)', fontSize: 15 }}>
                   Home state: {parsed.rows.filter((r) => r.is_home_state).map((r) => r.beneficiary_name).join(', ')}
                   {' '}— carries the {alloc.fehs_pct}% free power
                 </div>
               ) : (
-                <div style={{ color: 'var(--red)', fontSize: 13.5 }}>
+                <div style={{ color: 'var(--red)', fontSize: 15 }}>
                   No home state marked — add a <code>*</code> after the name of the state that
                   receives the {alloc.fehs_pct}% free power
                 </div>
               )}
               {parsed.errors.map((e2) => (
-                <div key={e2} style={{ color: 'var(--red)', fontSize: 13.5 }}>{e2}</div>
+                <div key={e2} style={{ color: 'var(--red)', fontSize: 15 }}>{e2}</div>
               ))}
             </div>
           )}
@@ -538,7 +539,7 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
 
   return (
     <Card title="Regulation of power — exclude beneficiaries from the energy calculation">
-      <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+      <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
         {fmtNumber(ursNr, 1)} kWh is reported as un-requisitioned surplus for this month. Tick each
         beneficiary whose supply was regulated and enter what was withheld from it. The deductions
         must add up to the surplus before the bill can be raised. A regulated beneficiary still
@@ -560,7 +561,7 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
               <th scope="col">
                 Actual scheduled energy
                 {!exact && (
-                  <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 13, display: 'block' }}>
+                  <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 14.5, display: 'block' }}>
                     approximate until the bill is computed
                   </span>
                 )}
@@ -579,10 +580,10 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
                   <td>
                     {r.beneficiary_name}
                     {r.parent_state && (
-                      <span style={{ color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>· {r.parent_state}</span>
+                      <span style={{ color: 'var(--text-light)', fontSize: 14.5, marginLeft: 6 }}>· {r.parent_state}</span>
                     )}
                     {caseOf(r.beneficiary_name) && (
-                      <div style={{ fontSize: 12.5, color: 'var(--amber-strong)' }}>
+                      <div style={{ fontSize: 14, color: 'var(--amber-strong)' }}>
                         Regulated — {caseOf(r.beneficiary_name).case_no}, {caseOf(r.beneficiary_name).regulation_pct}% from {caseOf(r.beneficiary_name).regulate_from}
                       </div>
                     )}
@@ -599,7 +600,7 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
                       placeholder="0"
                     />
                     {over && (
-                      <div style={{ color: 'var(--red)', fontSize: 13 }}>
+                      <div style={{ color: 'var(--red)', fontSize: 14.5 }}>
                         more than it was scheduled
                       </div>
                     )}
@@ -709,7 +710,7 @@ function BillProcessGuide({ label = 'hydro' }) {
         {open ? '▼' : '▶'} How a {label} bill is processed — Draft → Approval → Issue → Release → Send → Payment
       </button>
       {open && (
-        <ol style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: 13, lineHeight: 1.6 }}>
+        <ol style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: 14.5, lineHeight: 1.6 }}>
           {PROCESS_STEPS.map(([t, d]) => <li key={t}><strong>{t}.</strong> {d}</li>)}
         </ol>
       )}
@@ -905,6 +906,13 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
           : r.outcome === 'REJECTED' ? `${r.bill_no} rejected.`
             : `${r.bill_no} is now with ${r.now_with}.`,
       );
+      if (r.outcome === 'APPROVED') {
+        triggerUrjaCelebration({
+          title: 'Bill approved',
+          message: `${r.bill_no} is approved and can now be issued.`,
+          badge: 'Station billing',
+        });
+      }
       setActing(null);
       loadBills(); loadInbox();
     } catch (err) {
@@ -932,6 +940,11 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       await api.hydroBilling.release(bill.id);
       setNotice(`${bill.bill_no} released — it can now be printed and despatched.`);
       loadBills();
+      triggerUrjaCelebration({
+        title: 'Bill released',
+        message: `${bill.bill_no} can now be printed and despatched.`,
+        badge: 'Station billing',
+      });
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -1005,7 +1018,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
         <span>
           {fmtCurrency(r.total_charges)}
           {r.differential_amount != null && (
-            <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>
+            <span style={{ display: 'block', fontSize: 14.5, color: 'var(--text-light)' }}>
               differential {fmtCurrency(r.differential_amount)}
             </span>
           )}
@@ -1019,7 +1032,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       render: (r) => (r.approval_status === 'APPROVED'
         ? <Badge status="APPROVED" label="APPROVED" />
         : (
-          <span style={{ fontSize: 13.5, color: r.approval_status === 'REJECTED' ? 'var(--red)' : 'var(--text-light)' }}>
+          <span style={{ fontSize: 15, color: r.approval_status === 'REJECTED' ? 'var(--red)' : 'var(--text-light)' }}>
             {r.approval_status === 'IN_APPROVAL'
               ? <>with <strong>{r.pending_with || 'an approver'}</strong>{r.pending_since ? <> since {fmtDate(r.pending_since)}</> : null}</>
               : r.approval_status === 'REJECTED' ? <>rejected{r.rejection_comment ? <>: {r.rejection_comment}</> : null}</> : 'not sent'}
@@ -1029,7 +1042,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
     {
       key: 'next',
       header: 'Next step',
-      render: (r) => <span style={{ fontSize: 13.5 }}>{nextStepOf(r, user)}</span>,
+      render: (r) => <span style={{ fontSize: 15 }}>{nextStepOf(r, user)}</span>,
     },
     {
       key: 'actions',
@@ -1119,7 +1132,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
 
       {inbox.length === 0 && (
         <Card title="Waiting for your approval (0)">
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+          <p style={{ margin: 0, fontSize: 14.5, color: 'var(--text-muted)' }}>
             Nothing is waiting on you. A bill sent to you for approval appears here with a Review button.
           </p>
         </Card>
@@ -1191,8 +1204,8 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       <Card title="REA Upload (Monthly Bill)">
         <form onSubmit={doPreview}>
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
-            <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 13.5 }}>1</span>
+            <h4 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 15 }}>1</span>
               Station & Period
             </h4>
             <div className="form-grid">
@@ -1223,8 +1236,8 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
           </div>
 
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
-             <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 13.5 }}>2</span>
+             <h4 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 15 }}>2</span>
               Output & Tariffs
             </h4>
             <div className="form-grid">
@@ -1256,8 +1269,8 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
           </div>
 
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
-             <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 13.5 }}>3</span>
+             <h4 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 15 }}>3</span>
               Adjustments & Meta
             </h4>
             <div className="form-grid">
@@ -1285,11 +1298,11 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 12, padding: '16px 20px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-sm)' }}>
-            <button type="submit" className="btn btn-primary" disabled={!stationId || previewing} style={{ padding: '10px 24px', fontSize: 14 }}>
+            <button type="submit" className="btn btn-primary" disabled={!stationId || previewing} style={{ padding: '10px 24px', fontSize: 15.5 }}>
               {previewing ? 'Computing…' : 'Compute the bill'}
             </button>
             {preview && canWrite && (
-              <button type="button" className="btn btn-secondary" onClick={doSave} disabled={saving} style={{ padding: '10px 24px', fontSize: 14 }}>
+              <button type="button" className="btn btn-secondary" onClick={doSave} disabled={saving} style={{ padding: '10px 24px', fontSize: 15.5 }}>
                 {saving ? 'Saving…' : 'Save as draft'}
               </button>
             )}
@@ -1298,7 +1311,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       </Card>
 
       <Card title="Beneficiary energy from the REA (table D2)">
-        <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+        <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
           The bill is billed on each beneficiary&apos;s own scheduled energy as the Regional Energy
           Account states it, not on a share of the station total — on NJHPS for June 2026 the two
           differ by a few thousand kWh per beneficiary. Paste the REA&apos;s table D2 column here to
@@ -1328,7 +1341,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
               <textarea
                 id="hb-epaste" rows={8} value={energyPaste}
                 onChange={(e) => setEnergyPaste(e.target.value)}
-                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
+                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14.5, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
                 placeholder={'CHANDIGARH\t125.396150\nTPDDL\t212.428759\nGoHP\t1608.549250'}
               />
             </Field>
@@ -1352,7 +1365,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
                   const e3 = preview?.bill?.e3_saleable_scheduled_kwh;
                   if (e3 == null) {
                     return (
-                      <div style={{ color: 'var(--text-light)', fontSize: 13.5 }}>
+                      <div style={{ color: 'var(--text-light)', fontSize: 15 }}>
                         Compute the bill to check this against the month&apos;s saleable energy (E3).
                       </div>
                     );
@@ -1360,14 +1373,14 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
                   const diff = Math.round((parsedEnergy.total - e3) * 10) / 10;
                   const ties = Math.abs(diff) <= 1;
                   return (
-                    <div style={{ color: ties ? 'var(--green, #276749)' : 'var(--red)', fontSize: 13.5 }}>
+                    <div style={{ color: ties ? 'var(--green, #276749)' : 'var(--red)', fontSize: 15 }}>
                       Station saleable energy (E3) is {fmtNumber(e3, 1)} kWh —
                       {ties ? ' they agree' : ` ${diff > 0 ? 'over by' : 'short by'} ${fmtNumber(Math.abs(diff), 1)} kWh`}
                     </div>
                   );
                 })()}
                 {parsedEnergy.errors.map((e2) => (
-                  <div key={e2} style={{ color: 'var(--red)', fontSize: 13.5 }}>{e2}</div>
+                  <div key={e2} style={{ color: 'var(--red)', fontSize: 15 }}>{e2}</div>
                 ))}
               </div>
             )}
@@ -1421,7 +1434,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
           <Card
             title={`${station?.station_name || 'Station'} — ${bill.billing_month} ${bill.bill_kind.toLowerCase()} bill`}
             actions={
-              <span style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
+              <span style={{ fontSize: 15, color: 'var(--text-light)' }}>
                 energy: {preview.sources.energy} · availability: {preview.sources.pafm} ·
                 {' '}β: {preview.sources.beta} · cumulative: {preview.sources.cumulative}
                 {preview.sources.beneficiary_energy && (
@@ -1466,7 +1479,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       <Modal open={!!recalling} onClose={() => setRecalling(null)} title={recalling ? `Recall ${recalling.bill.bill_no}` : ''} width={520}>
         {recalling && (
           <form onSubmit={doRecall}>
-            <p style={{ marginTop: 0, fontSize: 13 }}>
+            <p style={{ marginTop: 0, fontSize: 14.5 }}>
               The bill is with <strong>{recalling.bill.pending_with || 'an approver'}</strong>. Recalling takes it back to you as a draft; you can correct it and send it for approval again.
             </p>
             <Field label="Why it is being recalled" required>
@@ -1483,7 +1496,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       <Modal open={!!openBill} onClose={() => setOpenBill(null)} title={openBill ? `${openBill.bill_no} — ${openBill.station_name} ${openBill.billing_month}` : ''} width={980}>
         {openBill && (
           <div>
-            <div style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+            <div style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 14.5 }}>
               <Badge status={openBill.status} label={openBill.status} /> · {openBill.bill_kind} · FY {openBill.financial_year}
               {openBill.rea_reference && <> · {openBill.rea_reference}</>}
               {openBill.revises_bill_no && <> · revises {openBill.revises_bill_no}</>}
@@ -1505,7 +1518,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
 
       <Modal open={!!sending} onClose={() => setSending(null)} title={`Send ${sending?.bill_no || ''} for approval`}>
         <form onSubmit={doSend}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             The final approver is the signature the beneficiaries&apos; bill goes out on and stays
             fixed once set. Whoever it goes to next may approve it, send it on, or reject it. The
             person who raised the bill cannot approve it.
@@ -1544,7 +1557,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       <Modal open={!!acting} onClose={() => setActing(null)} title={`Review ${acting?.bill_no || ''}`}>
         {acting && (
           <form onSubmit={doAct}>
-            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
               {acting.station_name} · {acting.billing_month} · {fmtCurrency(acting.total_charges)}
               {acting.is_final && ' — this is the final approval, and approving here releases the bill for issue.'}
             </p>
@@ -1595,7 +1608,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
 
       <Modal open={!!dispatching} onClose={() => setDispatching(null)} title={`Despatch ${dispatching?.bill_no || ''}`}>
         <form onSubmit={doDispatch}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             How the printed bill actually went out. The receipt date is the only record of when the
             beneficiary had it, so it is what a disputed due date is argued from.
           </p>
@@ -1636,7 +1649,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
 
       <Modal open={!!cancelling} onClose={() => setCancelling(null)} title={`Cancel ${cancelling?.bill_no || ''}`}>
         <form onSubmit={doCancel}>
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             A cancelled month drops out of the energy carried forward to later months in the same
             financial year, so any bill already raised after it will need re-checking.
           </p>

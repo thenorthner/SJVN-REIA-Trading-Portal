@@ -98,7 +98,7 @@ export default function IexBidBookReport({ kind }) {
     background: '#101a2e',
     color: '#fff',
     padding: '8px 10px',
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: 600,
     whiteSpace: 'nowrap',
     position: 'sticky',
@@ -116,7 +116,7 @@ export default function IexBidBookReport({ kind }) {
             <button type="button" className="btn btn-sm" style={exportBtn} onClick={exportExcel}>Excel</button>
             <button type="button" className="btn btn-sm" style={exportBtn} onClick={exportPdf}>PDF</button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
             Search:
             <input className="input" style={{ width: 240 }} value={search} onChange={(e) => setSearch(e.target.value)} />
           </label>
@@ -127,7 +127,7 @@ export default function IexBidBookReport({ kind }) {
         ) : (
           <>
             <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid var(--slate-200)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
                 <thead>
                   <tr>
                     {columns.map((c) => <th key={c.key} style={thStyle}>{c.label}</th>)}
@@ -160,7 +160,7 @@ export default function IexBidBookReport({ kind }) {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--slate-500)' }}>
+            <div style={{ marginTop: 10, fontSize: 15, color: 'var(--slate-500)' }}>
               {filtered.length === 0
                 ? 'No data available in table'
                 : `Showing 1 to ${filtered.length} of ${filtered.length} entries`}

@@ -63,20 +63,20 @@ export default function ExchangeBiddingSamplesModal({ open, onClose }) {
   return (
     <Modal open onClose={onClose} title="Exchange Bidding Samples" width={720}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 6 }}>
           Show
           <select className="input" style={{ width: 70, padding: '4px 6px' }} value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
             {[10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
           entries
         </label>
-        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 6 }}>
           Search:
           <input className="input" style={{ width: 180 }} value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
         <thead>
           <tr>
             {['S.No', 'File Name', 'Download'].map((h) => (
@@ -107,7 +107,7 @@ export default function ExchangeBiddingSamplesModal({ open, onClose }) {
         </tbody>
       </table>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 15, color: 'var(--slate-500)' }}>
         <span>
           Showing {page.length === 0 ? 0 : 1} to {page.length} of {filtered.length} entries
         </span>

@@ -176,7 +176,7 @@ export default function NOARRegistry() {
           <div style={{ display: 'grid', gap: 20 }}>
             <div>
               <h4 style={{ margin: '0 0 12px' }}>On record</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 14.5 }}>
                 <div><strong>Client:</strong> {viewing.client_name}</div>
                 <div><strong>NOAR ID:</strong> {viewing.noar_id || '—'}</div>
                 <div><strong>Issued by:</strong> {viewing.issuing_authority}</div>
@@ -227,7 +227,7 @@ export default function NOARRegistry() {
             <div>
               <h4 style={{ margin: '0 0 12px' }}>Terms the bid checks read for this client</h4>
               {clearance ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 14.5 }}>
                   <div><strong>SLDC:</strong> {clearance.sldc_name || '—'}</div>
                   <div><strong>Standing clearance no.:</strong> {clearance.standing_clearance_no || '—'}</div>
                   <div><strong>T-GNA approved:</strong> {clearance.tgna_approved_mw != null ? `${fmtNumber(clearance.tgna_approved_mw)} MW` : '—'}</div>

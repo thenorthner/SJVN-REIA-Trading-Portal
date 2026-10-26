@@ -37,8 +37,21 @@ export const STRINGS = {
   'footer.owned': { en: 'Content owned, maintained and updated by SJVN Limited, a Navratna CPSE under the Ministry of Power, Government of India.', hi: 'सामग्री का स्वामित्व, रखरखाव एवं अद्यतन एसजेवीएन लिमिटेड (विद्युत मंत्रालय, भारत सरकार के अधीन नवरत्न उपक्रम) द्वारा किया जाता है।', gu: 'સામગ્રીની માલિકી અને જાળવણી એસજેવીએન લિમિટેડ દ્વારા.', mr: 'सामग्रीची मालकी आणि देखभाल एसजेव्हीएन लिमिटेड द्वारे.' },
   'footer.queries': { en: 'For queries regarding this portal, contact the Web Information Manager.', hi: 'इस पोर्टल से संबंधित प्रश्नों के लिए वेब सूचना प्रबंधक से संपर्क करें।', gu: 'આ પોર્ટલ માટે વેબ માહિતી પ્રબંધકનો સંપર્ક કરો.', mr: 'या पोर्टलसंबंधी प्रश्नांसाठी वेब माहिती व्यवस्थापकाशी संपर्क साधा.' },
   'footer.lastUpdated': { en: 'Last updated', hi: 'अंतिम अद्यतन', gu: 'છેલ્લે અપડેટ કર્યું', mr: 'शेवटचे अद्यतन' },
-  'footer.bestViewed': { en: 'Best viewed in the latest versions of Chrome, Edge, Firefox and Safari. Compliant with GIGW 3.0 and WCAG 2.1 Level AA.', hi: 'क्रोम, एज, फ़ायरफ़ॉक्स एवं सफ़ारी के नवीनतम संस्करणों में सर्वोत्तम। GIGW 3.0 एवं WCAG 2.1 स्तर AA के अनुरूप।', gu: 'GIGW 3.0 અને WCAG 2.1 લેવલ AA સુસંગત.', mr: 'GIGW 3.0 आणि WCAG 2.1 लेव्हल AA सुसंगत.' },
+  'footer.bestViewed': { en: 'Best viewed in the latest versions of Chrome, Edge, Firefox and Safari. Built to GIGW 3.0, DBIM v3 and WCAG 2.1 Level AA; STQC certification pending.', hi: 'क्रोम, एज, फ़ायरफ़ॉक्स एवं सफ़ारी के नवीनतम संस्करणों में सर्वोत्तम। GIGW 3.0, DBIM v3 एवं WCAG 2.1 स्तर AA के अनुसार निर्मित; एसटीक्यूसी प्रमाणन लंबित।', gu: 'Chrome, Edge, Firefox અને Safari ના નવીનતમ સંસ્કરણોમાં શ્રેષ્ઠ. GIGW 3.0, DBIM v3 અને WCAG 2.1 લેવલ AA મુજબ બનાવેલ; STQC પ્રમાણન બાકી.', mr: 'Chrome, Edge, Firefox आणि Safari च्या नवीनतम आवृत्त्यांमध्ये सर्वोत्तम. GIGW 3.0, DBIM v3 आणि WCAG 2.1 लेव्हल AA नुसार तयार; STQC प्रमाणन प्रलंबित.' },
   'footer.copyright': { en: '© {year} SJVN Limited. All rights reserved.', hi: '© {year} एसजेवीएन लिमिटेड। सर्वाधिकार सुरक्षित।', gu: '© {year} એસજેવીએન લિમિટેડ. સર્વાધિકાર સુરક્ષિત.', mr: '© {year} एसजेव्हीएन लिमिटेड. सर्व हक्क राखीव.' },
+
+  'footer.lineage': {
+    en: 'This is the official Website of SJVN Limited, a Navratna Public Sector Undertaking of the Government of India under the Ministry of Power, a Joint Venture of Government of India and Government of Himachal Pradesh.',
+    hi: 'यह एसजेवीएन लिमिटेड (विद्युत मंत्रालय के तहत भारत सरकार का नवरत्न सार्वजनिक क्षेत्र उपक्रम, भारत सरकार एवं हिमाचल प्रदेश सरकार का संयुक्त उपक्रम) की आधिकारिक वेबसाइट है।',
+    gu: 'આ એસજેવીએન લિમિટેડ (વીજ મંત્રાલય હેઠળ ભારત સરકારનું નવરત્ન જાહેર સાહસ, ભારત સરકાર અને હિમાચલ પ્રદેશ સરકારનું સંયુક્ત સાહસ) ની સત્તાવાર વેબસાઇટ છે.',
+    mr: 'ही एसजेव्हीएन लिमिटेड (ऊर्जा मंत्रालयांतर्गत भारत सरकारचा नवरत्न सार्वजनिक क्षेत्रातील उपक्रम, भारत सरकार आणि हिमाचल प्रदेश सरकारचा संयुक्त उपक्रम) ची अधिकृत वेबसाइट आहे.'
+  },
+  'footer.connect': { en: 'Connect', hi: 'संपर्क', gu: 'સંપર્ક', mr: 'संपर्क' },
+  'footer.related': { en: 'Related Links', hi: 'संबंधित लिंक', gu: 'સંબંધિત લિંક્સ', mr: 'संबंधित दुवे' },
+  'footer.helpOnly': { en: 'Help', hi: 'सहायता', gu: 'મદદ', mr: 'मदत' },
+  'footer.lastUpdatedOn': { en: 'Last Updated On', hi: 'अंतिम अद्यतन तिथि', gu: 'છેલ્લે અપડેટ તારીખ', mr: 'शेवटच्या अद्यतनाची तारीख' },
+  'footer.social': { en: 'Connect with SJVN', hi: 'एसजेवीएन से जुड़ें', gu: 'એસજેવીએન સાથે જોડાઓ', mr: 'एसजेव्हीएनशी जोडा' },
+  'footer.portalsRibbon': { en: 'Government of India Portals & Initiatives', hi: 'भारत सरकार के प्रमुख पोर्टल एवं राष्ट्रीय पहलें', gu: 'ભારત સરકારના મુખ્ય પોર્ટલ અને પહેલ', mr: 'भारत सरकारचे मुख्य पोर्टल आणि उपक्रम' },
 
   // Page names (footer links, page titles, sitemap)
   'page.home': { en: 'Home', hi: 'मुख पृष्ठ', gu: 'મુખ્ય પૃષ્ઠ', mr: 'मुख्य पृष्ठ' },
@@ -78,7 +91,7 @@ export const STRINGS = {
 
   // Cookie notice (DPDP Act 2023)
   'cookie.title': { en: 'Your privacy on this portal', hi: 'इस पोर्टल पर आपकी गोपनीयता', gu: 'આ પોર્ટલ પર તમારી ગોપનીયતા', mr: 'या पोर्टलवर आपली गोपनीयता' },
-  'cookie.body': { en: 'This portal stores only what it needs to work: your sign-in session, and your display choices (language, text size, contrast, theme) in this browser. It uses no advertising or third-party tracking. Optional performance measurement runs only if you accept it.', hi: 'यह पोर्टल केवल वही संग्रहीत करता है जो इसके कार्य हेतु आवश्यक है: आपका साइन-इन सत्र तथा इस ब्राउज़र में आपकी प्रदर्शन पसंद (भाषा, पाठ आकार, कंट्रास्ट, थीम)। इसमें कोई विज्ञापन या तृतीय-पक्ष ट्रैकिंग नहीं है। वैकल्पिक प्रदर्शन मापन केवल आपकी सहमति पर होता है।', gu: 'આ પોર્ટલ ફક્ત તે જ સંગ્રહ કરે છે જે તેના કાર્ય માટે જરૂરી છે: તમારું સાઇન-ઇન સત્ર અને આ બ્રાઉઝરમાં તમારી પ્રદર્શન પસંદગીઓ (ભાષા, ટેક્સ્ટ કદ, કોન્ટ્રાસ્ટ, થીમ). તેમાં કોઈ જાહેરાત કે તૃતીય-પક્ષ ટ્રેકિંગ નથી. વૈકલ્પિક પ્રદર્શન માપન ફક્ત તમારી સંમતિથી જ થાય છે.', mr: 'हे पोर्टल केवळ त्याच्या कामासाठी आवश्यक तेवढेच साठवते: आपले साइन-इन सत्र आणि या ब्राउझरमधील आपल्या प्रदर्शन निवडी (भाषा, मजकूर आकार, कॉन्ट्रास्ट, थीम). यात कोणतीही जाहिरात किंवा तृतीय-पक्ष ट्रॅकिंग नाही. ऐच्छिक कामगिरी मोजमाप केवळ आपल्या संमतीनेच होते.' },
+  'cookie.body': { en: 'This portal stores your sign-in session and your display choices (language, text size, contrast, theme) in this browser; it cannot work without them. With your consent it also remembers your recent searches. It uses no analytics, advertising or third-party tracking.', hi: 'यह पोर्टल आपका साइन-इन सत्र एवं आपकी प्रदर्शन पसंद (भाषा, पाठ आकार, कंट्रास्ट, थीम) इस ब्राउज़र में संग्रहीत करता है; इनके बिना यह कार्य नहीं कर सकता। आपकी सहमति से यह आपकी हाल की खोजें भी याद रखता है। यह कोई विश्लेषण, विज्ञापन या तृतीय-पक्ष ट्रैकिंग उपयोग नहीं करता।' },
   'cookie.acceptAll': { en: 'Accept all', hi: 'सभी स्वीकार करें', gu: 'બધું સ્વીકારો', mr: 'सर्व स्वीकारा' },
   'cookie.essential': { en: 'Essential only', hi: 'केवल आवश्यक', gu: 'ફક્ત આવશ્યક', mr: 'केवळ आवश्यक' },
   'cookie.policy': { en: 'Cookie Policy', hi: 'कुकी नीति', gu: 'કૂકી નીતિ', mr: 'कुकी धोरण' },
@@ -190,4 +203,68 @@ export const STRINGS = {
   'pub.sitemap.desks': { en: 'Enterprise Operating Desks', hi: 'उद्यम परिचालन डेस्क', gu: 'એન્ટરપ્રાઇઝ ઓપરેટિંગ ડેસ્ક', mr: 'उद्यम कार्यान्वयन डेस्क' },
   'pub.sitemap.restricted': { en: 'Restricted', hi: 'प्रतिबंधित', gu: 'પ્રતિબંધિત', mr: 'प्रतिबंधित' },
   'pub.footer.wim': { en: 'Web Information Manager', hi: 'वेब सूचना प्रबंधक', gu: 'વેબ માહિતી વ્યવસ્થાપક', mr: 'वेब माहिती व्यवस्थापक' },
+
+
+    // DBIM v3 Mandated PM Quote (Annexure A.4.1.2 item iv)
+  'pub.quote.eyebrow': { en: 'NATIONAL CLEAN ENERGY VISION', hi: 'राष्ट्रीय स्वच्छ ऊर्जा संकल्प', gu: 'રાષ્ટ્રીય સ્વચ્છ ઊર્જા સંકલ્પ', mr: 'राष्ट्रीय स्वच्छ ऊर्जा संकल्प' },
+  'pub.quote.text': {
+    en: 'India is moving forward with the goal of 500 GW non-fossil energy capacity by 2030. Our renewable energy revolution is not only powering the nation, but also lighting the way for global sustainable development.',
+    hi: 'भारत 2030 तक 500 गीगावाट गैर-जीवाश्म ऊर्जा क्षमता के लक्ष्य के साथ आगे बढ़ रहा है। हमारी नवीकरणीय ऊर्जा क्रांति न केवल राष्ट्र को सशक्त बना रही है, बल्कि वैश्विक सतत विकास का मार्ग भी प्रशस्त कर रही है।',
+    gu: 'ભારત 2030 સુધીમાં 500 ગીગાવોટ બિન-અશ્મિભૂત ઊર્જા ક્ષમતાના લક્ષ્યાંક સાથે આગળ વધી રહ્યું છે. આપણી પુનઃપ્રાપ્ય ઊર્જા ક્રાંતિ માત્ર દેશને જ ઊર્જાવાન નથી બનાવી રહી, પરંતુ વૈશ્વિક ટકાઉ વિકાસનો માર્ગ પણ પ્રશસ્ત કરી રહી છે.',
+    mr: 'भारत 2030 पर्यंत 500 गिगावॅट बिगर-जीवाश्म ऊर्जा क्षमतेच्या उद्दिष्टासह पुढे जात आहे. आपली नवीकरणीय ऊर्जा क्रांती केवळ देशालाच ऊर्जा देत नाही, तर जागतिक शाश्वत विकासाचा मार्गही उजळवत आहे.'
+  },
+  'pub.quote.author': { en: 'Shri Narendra Modi', hi: 'श्री नरेन्द्र मोदी', gu: 'શ્રી નરેન્દ્ર મોદી', mr: 'श्री नरेंद्र मोदी' },
+  'pub.quote.designation': { en: 'Hon\'ble Prime Minister of India', hi: 'माननीय प्रधानमंत्री, भारत', gu: 'માનનીય પ્રધાનમંત્રી, ભારત', mr: 'माननीय पंतप्रधान, भारत' },
+  'pub.quote.context': { en: 'COP26 World Leaders Summit · Panchamrit Climate Goals (2 Nov 2021)', hi: 'कॉप26 विश्व नेता शिखर सम्मेलन · पंचामृत जलवायु संकल्प (2 नवंबर 2021)', gu: 'COP26 વર્લ્ડ લીડર્સ સમિટ · પંચામૃત આબોહવા લક્ષ્યો (2 નવેમ્બર 2021)', mr: 'COP26 जागतिक नेते शिखर परिषद · पंचामृत हवामान उद्दिष्टे (2 नोव्हेंबर 2021)' },
+
+// DBIM v3 Mandated National Initiatives & Government Portals (Annexure A.4.1.2 item xiv)
+  'pub.initiatives.eyebrow': { en: 'GOVERNMENT OF INDIA PORTALS & INITIATIVES', hi: 'भारत सरकार के पोर्टल एवं राष्ट्रीय पहल', gu: 'ભારત સરકારના પોર્ટલ અને રાષ્ટ્રીય પહેલ', mr: 'भारत सरकारची पोर्टल्स आणि राष्ट्रीय उपक्रम' },
+  'pub.initiatives.title': { en: 'National Portals & Regulatory Authorities', hi: 'संबद्ध मंत्रालय, विनियामक आयोग एवं राष्ट्रीय डिजिटल मंच', gu: 'સંબંધિત મંત્રાલય, નિયમનકારી આયોગ અને રાષ્ટ્રીય ડિજિટલ મંચ', mr: 'संबंधित मंत्रालय, नियामक आयोग आणि राष्ट्रीय डिजिटल मंच' },
+  'pub.initiatives.sub': { en: 'Direct access to official Government of India energy ministries, statutory commissions, and public service gateways.', hi: 'भारत सरकार के ऊर्जा मंत्रालयों, वैधानिक आयोगों एवं सार्वजनिक सेवा पोर्टलों के आधिकारिक लिंक।', gu: 'ભારત સરકારના ઊર્જા મંત્રાલયો, વૈધાનિક પંચો અને જાહેર સેવા પોર્ટલોના સત્તાવાર લિંક્સ.', mr: 'भारत सरकारच्या ऊर्जा मंत्रालये, वैधानिक आयोग आणि सार्वजनिक सेवा पोर्टल्सच्या अधिकृत लिंक्स.' },
+
+  // DBIM v3 additions: header navigation, search, language, external links,
+  // cookie categories, feedback, about-us and related-links pages.
+  'nav.global': { en: 'Main menu', hi: 'मुख्य मेनू', gu: 'મુખ્ય મેનૂ', mr: 'मुख्य मेनू' },
+  'page.about': { en: 'About Us', hi: 'हमारे बारे में', gu: 'અમારા વિશે', mr: 'आमच्याबद्दल' },
+  'page.circulars': { en: 'Circulars & Notices', hi: 'परिपत्र एवं सूचनाएँ', gu: 'પરિપત્રો અને સૂચનાઓ', mr: 'परिपत्रके आणि सूचना' },
+  'page.contactShort': { en: 'Contact Us', hi: 'संपर्क करें', gu: 'સંપર્ક કરો', mr: 'संपर्क साधा' },
+  'page.feedback': { en: 'Feedback', hi: 'प्रतिक्रिया', gu: 'પ્રતિસાદ', mr: 'अभिप्राय' },
+  'page.related': { en: 'Related Links', hi: 'संबंधित लिंक', gu: 'સંબંધિત લિંક્સ', mr: 'संबंधित दुवे' },
+  'search.placeholder': { en: 'Search this portal', hi: 'इस पोर्टल में खोजें', gu: 'આ પોર્ટલમાં શોધો', mr: 'या पोर्टलमध्ये शोधा' },
+  'search.label': { en: 'Search', hi: 'खोजें', gu: 'શોધો', mr: 'शोधा' },
+  'lang.select': { en: 'Select language', hi: 'भाषा चुनें', gu: 'ભાષા પસંદ કરો', mr: 'भाषा निवडा' },
+  'ext.title': { en: 'You are leaving the SJVN portal', hi: 'आप एसजेवीएन पोर्टल से बाहर जा रहे हैं', gu: 'તમે એસજેવીએન પોર્ટલ છોડી રહ્યા છો', mr: 'आपण एसजेव्हीएन पोर्टल सोडत आहात' },
+  'ext.body': { en: 'This link opens {host}, a website not run by SJVN or the Government of India. SJVN is not responsible for its content or privacy practices.', hi: 'यह लिंक {host} खोलता है, जो एसजेवीएन या भारत सरकार द्वारा संचालित वेबसाइट नहीं है। एसजेवीएन इसकी सामग्री या गोपनीयता व्यवहार के लिए उत्तरदायी नहीं है।' },
+  'ext.continue': { en: 'Continue', hi: 'जारी रखें', gu: 'ચાલુ રાખો', mr: 'पुढे जा' },
+  'ext.cancel': { en: 'Stay here', hi: 'यहीं रहें', gu: 'અહીં રહો', mr: 'येथेच रहा' },
+  'ext.newTab': { en: '(opens in a new tab)', hi: '(नए टैब में खुलता है)', gu: '(નવા ટૅબમાં ખૂલે છે)', mr: '(नवीन टॅबमध्ये उघडते)' },
+  'cookie.reject': { en: 'Reject optional', hi: 'वैकल्पिक अस्वीकार करें', gu: 'વૈકલ્પિક નકારો', mr: 'पर्यायी नाकारा' },
+  'cookie.customise': { en: 'Customise', hi: 'अनुकूलित करें', gu: 'કસ્ટમાઇઝ કરો', mr: 'सानुकूलित करा' },
+  'cookie.save': { en: 'Save choices', hi: 'विकल्प सहेजें', gu: 'પસંદગી સાચવો', mr: 'निवडी जतन करा' },
+  'cookie.catEssential': { en: 'Essential (always on)', hi: 'आवश्यक (सदैव चालू)', gu: 'આવશ્યક (હંમેશાં ચાલુ)', mr: 'आवश्यक (नेहमी चालू)' },
+  'cookie.catEssentialDesc': { en: 'Your sign-in session, your display choices (language, text size, contrast, theme) and this cookie choice. The portal cannot work without them.', hi: 'आपका साइन-इन सत्र, आपकी प्रदर्शन पसंद (भाषा, पाठ आकार, कंट्रास्ट, थीम) एवं यह कुकी विकल्प। इनके बिना पोर्टल कार्य नहीं कर सकता।' },
+  'cookie.catFunctional': { en: 'Functionality (optional)', hi: 'कार्यक्षमता (वैकल्पिक)', gu: 'કાર્યક્ષમતા (વૈકલ્પિક)', mr: 'कार्यक्षमता (पर्यायी)' },
+  'cookie.catFunctionalDesc': { en: 'Remembers your recent searches and the companies you opened recently, in this browser only. Turning it off deletes them.', hi: 'आपकी हाल की खोजें एवं हाल में खोली गई कंपनियाँ केवल इसी ब्राउज़र में याद रखता है। बंद करने पर ये हटा दी जाती हैं।' },
+  'cookie.noTracking': { en: 'The portal sets no analytics, advertising or social-media tracking cookies.', hi: 'पोर्टल कोई विश्लेषण, विज्ञापन या सोशल-मीडिया ट्रैकिंग कुकी नहीं लगाता।' },
+  'fb.lead': { en: 'Tell us what works, what does not, or what is missing on this portal. Fields marked * are required. Do not enter passwords, bank details or Aadhaar numbers.', hi: 'इस पोर्टल पर क्या ठीक है, क्या नहीं, या क्या कमी है, हमें बताएँ। * चिह्नित फ़ील्ड आवश्यक हैं। पासवर्ड, बैंक विवरण या आधार संख्या दर्ज न करें।' },
+  'fb.name': { en: 'Your name', hi: 'आपका नाम', gu: 'તમારું નામ', mr: 'आपले नाव' },
+  'fb.email': { en: 'E-mail address', hi: 'ई-मेल पता', gu: 'ઈ-મેલ સરનામું', mr: 'ई-मेल पत्ता' },
+  'fb.category': { en: 'Feedback about', hi: 'प्रतिक्रिया का विषय', gu: 'પ્રતિસાદનો વિષય', mr: 'अभिप्रायाचा विषय' },
+  'fb.cat.content': { en: 'Content or information', hi: 'सामग्री या जानकारी' },
+  'fb.cat.accessibility': { en: 'Accessibility', hi: 'सुगम्यता' },
+  'fb.cat.technical': { en: 'Technical problem', hi: 'तकनीकी समस्या' },
+  'fb.cat.translation': { en: 'Translation', hi: 'अनुवाद' },
+  'fb.cat.suggestion': { en: 'Suggestion', hi: 'सुझाव' },
+  'fb.page': { en: 'Page it is about (optional)', hi: 'संबंधित पृष्ठ (वैकल्पिक)' },
+  'fb.message': { en: 'Your feedback', hi: 'आपकी प्रतिक्रिया', gu: 'તમારો પ્રતિસાદ', mr: 'आपला अभिप्राय' },
+  'fb.messageHelp': { en: '20 to 2,000 characters.', hi: '20 से 2,000 अक्षर।' },
+  'fb.consent': { en: 'I agree that SJVN may use my name and e-mail address only to reply to this feedback.', hi: 'मैं सहमत हूँ कि एसजेवीएन मेरे नाम एवं ई-मेल पते का उपयोग केवल इस प्रतिक्रिया का उत्तर देने हेतु करे।' },
+  'fb.submit': { en: 'Send feedback', hi: 'प्रतिक्रिया भेजें', gu: 'પ્રતિસાદ મોકલો', mr: 'अभिप्राय पाठवा' },
+  'fb.sending': { en: 'Sending…', hi: 'भेजा जा रहा है…' },
+  'fb.done': { en: 'Thank you. Your reference number is {ref}. The Web Information Manager will reply to the e-mail address you gave.', hi: 'धन्यवाद। आपकी संदर्भ संख्या {ref} है। वेब सूचना प्रबंधक आपके दिए गए ई-मेल पते पर उत्तर देंगे।' },
+  'fb.err.name': { en: 'Enter your name (2 to 100 characters).', hi: 'अपना नाम दर्ज करें (2 से 100 अक्षर)।' },
+  'fb.err.email': { en: 'Enter a valid e-mail address, for example name@example.com.', hi: 'मान्य ई-मेल पता दर्ज करें, जैसे name@example.com।' },
+  'fb.err.message': { en: 'Write between 20 and 2,000 characters.', hi: '20 से 2,000 अक्षर लिखें।' },
+  'fb.err.consent': { en: 'Tick the box so we can reply to you.', hi: 'चेकबॉक्स चिह्नित करें ताकि हम आपको उत्तर दे सकें।' },
+  'fb.err.server': { en: 'The feedback could not be sent. Try again, or write to the Web Information Manager.', hi: 'प्रतिक्रिया नहीं भेजी जा सकी। पुनः प्रयास करें या वेब सूचना प्रबंधक को लिखें।' },
 };

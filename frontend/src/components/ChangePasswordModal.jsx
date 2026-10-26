@@ -79,7 +79,7 @@ export default function ChangePasswordModal({ open, onClose, forced = false }) {
               value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={8}
             />
           </Field>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 4 }}>
             At least 8 characters, with a letter and a digit.
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>

@@ -28,7 +28,7 @@ export default function DeveloperScorecardCard({ from = null, to = null }) {
           <option value="plant">By plant (PPA)</option>
           <option value="developer">By developer</option>
         </select>
-        <span style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>
+        <span style={{ fontSize: 14, color: 'var(--slate-500)' }}>
           Score = generation {data.weights.generation} + compliance {data.weights.compliance} + disputes {data.weights.disputes}. Target is the PPA's minimum CUF on possible energy (curtailment taken out). Indicative, not a contractual rating.
         </span>
       </div>
@@ -42,7 +42,7 @@ export default function DeveloperScorecardCard({ from = null, to = null }) {
           <tbody>
             {by === 'plant' ? data.plants.map((p) => (
               <tr key={p.contract_id}>
-                <td>{p.contract_no}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{p.project_type} · {fmtNumber(p.capacity_mw)} MW · {p.months} mo</div></td>
+                <td>{p.contract_no}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{p.project_type} · {fmtNumber(p.capacity_mw)} MW · {p.months} mo</div></td>
                 <td>{p.developer}</td>
                 <td>{fmtNumber(p.energy_mwh)} / {p.target_mwh == null ? '—' : fmtNumber(p.target_mwh)}</td>
                 <td>{pct(p.achievement_pct)}</td>

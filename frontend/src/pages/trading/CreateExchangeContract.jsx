@@ -186,7 +186,7 @@ export default function CreateExchangeContract() {
               <Field label="Buyer/Seller?" required>
                 <div style={{ display: 'flex', gap: 16, height: 36, alignItems: 'center' }}>
                   {['Buyer', 'Seller'].map((opt) => (
-                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                       <input type="radio" name="side" checked={form.side === opt} onChange={() => set('side', opt)} required />
                       {opt}
                     </label>
@@ -196,7 +196,7 @@ export default function CreateExchangeContract() {
               <Field label="CarryOver" required>
                 <div style={{ display: 'flex', gap: 16, height: 36, alignItems: 'center' }}>
                   {['Yes', 'No'].map((opt) => (
-                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                       <input type="radio" name="carry_over" checked={form.carry_over === opt} onChange={() => set('carry_over', opt)} required />
                       {opt}
                     </label>
@@ -236,7 +236,7 @@ export default function CreateExchangeContract() {
               <Field label="Is source of energy renewable?" required>
                 <div style={{ display: 'flex', gap: 16, height: 36, alignItems: 'center' }}>
                   {['Yes', 'No'].map((opt) => (
-                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                       <input type="radio" name="is_renewable" checked={form.is_renewable === opt} onChange={() => set('is_renewable', opt)} required />
                       {opt}
                     </label>
@@ -248,7 +248,7 @@ export default function CreateExchangeContract() {
 
           <FormSection title="Requested Schedule Details">
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontSize: 14.5 }}>
                 <thead style={{ background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-200)' }}>
                   <tr>
                     <th colSpan="2" style={{ padding: 8, borderRight: '1px solid var(--slate-200)', textAlign: 'center' }}>Date</th>
@@ -259,7 +259,7 @@ export default function CreateExchangeContract() {
                     <th style={{ padding: 8 }}>Variation</th>
                     <th style={{ padding: 8, width: 70, textAlign: 'center' }}>Action</th>
                   </tr>
-                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 13 }}>
+                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 14.5 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
                     <th style={{ padding: '4px 8px', borderRight: '1px solid var(--slate-200)' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>
@@ -354,12 +354,12 @@ export default function CreateExchangeContract() {
           </FormSection>
 
           {error && (
-            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>
               {error}
             </div>
           )}
           {success && (
-            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>
               Exchange contract <strong>{success.id}</strong> created for {success.client_name} ({success.product}).
             </div>
           )}

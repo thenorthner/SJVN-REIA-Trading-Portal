@@ -112,7 +112,7 @@ export default function CERCMarketIntelligence() {
       <Card style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, marginBottom: 5, fontWeight: 600, color: 'var(--slate-600)' }}>Select Month</label>
+            <label style={{ display: 'block', fontSize: 15, marginBottom: 5, fontWeight: 600, color: 'var(--slate-600)' }}>Select Month</label>
             <select 
               className="input" 
               value={selectedPeriod} 
@@ -148,10 +148,10 @@ export default function CERCMarketIntelligence() {
           </div>
           
           <div style={{ marginLeft: 'auto', textAlign: 'right', marginTop: 22 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-800)' }}>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--slate-800)' }}>
               Period: {periodLabel || selectedPeriod}
             </div>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+            <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>
               Source: CERC Monthly Market Monitoring
             </div>
           </div>
@@ -163,8 +163,8 @@ export default function CERCMarketIntelligence() {
         <div style={{ padding: '14px 20px', marginBottom: 20, background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, color: 'var(--on-red)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div><strong>Notice: </strong> {error}</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-outline" onClick={fetchData} style={{ fontSize: 13.5, padding: '4px 10px' }}>Retry</button>
-            <button className="btn btn-primary" onClick={handleTriggerFetch} style={{ fontSize: 13.5, padding: '4px 10px' }}>Fetch CERC Report</button>
+            <button className="btn btn-outline" onClick={fetchData} style={{ fontSize: 15, padding: '4px 10px' }}>Retry</button>
+            <button className="btn btn-primary" onClick={handleTriggerFetch} style={{ fontSize: 15, padding: '4px 10px' }}>Fetch CERC Report</button>
           </div>
         </div>
       )}
@@ -172,7 +172,7 @@ export default function CERCMarketIntelligence() {
       {loading && !summary && (
         <Card style={{ padding: 60, textAlign: 'center', color: 'var(--slate-600)' }}>
           <div style={{ fontSize: 16, fontWeight: 600 }}>Loading CERC Market Intelligence Data...</div>
-          <div style={{ fontSize: 13, color: 'var(--slate-400)', marginTop: 8 }}>Fetching records for {selectedPeriod}...</div>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-400)', marginTop: 8 }}>Fetching records for {selectedPeriod}...</div>
         </Card>
       )}
 
@@ -181,10 +181,10 @@ export default function CERCMarketIntelligence() {
           <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)', marginBottom: 8 }}>
             No CERC Market Data Found for {selectedPeriod || 'Selected Period'}
           </div>
-          <p style={{ color: 'var(--slate-500)', maxWidth: 500, margin: '0 auto 20px auto', fontSize: 14 }}>
+          <p style={{ color: 'var(--slate-500)', maxWidth: 500, margin: '0 auto 20px auto', fontSize: 15.5 }}>
             The CERC Monthly Market Monitoring report has not been imported for this period yet. Click the button below to download and parse the official report.
           </p>
-          <button className="btn btn-primary" onClick={handleTriggerFetch} disabled={loading} style={{ padding: '10px 24px', fontSize: 14 }}>
+          <button className="btn btn-primary" onClick={handleTriggerFetch} disabled={loading} style={{ padding: '10px 24px', fontSize: 15.5 }}>
             Fetch & Parse CERC MMC Report ({selectedPeriod})
           </button>
         </Card>
@@ -236,7 +236,7 @@ export default function CERCMarketIntelligence() {
         {/* 3. EXCHANGE PRICE COMPARISON TABLE */}
         <Card title="Exchange Price Comparison (Rs/kWh) & Volumes (MU)">
           <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ margin: 0, fontSize: 13 }}>
+            <table className="data-table" style={{ margin: 0, fontSize: 14.5 }}>
               <thead style={{ background: 'var(--slate-100)' }}>
                 <tr>
                   <th scope="col">Product</th>
@@ -276,8 +276,8 @@ export default function CERCMarketIntelligence() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={volumes} layout="vertical" margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--slate-200)" />
-                <XAxis type="number" tick={{ fontSize: 13.5, fill: 'var(--slate-500)' }} />
-                <YAxis type="category" dataKey="product" tick={{ fontSize: 13.5, fontWeight: 600, fill: 'var(--slate-700)' }} />
+                <XAxis type="number" tick={{ fontSize: 15, fill: 'var(--slate-500)' }} />
+                <YAxis type="category" dataKey="product" tick={{ fontSize: 15, fontWeight: 600, fill: 'var(--slate-700)' }} />
                 <Tooltip 
                   formatter={(value) => [`${fmtNumber(value, 2)} MU`, 'Volume']}
                   contentStyle={{ borderRadius: 8, border: '1px solid var(--slate-200)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
@@ -286,7 +286,7 @@ export default function CERCMarketIntelligence() {
                   {volumes.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[entry.product.toLowerCase().replace('-', '')] || COLORS.dam} />
                   ))}
-                  <LabelList dataKey="volume" position="right" formatter={(v) => fmtNumber(v, 2)} style={{ fontSize: 13, fill: 'var(--slate-600)' }} />
+                  <LabelList dataKey="volume" position="right" formatter={(v) => fmtNumber(v, 2)} style={{ fontSize: 14.5, fill: 'var(--slate-600)' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -300,9 +300,9 @@ export default function CERCMarketIntelligence() {
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={dailyTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--slate-200)" />
-              <XAxis dataKey="day" tick={{ fontSize: 13.5, fill: 'var(--slate-500)' }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 13.5, fill: 'var(--slate-500)' }} label={{ value: 'Price (Rs/kWh)', angle: -90, position: 'insideLeft', style: { fill: 'var(--slate-500)' } }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 13.5, fill: 'var(--slate-500)' }} label={{ value: 'Volume (MU)', angle: 90, position: 'insideRight', style: { fill: 'var(--slate-500)' } }} />
+              <XAxis dataKey="day" tick={{ fontSize: 15, fill: 'var(--slate-500)' }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 15, fill: 'var(--slate-500)' }} label={{ value: 'Price (Rs/kWh)', angle: -90, position: 'insideLeft', style: { fill: 'var(--slate-500)' } }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 15, fill: 'var(--slate-500)' }} label={{ value: 'Volume (MU)', angle: 90, position: 'insideRight', style: { fill: 'var(--slate-500)' } }} />
               <Tooltip 
                 contentStyle={{ borderRadius: 8, border: '1px solid var(--slate-200)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
               />
@@ -323,16 +323,16 @@ export default function CERCMarketIntelligence() {
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 15, marginBottom: 20 }}>
                 <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
-                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 5 }}>Min Charge</div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.minCharge, 2)} <span style={{ fontSize: 13.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
+                  <div style={{ fontSize: 15, color: 'var(--slate-500)', marginBottom: 5 }}>Min Charge</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.minCharge, 2)} <span style={{ fontSize: 15, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
                 </div>
                 <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
-                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 5 }}>Avg Charge</div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.avgCharge, 2)} <span style={{ fontSize: 13.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
+                  <div style={{ fontSize: 15, color: 'var(--slate-500)', marginBottom: 5 }}>Avg Charge</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.avgCharge, 2)} <span style={{ fontSize: 15, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
                 </div>
                 <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
-                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 5 }}>Max Charge</div>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.maxCharge, 2)} <span style={{ fontSize: 13.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
+                  <div style={{ fontSize: 15, color: 'var(--slate-500)', marginBottom: 5 }}>Max Charge</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.maxCharge, 2)} <span style={{ fontSize: 15, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
                 </div>
               </div>
               
@@ -340,8 +340,8 @@ export default function CERCMarketIntelligence() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={dsm.dailyTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="day" tick={{ fontSize: 12.5 }} />
-                    <YAxis tick={{ fontSize: 12.5 }} />
+                    <XAxis dataKey="day" tick={{ fontSize: 14 }} />
+                    <YAxis tick={{ fontSize: 14 }} />
                     <Tooltip />
                     <Line type="monotone" dataKey="charge" name="DSM Rate" stroke={COLORS.dsm} strokeWidth={2} dot={false} />
                   </LineChart>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Table, fmtNumber } from './ui.jsx';
+import { showAlert } from '../lib/dialogs.js';
 
 export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
   const isCert = ['REC', 'ESCERT'].includes(marketSegment);
@@ -19,9 +20,9 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
       </div>
     )},
     { key: 'deduction', label: 'Deductions', render: r => <span style={{ color: 'var(--on-red)' }}>{fmtNumber(r.deduction)}</span> },
-    { key: 'netTotal', label: 'Net Payout (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 15 }}>{fmtNumber(r.netTotal || r.netAmount)}</span> },
+    { key: 'netTotal', label: 'Net Payout (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 16 }}>{fmtNumber(r.netTotal || r.netAmount)}</span> },
     { key: 'sapStatus', label: 'SAP FI Status', render: r => (
-      <span style={{ fontSize: 13, background: r.sapStatus === 'POSTED' ? 'var(--t-green-50)' : 'var(--t-amber-50)', color: r.sapStatus === 'POSTED' ? 'var(--on-green)' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? 'var(--t-green-100)' : 'var(--t-amber-100)'}`, padding: '2px 6px', borderRadius: 12 }}>
+      <span style={{ fontSize: 14.5, background: r.sapStatus === 'POSTED' ? 'var(--t-green-50)' : 'var(--t-amber-50)', color: r.sapStatus === 'POSTED' ? 'var(--on-green)' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? 'var(--t-green-100)' : 'var(--t-amber-100)'}`, padding: '2px 6px', borderRadius: 12 }}>
         {r.sapStatus === 'POSTED' ? 'Posted' : 'Pending'}
       </span>
     )},
@@ -36,7 +37,7 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
   const handleSapPost = () => {
     // Nothing posts to SAP: there is no FI integration. Saying a batch was
     // initiated would leave finance believing entries are on their way.
-    alert(
+    showAlert(
       'Not posted.\n\n'
       + 'SAP FI posting is not integrated yet, so no journal entry was created for '
       + `the ${records.filter(r => r.sapStatus !== 'POSTED').length} pending ${marketSegment} invoice(s).`
@@ -47,8 +48,8 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, padding: '10px 15px', background: 'var(--slate-50)', border: '1px solid var(--slate-100)', borderRadius: 6 }}>
         <div>
-          <strong style={{ fontSize: 14 }}>Commercial Tax Ledger</strong>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
+          <strong style={{ fontSize: 15.5 }}>Commercial Tax Ledger</strong>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
         </div>
         <button onClick={handleSapPost} className="btn btn-primary" style={{ background: '#f39c12', borderColor: '#e67e22', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 'bold' }}>
           <span></span> Generate SAP Journal Entry

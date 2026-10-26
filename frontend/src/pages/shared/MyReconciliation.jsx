@@ -114,7 +114,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
             </div>
 
             <div style={{ marginTop: 14, padding: 14, background: 'var(--surface-hover, var(--slate-50))', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Sign-off by both parties</span>
                 <Badge
                   status={detail.status === 'CLOSED' ? 'ACTIVE' : detail.status === 'DISPUTED' ? 'REJECTED' : 'PENDING'}
@@ -124,8 +124,8 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[['SJVN', detail.sjvn_ack_at, detail.sjvn_ack_by, 'Pending SJVN'], [partyName, detail.counterparty_ack_at, detail.counterparty_ack_by, 'Pending your action']].map(([label, at, by, pending]) => (
                   <div key={label} style={{ padding: 10, background: at ? 'var(--t-green-50)' : 'var(--surface)', border: `1px solid ${at ? 'var(--t-green-100)' : 'var(--border)'}`, borderRadius: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: at ? 'var(--on-green)' : 'var(--text-muted)' }}>{label}</div>
-                    <div style={{ fontSize: 13.5, marginTop: 3 }}>{at ? `${by} · ${fmtDateTime(at)}` : pending}</div>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: at ? 'var(--on-green)' : 'var(--text-muted)' }}>{label}</div>
+                    <div style={{ fontSize: 15, marginTop: 3 }}>{at ? `${by} · ${fmtDateTime(at)}` : pending}</div>
                   </div>
                 ))}
               </div>
@@ -138,7 +138,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               {(detail.items || []).map((it) => (
                 <li key={it.id} style={{ marginBottom: 4 }}>
                   {it.match_status === 'NOT_CONNECTED' ? (
-                    <span title="No connector for the system this would be checked against, so this line was not checked." style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}>Not checked</span>
+                    <span title="No connector for the system this would be checked against, so this line was not checked." style={{ color: 'var(--text-muted)', fontSize: 15, fontWeight: 600 }}>Not checked</span>
                   ) : (
                     <Badge status={['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(it.match_status) ? 'AUTO_MATCHED' : 'NEEDS_REVIEW'} />
                   )}{' '}
@@ -198,7 +198,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
 
       <Modal open={disagree !== null} onClose={() => !busy && setDisagree(null)} title="Disagree with the statement" width={540}>
         <form onSubmit={submitDisagree}>
-          <div className="alert alert-error" style={{ fontSize: 13 }}>
+          <div className="alert alert-error" style={{ fontSize: 14.5 }}>
             This marks the whole statement <strong>disputed</strong> and holds everything on it. If you accept most of it, use <strong>Agree with exceptions</strong> instead, so what is not in question can be settled.
           </div>
           <Field label="What is wrong with it" required>

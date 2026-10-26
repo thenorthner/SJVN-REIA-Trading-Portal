@@ -176,7 +176,7 @@ export default function BillGenerationForm() {
             </Field>
 
             <Field label="GST">
-              <label style={{ display: 'flex', gap: 6, alignItems: 'center', height: 36, fontSize: 13 }}>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', height: 36, fontSize: 14.5 }}>
                 <input type="checkbox" checked={form.gst_applicable} onChange={(e) => set('gst_applicable', e.target.checked)} />
                 Charge GST at 18%
               </label>
@@ -184,7 +184,7 @@ export default function BillGenerationForm() {
           </div>
 
           {selected && (
-            <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 4 }}>
+            <p style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 4 }}>
               {selected.kind} contract · {selected.state}
               {!selected.billable && ' — this one cannot be billed yet.'}
               {!form.from && !form.to && ' · leaving the period blank bills the whole contract.'}
@@ -192,7 +192,7 @@ export default function BillGenerationForm() {
           )}
 
           {error && (
-            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, color: 'var(--on-red)', fontSize: 13 }}>
+            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, color: 'var(--on-red)', fontSize: 14.5 }}>
               {error}
             </div>
           )}
@@ -211,20 +211,20 @@ export default function BillGenerationForm() {
       {preview && (
         <Card style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <strong style={{ fontSize: 14 }}>Preview — nothing is raised yet</strong>
+            <strong style={{ fontSize: 15.5 }}>Preview — nothing is raised yet</strong>
             <Badge type={blocked ? 'danger' : 'success'}>
               {blocked ? 'cannot raise' : `₹${fmtNumber(preview.invoice_amount, 0)}`}
             </Badge>
           </div>
 
           {blocked && (
-            <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 13, color: 'var(--on-red)' }}>
+            <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 14.5, color: 'var(--on-red)' }}>
               {blocked.error}
               {blocked.would_bill != null && <> (would bill ₹{fmtNumber(blocked.would_bill, 0)})</>}
             </div>
           )}
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
             <thead>
               <tr style={{ background: 'var(--slate-100)' }}>
                 {['Description', 'Basis', 'Quantity', 'Rate', 'Amount (₹)'].map((h) => (
@@ -264,7 +264,7 @@ export default function BillGenerationForm() {
           </table>
 
           {preview.warnings?.length > 0 && (
-            <ul style={{ margin: '10px 0 0 18px', fontSize: 13.5, color: 'var(--on-red)' }}>
+            <ul style={{ margin: '10px 0 0 18px', fontSize: 15, color: 'var(--on-red)' }}>
               {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
@@ -273,7 +273,7 @@ export default function BillGenerationForm() {
 
       {raised && (
         <Card style={{ marginTop: 16 }}>
-          <div style={{ padding: '10px 12px', background: 'var(--t-green-50)', border: '1px solid var(--t-green-line)', borderRadius: 6, color: 'var(--on-green)', fontSize: 13 }}>
+          <div style={{ padding: '10px 12px', background: 'var(--t-green-50)', border: '1px solid var(--t-green-line)', borderRadius: 6, color: 'var(--on-green)', fontSize: 14.5 }}>
             <strong>{raised.invoice_no}</strong> raised for ₹{fmtNumber(raised.invoice_amount, 0)} ({raised.settlement_basis}).{' '}
             <Link to="/billing/view-bills" style={{ color: 'var(--on-green)', textDecoration: 'underline' }}>Open View Bills</Link>
           </div>

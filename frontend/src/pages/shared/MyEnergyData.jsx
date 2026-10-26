@@ -3,7 +3,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import api from '../../api/client.js';
-import { PageHeader, Card, StatCard, Table, Badge, Modal, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, StatCard, Table, Badge, Modal, AlertPopup, fmtNumber } from '../../components/ui.jsx';
 import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 
 const monthLabel = (p) => new Date(`${p}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' });
@@ -36,6 +36,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
   const [open, setOpen] = useState(null); // { id, tab }
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [asking, setAsking] = useState(null); // the row whose figure is being accepted
 
   const load = useCallback(() => {
     setLoading(true);
@@ -52,8 +53,11 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
   const awaiting = (r) => !r.response_status && r.status === 'VALIDATED' && !r.is_superseded;
   const shown = useMemo(() => (onlyAwaiting ? rows.filter(awaiting) : rows), [rows, onlyAwaiting]);
 
-  async function accept(r) {
-    if (!window.confirm(`Accept ${r.energy_mwh} MWh for ${r.period_month} on ${r.contract_no}? This is recorded as your agreement to the figure and cannot be undone.`)) return;
+  // Asked in the page, not a browser dialog: those block assistive and automated browsers.
+  const accept = (r) => setAsking(r);
+  async function confirmAccept() {
+    const r = asking;
+    setAsking(null);
     try {
       await api.energyRecords.respond(r.id, { response: 'ACCEPTED' });
       setNotice(`Accepted ${r.period_month} on ${r.contract_no}.`);
@@ -79,7 +83,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
         : '-'),
     }] : []),
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
-    { key: 'response', header: 'Your answer', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>Replaced by final{r.response_status === 'OBJECTED' ? ' · objected' : r.response_status === 'ACCEPTED' ? ' · accepted' : ''}</span> : <ResponseBadge row={r} />) },
+    { key: 'response', header: 'Your answer', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>Replaced by final{r.response_status === 'OBJECTED' ? ' · objected' : r.response_status === 'ACCEPTED' ? ' · accepted' : ''}</span> : <ResponseBadge row={r} />) },
     {
       key: 'actions',
       header: 'Actions',
@@ -142,19 +146,19 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 13 }} />
-                  <YAxis yAxisId="mwh" tick={{ fontSize: 13 }} width={64} tickFormatter={(v) => fmtNumber(v, 0)} />
-                  {showCuf && <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 13 }} width={44} unit="%" domain={[0, (max) => Math.ceil(Math.max(max, minCuf || 0) / 10) * 10 + 10]} />}
+                  <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 14.5 }} />
+                  <YAxis yAxisId="mwh" tick={{ fontSize: 14.5 }} width={64} tickFormatter={(v) => fmtNumber(v, 0)} />
+                  {showCuf && <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 14.5 }} width={44} unit="%" domain={[0, (max) => Math.ceil(Math.max(max, minCuf || 0) / 10) * 10 + 10]} />}
                   <Tooltip
                     labelFormatter={(p) => `${monthLabel(p)}${series.find((s) => s.period === p)?.provisional ? ' — provisional' : ''}`}
                     formatter={(v, name) => (name === 'CUF' ? [`${fmtNumber(v)}%`, name] : [`${fmtNumber(v)} MWh`, name])}
                   />
-                  <Legend wrapperStyle={{ fontSize: 13.5 }} />
+                  <Legend wrapperStyle={{ fontSize: 15 }} />
                   <Bar yAxisId="mwh" dataKey="energy_mwh" name={energyLabel} fill="url(#eliteBlue)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                     {series.map((s) => <Cell key={s.period} fill={s.provisional ? '#93c5fd' : '#2563eb'} />)}
                   </Bar>
                   {showCuf && <Line yAxisId="cuf" type="monotone" dataKey="cuf_percent" name="CUF" stroke="url(#eliteOrange)" strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />}
-                  {showCuf && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="url(#eliteRed)" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 13, fill: '#dc2626' }} />}
+                  {showCuf && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="url(#eliteRed)" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 14.5, fill: '#dc2626' }} />}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -175,7 +179,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
           <option value="">All statuses</option>
           {['VALIDATED', 'LOCKED', 'DISPUTED'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14.5 }}>
           <input type="checkbox" checked={onlyAwaiting} onChange={(e) => setOnlyAwaiting(e.target.checked)} />
           Only those awaiting my confirmation
         </label>
@@ -188,6 +192,15 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
         />
       </Card>
 
+      <AlertPopup
+        open={!!asking}
+        tone="warning"
+        title="Accept this energy figure?"
+        message={asking ? `Accept ${fmtNumber(asking.energy_mwh)} MWh for ${asking.period_month} on ${asking.contract_no}? This is recorded as your agreement to the figure and cannot be undone.` : ''}
+        okLabel="Back"
+        onClose={() => setAsking(null)}
+        actions={<button type="button" className="btn btn-success" onClick={confirmAccept}>Accept the figure</button>}
+      />
       <Modal open={!!open} onClose={() => setOpen(null)} title={openRow ? `${openRow.contract_no} — ${openRow.period_month}` : 'Energy record'} width={940}>
         {open && <EnergyRecordDetail key={`${open.id}-${open.tab}`} id={open.id} startTab={open.tab} onChanged={load} disputesPath={disputesPath} />}
       </Modal>

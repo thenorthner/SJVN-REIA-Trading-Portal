@@ -278,7 +278,7 @@ export default function ExchangeBidding() {
               </Field>
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 8 }}>
                 Upload Request details in CSV format<span style={{ color: 'var(--red)' }}> *</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -289,14 +289,14 @@ export default function ExchangeBidding() {
                 <button type="button" className="btn btn-link" style={{ color: 'var(--on-blue)', padding: 0 }} onClick={downloadSample}>
                   Download Samples
                 </button>
-                {csvName && <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{csvName}</span>}
+                {csvName && <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>{csvName}</span>}
               </div>
             </div>
           </FormSection>
 
           <FormSection title="Requested Schedule Details">
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', textAlign: 'left', fontSize: 14.5 }}>
                 <thead style={{ background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-200)' }}>
                   <tr>
                     <th colSpan="2" style={{ padding: 8, borderRight: '1px solid var(--slate-200)', textAlign: 'center' }}>Date</th>
@@ -310,7 +310,7 @@ export default function ExchangeBidding() {
                       <button type="button" style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '1px 7px' }} onClick={() => addRow()}>+</button>
                     </th>
                   </tr>
-                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 13 }}>
+                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 14.5 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
                     <th style={{ padding: '4px 8px', borderRight: '1px solid var(--slate-200)' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>
@@ -364,10 +364,10 @@ export default function ExchangeBidding() {
           </FormSection>
 
           {error && (
-            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>
+            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>{error}</div>
           )}
           {success && (
-            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5 }}>
               Bidding <strong>{success.id}</strong> submitted for {success.client_name} ({success.product_type} · {success.bidding_type}).
               {success.bid_ids?.length > 0 && (
                 <>

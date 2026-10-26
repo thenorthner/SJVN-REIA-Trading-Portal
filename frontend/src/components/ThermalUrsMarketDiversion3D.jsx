@@ -101,7 +101,7 @@ export default function ThermalUrsMarketDiversion3D({
             </svg>
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
                 Thermal Beneficiary Dispatch & URS Power Market Diversion
               </span>
@@ -109,7 +109,7 @@ export default function ThermalUrsMarketDiversion3D({
                 background: 'rgba(20, 184, 166, 0.15)',
                 color: '#2dd4bf',
                 border: '1px solid rgba(20, 184, 166, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -118,7 +118,7 @@ export default function ThermalUrsMarketDiversion3D({
                 CERC URS SHARING RULE
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               {/* Example figures, not the station's account: under the station's
                   name they read as its own coal and URS (Thermal QA run 19). */}
               <span style={{ fontWeight: 700, color: '#fbbf24' }}>Illustration — example figures, not {station?.station_name || 'this station'}'s account.</span>{' '}Surrendered Discom Capacity (URS) ➔ Power Exchange (IEX RTM) Dispatch ➔ 50:50 Shared Benefit Gain
@@ -127,14 +127,14 @@ export default function ThermalUrsMarketDiversion3D({
         </div>
 
         {/* Case Toggle Buttons */}
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {SAMPLE_URS_CASES.map((c, idx) => (
             <button
               key={c.discom}
               type="button"
               className={`btn btn-xs ${selectedCaseIdx === idx ? 'btn-primary' : 'btn-ghost'}`}
               style={{
-                fontSize: 12,
+                fontSize: 13.5,
                 padding: '4px 10px',
                 background: selectedCaseIdx === idx ? 'rgba(20, 184, 166, 0.3)' : 'rgba(255, 255, 255, 0.04)',
                 borderColor: selectedCaseIdx === idx ? '#14b8a6' : 'rgba(255, 255, 255, 0.1)',
@@ -172,20 +172,20 @@ export default function ThermalUrsMarketDiversion3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#2dd4bf', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#2dd4bf', letterSpacing: '0.04em' }}>
               STAGE 1: SURRENDER GATE
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>ERPC SLDC</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>ERPC SLDC</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Un-requisitioned Surplus</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>{uCase.discom.split(' ')[0]} Off-Take Delta</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Un-requisitioned Surplus</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>{uCase.discom.split(' ')[0]} Off-Take Delta</div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Allocated / Scheduled:</span>
               <span style={{ color: '#f8fafc', fontWeight: 600 }}>{uCase.allocated_mw} MW / {uCase.scheduled_mw} MW</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Surrendered Power:</span>
               <span style={{ fontWeight: 700, color: '#f87171' }}>{uCase.surrendered_urs_mw} MW ({fmtNumber(uCase.surrendered_mwh, 0)} MWh)</span>
             </div>
@@ -207,22 +207,22 @@ export default function ThermalUrsMarketDiversion3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 2: EXCHANGE DISPATCH
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>IEX RTM</span>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>IEX RTM</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Power Exchange Clearing</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Power Exchange Clearing</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Station ECR: ₹{uCase.ecr_variable_cost}/kWh
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>RTM Clearing Price:</span>
               <span style={{ fontWeight: 700, color: '#4ade80' }}>₹{uCase.rtm_clearing_price} / kWh</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>Gross Realized:</span>
               <span style={{ fontWeight: 700, color: '#f8fafc' }}>{fmtCurrency(grossMarketRevenue)}</span>
             </div>
@@ -244,11 +244,11 @@ export default function ThermalUrsMarketDiversion3D({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#facc15', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#facc15', letterSpacing: '0.04em' }}>
               STAGE 3: 50:50 SHARING
             </span>
             <span style={{
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 700,
               background: 'rgba(234, 179, 8, 0.2)',
               color: '#facc15',
@@ -258,17 +258,17 @@ export default function ThermalUrsMarketDiversion3D({
               NET SURPLUS
             </span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Gain Sharing Settlement</div>
-          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>Gain Sharing Settlement</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
             Net Profit: {fmtCurrency(netSurplusGain)}
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 4 }}>
               <span style={{ color: '#94a3b8' }}>Discom 50% Bill Rebate:</span>
               <span style={{ fontWeight: 700, color: '#4ade80' }}>+{fmtCurrency(beneficiaryShareCredit)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
               <span style={{ color: '#94a3b8' }}>SJVN 50% Margin Gain:</span>
               <span style={{ fontWeight: 700, color: '#38bdf8' }}>+{fmtCurrency(sjvnRetainedMargin)}</span>
             </div>
@@ -284,7 +284,7 @@ export default function ThermalUrsMarketDiversion3D({
           border: '1px solid rgba(20, 184, 166, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',

@@ -100,7 +100,7 @@ export default function StaffUsers() {
               <div key={m.id} className={`elite-user-card ${!m.is_active ? 'inactive' : ''}`}>
                 <div className="elite-card-top">
                   <div className={`elite-avatar ${m.is_admin ? 'admin' : m.desk === 'Finance' || m.desk === 'Management' ? 'checker' : ''}`}>{m.name.charAt(0).toUpperCase()}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.875rem', color: 'var(--slate-500)', fontWeight: 500 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.969rem', color: 'var(--slate-500)', fontWeight: 500 }}>
                     <div className={`elite-status-indicator ${!m.is_active ? 'inactive' : ''}`} />{m.is_active ? 'Active' : 'Switched off'}
                   </div>
                 </div>
@@ -147,11 +147,11 @@ export default function StaffUsers() {
           </div>
           <div className="table-wrap" style={{ marginTop: '1.5rem' }}>
             <table className="data-table elite-matrix">
-              <thead><tr><th scope="col">What</th>{cols.map((r) => <th key={r} scope="col" style={{ fontSize: 13 }}>{d.roles.find((x) => x.role === r)?.label}</th>)}</tr></thead>
+              <thead><tr><th scope="col">What</th>{cols.map((r) => <th key={r} scope="col" style={{ fontSize: 14.5 }}>{d.roles.find((x) => x.role === r)?.label}</th>)}</tr></thead>
               <tbody>
                 {d.access.map((a) => (
                   <tr key={a.what}><td>{a.what}</td>
-                    {cols.map((r) => <td key={r}>{a.by[r] === 'Full' ? <Check size={16} color="#15803d" aria-label="Full" /> : a.by[r] ? <span style={{ fontSize: 13, color: 'var(--slate-600)' }}>{a.by[r]}</span> : <Minus size={16} color="#cbd5e1" aria-label="None" />}</td>)}
+                    {cols.map((r) => <td key={r}>{a.by[r] === 'Full' ? <Check size={16} color="#15803d" aria-label="Full" /> : a.by[r] ? <span style={{ fontSize: 14.5, color: 'var(--slate-600)' }}>{a.by[r]}</span> : <Minus size={16} color="#cbd5e1" aria-label="None" />}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -193,7 +193,7 @@ export default function StaffUsers() {
       <Modal open={modal?.kind === 'off'} onClose={() => setModal(null)} title={modal?.member ? `Switch off ${modal.member.name}'s account` : ''} width={480}>
         {modal?.kind === 'off' && (
           <form onSubmit={(e) => { e.preventDefault(); act(() => api.staff.deactivate(modal.member.id, modal.reason), `${modal.member.name}'s account is switched off.`); }}>
-            <p style={{ margin: '0 0 1rem', fontSize: 14 }}>They are signed out at once and cannot sign in again until the account is switched back on. What they have done stays on record.</p>
+            <p style={{ margin: '0 0 1rem', fontSize: 15.5 }}>They are signed out at once and cannot sign in again until the account is switched back on. What they have done stays on record.</p>
             <div className="elite-field">
               <label htmlFor="st-reason">Reason</label>
               <input id="st-reason" className="elite-input" required value={modal.reason} onChange={(e) => setModal({ ...modal, reason: e.target.value })} placeholder="e.g. Transferred; retired; left SJVN" />
@@ -205,7 +205,7 @@ export default function StaffUsers() {
       <Modal open={modal?.kind === 'reset'} onClose={() => setModal(null)} title={modal?.member ? `Reset ${modal.member.name}'s password` : ''} width={480}>
         {modal?.kind === 'reset' && (
           <div>
-            <p style={{ margin: 0, fontSize: 14 }}>A new temporary password is generated. Their current password stops working, they are signed out everywhere, and they must choose a new one at next sign-in.</p>
+            <p style={{ margin: 0, fontSize: 15.5 }}>A new temporary password is generated. Their current password stops working, they are signed out everywhere, and they must choose a new one at next sign-in.</p>
             <div className="elite-modal-actions">
               <button type="button" className="elite-btn-cancel" onClick={() => setModal(null)}>Cancel</button>
               <button type="button" className="elite-btn-submit" onClick={async () => {

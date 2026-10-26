@@ -69,12 +69,12 @@ export default function HydroEnergyOverview({ contractId, title, subtitle, showK
       <Card
         title={title || `Regional Energy Account (REA) — Generation & Plant Availability Month on Month${stationName ? ` (${stationName})` : ' — All Hydro Stations'}`}
       >
-        <div style={{ padding: '4px 0 12px', fontSize: 13.5, color: 'var(--slate-500)' }}>
+        <div style={{ padding: '4px 0 12px', fontSize: 15, color: 'var(--slate-500)' }}>
           {subtitle || 'Actual ex-bus generation in MWh and plant availability factor (PAFM %) certified by Northern Regional Power Committee (NRPC)'}
         </div>
 
         {series.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--slate-500)', fontSize: 13.5 }}>
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--slate-500)', fontSize: 15 }}>
             {loading ? 'Loading REA energy data from NRPC records…' : 'No energy records found for the selected station.'}
           </div>
         ) : (
@@ -82,22 +82,22 @@ export default function HydroEnergyOverview({ contractId, title, subtitle, showK
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={series} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 12.5 }} />
+                <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 14 }} />
                 <YAxis
                   yAxisId="mwh"
-                  tick={{ fontSize: 12.5 }}
+                  tick={{ fontSize: 14 }}
                   width={72}
                   tickFormatter={(v) => fmtNumber(v, 0)}
-                  label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11.5, fill: 'var(--slate-500)' }}
+                  label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 13, fill: 'var(--slate-500)' }}
                 />
                 <YAxis
                   yAxisId="pafm"
                   orientation="right"
-                  tick={{ fontSize: 12.5 }}
+                  tick={{ fontSize: 14 }}
                   width={52}
                   unit="%"
                   domain={[0, (max) => Math.ceil(Math.max(max, 100) / 10) * 10 + 10]}
-                  label={{ value: 'PAFM %', angle: 90, position: 'insideRight', offset: 10, fontSize: 11.5, fill: 'var(--slate-500)' }}
+                  label={{ value: 'PAFM %', angle: 90, position: 'insideRight', offset: 10, fontSize: 13, fill: 'var(--slate-500)' }}
                 />
                 <Tooltip
                   labelFormatter={(p) => {
@@ -110,7 +110,7 @@ export default function HydroEnergyOverview({ contractId, title, subtitle, showK
                       : [`${fmtNumber(v)} MWh`, name]
                   )}
                 />
-                <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
+                <Legend wrapperStyle={{ fontSize: 14.5, paddingTop: 8 }} />
                 <Bar
                   yAxisId="mwh"
                   dataKey="energy_mwh"
@@ -138,7 +138,7 @@ export default function HydroEnergyOverview({ contractId, title, subtitle, showK
                   y={87.0}
                   stroke="#ef4444"
                   strokeDasharray="4 4"
-                  label={{ value: 'NAPAF Norm 87%', position: 'insideTopRight', fontSize: 12, fill: '#ef4444' }}
+                  label={{ value: 'NAPAF Norm 87%', position: 'insideTopRight', fontSize: 13.5, fill: '#ef4444' }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -146,11 +146,11 @@ export default function HydroEnergyOverview({ contractId, title, subtitle, showK
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-          <p className="inline-note" style={{ margin: 0, fontSize: 12.5, color: 'var(--slate-500)' }}>
+          <p className="inline-note" style={{ margin: 0, fontSize: 14, color: 'var(--slate-500)' }}>
             Darker blue bars indicate Final REA accounts; lighter blue bars indicate Provisional REA accounts.
             Dashed red line indicates CERC NAPAF norm of 87.0%.
           </p>
-          <span style={{ fontSize: 12, color: 'var(--slate-500)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: 4 }}>
+          <span style={{ fontSize: 13.5, color: 'var(--slate-500)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: 4 }}>
             Source: Table D2 (NRPC Certified)
           </span>
         </div>

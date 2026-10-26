@@ -13,6 +13,9 @@ import { ROLE_GROUPS } from '../../roles.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
+// Phase B.2: the maker records, uploads and enters curtailment; the checker validates and locks.
+const CAN_MAKE = ROLE_GROUPS.REIA_MAKE;
+const CAN_CHECK = ROLE_GROUPS.REIA_CHECK;
 
 const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const hoursIn = (ym) => { const [y, m] = String(ym).split('-').map(Number); return y && m ? new Date(Date.UTC(y, m, 0)).getUTCDate() * 24 : null; };
@@ -172,7 +175,7 @@ export default function EnergyData() {
       return (
         <div>
           <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{r.contract_no}</div>
-          {plant && <div style={{ fontSize: 12, color: 'var(--slate-500)', fontWeight: 500 }}>{plant}</div>}
+          {plant && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 500 }}>{plant}</div>}
         </div>
       );
     }},
@@ -188,23 +191,23 @@ export default function EnergyData() {
     { key: 'cuf_percent', header: 'CUF %', render: (r) => (
       <span>
         {r.cuf_percent != null ? `${fmtNumber(r.cuf_percent)}%` : '-'}
-        {Number(r.curtailment_hours) > 0 && <div style={{ fontSize: 12, color: 'var(--slate-500)' }} title={r.curtailment_ref || ''}>{fmtNumber(r.curtailment_hours)} h curtailed</div>}
+        {Number(r.curtailment_hours) > 0 && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }} title={r.curtailment_ref || ''}>{fmtNumber(r.curtailment_hours)} h curtailed</div>}
       </span>
     ) },
     { key: 'availability_percent', header: 'Availability %', render: (r) => r.availability_percent != null ? `${fmtNumber(r.availability_percent)}%` : '-' },
     { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     // What the seller or buyer has said to the figure: accepted, objected, or not yet answered.
-    { key: 'response', header: 'Counterparty', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
+    { key: 'response', header: 'Counterparty', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
     { key: 'deviation_notes', header: 'Notes', render: (r) => r.deviation_notes || '-' },
     ...(CAN_WRITE.includes(user?.role) ? [{
       key: 'actions', header: 'Actions', render: (r) => (
         <div className="cell-actions">
-          {['DRAFT', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>{r.status === 'DISPUTED' ? 'Re-validate' : 'Validate'}</button>}
-          {['VALIDATED', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-success btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
+          {CAN_CHECK.includes(user?.role) && ['DRAFT', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>{r.status === 'DISPUTED' ? 'Re-validate' : 'Validate'}</button>}
+          {CAN_CHECK.includes(user?.role) && ['VALIDATED', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-success btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
           <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
           <button className="btn btn-outline btn-sm" title="Source document, 15-minute blocks and the counterparty's answer" onClick={(e) => { e.stopPropagation(); setRecordId(r.id); }}>Record</button>
-          {!r.is_superseded && <button className="btn btn-outline btn-sm" title="SLDC/RLDC-certified curtailment hours, taken out of CUF's possible generation"
+          {CAN_MAKE.includes(user?.role) && !r.is_superseded && <button className="btn btn-outline btn-sm" title="SLDC/RLDC-certified curtailment hours, taken out of CUF's possible generation"
             onClick={(e) => { e.stopPropagation(); setCurtail({ row: r, hours: r.curtailment_hours ?? '', reference: r.curtailment_ref || '' }); }}>Curtailment</button>}
         </div>
       ),
@@ -233,7 +236,7 @@ export default function EnergyData() {
             >
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_WRITE.includes(user?.role) && (
+            {CAN_MAKE.includes(user?.role) && (
               <>
                 <button className="btn btn-secondary" onClick={() => { setAccountResult(null); setShowAccountUpload(true); }}>Upload JMR / SEA</button>
                 <button className="btn btn-secondary" onClick={openCreate}>+ Record Energy Data</button>
@@ -328,7 +331,7 @@ export default function EnergyData() {
               const max = mw && h ? mw * h : null;
               return (
                 <Field label="CUF (worked out)">
-                  <div style={{ padding: '8px 0', fontSize: 13.5, color: max != null && e > max ? 'var(--red-deep)' : 'var(--slate-600)' }}>
+                  <div style={{ padding: '8px 0', fontSize: 15, color: max != null && e > max ? 'var(--red-deep)' : 'var(--slate-600)' }}>
                     {mw && h && form.energy_mwh !== '' ? `${fmtNumber(Math.round((e / (mw * h)) * 10000) / 100)}% — ${fmtNumber(e)} MWh on ${fmtNumber(mw)} MW over ${h} h` : 'Choose the contract, month and energy'}
                     {max != null && e > max ? ` · above the ${fmtNumber(max)} MWh the plant can make` : ''}
                   </div>
@@ -383,7 +386,7 @@ export default function EnergyData() {
               setPopup({ tone: 'error', title: 'Curtailment not saved', message: errOf(err, 'Could not save the curtailment hours.') });
             }
           }}>
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginTop: 0 }}>
               {curtail.row.contract_no} · {curtail.row.period_month}. Only hours an SLDC/RLDC instruction certifies count. Where hours are entered, deemed generation is not added again for the month.
             </p>
             <Field label="Curtailed hours" required><input type="number" min="0" step="0.25" value={curtail.hours} onChange={(e) => setCurtail({ ...curtail, hours: e.target.value })} /></Field>
@@ -399,7 +402,7 @@ export default function EnergyData() {
       <Modal open={!!lockAsk} onClose={() => setLockAsk(null)} title="Lock this period as it stands?" width={560}>
         {lockAsk && (
           <form onSubmit={(e) => { e.preventDefault(); handleLock(lockAsk.row, lockReason.trim()); }}>
-            <div className="alert alert-error" style={{ fontSize: 13.5 }}>
+            <div className="alert alert-error" style={{ fontSize: 15 }}>
               <strong>{lockAsk.row.contract_no} · {lockAsk.row.period_month}</strong> — {lockAsk.error}
               {lockAsk.objection && <div style={{ marginTop: 6 }}>Their objection: {lockAsk.objection}</div>}
               {lockAsk.validation && <div style={{ marginTop: 6 }}>Validation: {lockAsk.validation}</div>}
@@ -407,7 +410,7 @@ export default function EnergyData() {
             {lockError && <div className="form-error" role="alert">{lockError}</div>}
             <Field label="Reason for locking it anyway (kept on record, and the desk is told)" required>
               <textarea required rows={3} minLength={15} placeholder="e.g. CERC order 14/2026 — NRLDC certified curtailment for the month" value={lockReason} onChange={(e) => setLockReason(e.target.value)} style={{ width: '100%' }} />
-              <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>At least 15 characters — an auditor reads this.</span>
+              <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>At least 15 characters — an auditor reads this.</span>
             </Field>
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setLockAsk(null)}>Cancel</button>

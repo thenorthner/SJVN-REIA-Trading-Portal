@@ -37,7 +37,7 @@ function Caveat({ children }) {
       background: 'var(--warning-bg, var(--t-amber-50))',
       border: '1px solid var(--warning-border, var(--t-amber-100))',
       color: 'var(--warning-text, #92400e)',
-      borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 13,
+      borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 14.5,
     }}>
       {children}
     </div>
@@ -127,7 +127,7 @@ export default function PxilReports() {
             {loading ? 'Fetching…' : 'Fetch from PXIL'}
           </button>
           {tab === 'reverse-auction' && (
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: 14.5, color: 'var(--text-muted)' }}>
               The reverse auction endpoint has no date filter — it returns whatever is open now.
             </span>
           )}
@@ -150,7 +150,7 @@ export default function PxilReports() {
             {report.mode === 'PXIL' ? 'Live from PXIL' : 'Documented sample'}
           </Badge>
           {report.code && (
-            <span style={{ marginLeft: 10, fontSize: 13.5, color: 'var(--text-muted)' }}>
+            <span style={{ marginLeft: 10, fontSize: 15, color: 'var(--text-muted)' }}>
               {/* PXIL sends an empty period as a 404; that is an answer, not a failure. */}
               {Number(report.code) === 404 ? 'PXIL holds no data for this period' : `Response code ${report.code}`}
             </span>
@@ -509,7 +509,7 @@ function ReverseAuction({ result, loading }) {
         only if each poll is recorded.
       </Caveat>
       {result?.polled_at && (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
+        <p style={{ fontSize: 14.5, color: 'var(--text-muted)', marginTop: 0 }}>
           Polled at {new Date(result.polled_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
         </p>
       )}

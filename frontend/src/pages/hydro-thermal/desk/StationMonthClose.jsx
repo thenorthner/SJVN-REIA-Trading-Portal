@@ -52,20 +52,20 @@ export default function StationMonthClose({ vertical = 'HYDRO' }) {
       <Card title="Stations">
         <Table
           columns={[
-            { key: 'station_name', header: 'Station', render: (r) => <span>{r.station_name}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.contract_no}</div></span> },
+            { key: 'station_name', header: 'Station', render: (r) => <span>{r.station_name}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.contract_no}</div></span> },
             { key: 'energy', header: 'REA / energy', render: (r) => (r.energy.in
-              ? <span>{kwhToMu(r.energy.saleable_kwh)}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.energy.rea_reference || 'REA on file'}{r.energy.pafm_pct != null ? ` · PAFM ${r.energy.pafm_pct}%` : ''}</div></span>
+              ? <span>{kwhToMu(r.energy.saleable_kwh)}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.energy.rea_reference || 'REA on file'}{r.energy.pafm_pct != null ? ` · PAFM ${r.energy.pafm_pct}%` : ''}</div></span>
               : <span style={{ color: 'var(--amber-strong)' }}>Not in yet</span>) },
             { key: 'bill', header: 'Month bill', render: (r) => (r.bill
-              ? <span>{r.bill.bill_no} <span style={{ color: 'var(--text-light)', fontSize: 12.5 }}>({r.bill.bill_kind.toLowerCase()})</span><div style={{ fontSize: 12.5 }}>{fmtCurrency(r.bill.total)}</div></span>
+              ? <span>{r.bill.bill_no} <span style={{ color: 'var(--text-light)', fontSize: 14 }}>({r.bill.bill_kind.toLowerCase()})</span><div style={{ fontSize: 14 }}>{fmtCurrency(r.bill.total)}</div></span>
               : '—') },
             { key: 'others', header: 'Other bills', render: (r) => (r.other_bills.length
-              ? r.other_bills.map((b) => <div key={b.bill_no} style={{ fontSize: 12.5 }}>{b.bill_no} · {b.bill_kind.toLowerCase()} <Badge status={b.status} /></div>)
+              ? r.other_bills.map((b) => <div key={b.bill_no} style={{ fontSize: 14 }}>{b.bill_no} · {b.bill_kind.toLowerCase()} <Badge status={b.status} /></div>)
               : '—') },
             { key: 'fi', header: 'Finance', render: (r) => (r.fi ? <span>{r.fi.posting_no} <Badge status={r.fi.status} /></span> : '—') },
             { key: 'stage', header: 'Standing', render: (r) => (
               <span><Badge type={r.tone}>{r.stage_label}</Badge>
-                {r.next_step && <div style={{ fontSize: 12.5, color: 'var(--text-light)', marginTop: 2 }}>{r.next_step}</div>}
+                {r.next_step && <div style={{ fontSize: 14, color: 'var(--text-light)', marginTop: 2 }}>{r.next_step}</div>}
               </span>
             ) },
             { key: 'go', header: '', render: (r) => (r.next_step
@@ -89,10 +89,10 @@ export default function StationMonthClose({ vertical = 'HYDRO' }) {
                   {i.clear ? '✓' : (i.blocking ? '✗' : '•')} {i.label}
                   {!i.clear && i.key !== 'advances' && i.key !== 'lps' ? ` — ${i.count}` : ''}
                   {!i.clear && i.amount ? `, ${fmtCurrency(i.amount)}` : ''}
-                  {!i.blocking && !i.clear && <span style={{ fontWeight: 400, fontSize: 12.5, color: 'var(--text-light)' }}> (disclose, does not hold the close)</span>}
+                  {!i.blocking && !i.clear && <span style={{ fontWeight: 400, fontSize: 14, color: 'var(--text-light)' }}> (disclose, does not hold the close)</span>}
                 </div>
                 {!i.clear && (i.refs?.length > 0 || i.hint) && (
-                  <div style={{ fontSize: 13, color: 'var(--text-light)' }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>
                     {i.refs.slice(0, 6).join(', ')}{i.refs.length > 6 ? ` and ${i.refs.length - 6} more` : ''}{i.hint ? `${i.refs.length ? ' · ' : ''}${i.hint}` : ''}
                   </div>
                 )}

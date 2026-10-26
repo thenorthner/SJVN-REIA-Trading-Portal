@@ -18,7 +18,8 @@ function saveBlob(blob, name) {
 
 export default function NoteApprovals() {
   const { user } = useAuth();
-  const canAct = ['FINANCE_USER', 'REIA_MAKER', 'REIA_CHECKER'].includes(user?.role);
+  // Phase B.2: approving or rejecting a note is the checker's or Finance's (routes/notes.js).
+  const canAct = ['FINANCE_USER', 'REIA_CHECKER'].includes(user?.role);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rejecting, setRejecting] = useState(null);
@@ -46,14 +47,14 @@ export default function NoteApprovals() {
       {!loading && !rows.length && <Card><p className="inline-note">No note is waiting for approval.</p></Card>}
       {rows.map((n) => (
         <Card key={n.id} title={`${n.note_type === 'CREDIT' ? 'Credit' : 'Debit'} note ${fmtCurrency(n.amount)} on ${n.invoice_no}`}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 13.5, marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 15, marginBottom: 8 }}>
             <Badge type="primary">{SOURCE[n.source] || n.source}</Badge>
             <span>{n.contract_no} · {n.counterparty} · {n.billing_period}</span>
             <span style={{ color: 'var(--text-light)' }}>Raised by {n.created_by}, {n.age_days} day{n.age_days === 1 ? '' : 's'} ago</span>
           </div>
           <p style={{ margin: '0 0 8px' }}>{n.reason}</p>
           {n.dispute && (
-            <div style={{ background: 'var(--bg)', borderRadius: 8, padding: 10, fontSize: 13.5, marginBottom: 8 }}>
+            <div style={{ background: 'var(--bg)', borderRadius: 8, padding: 10, fontSize: 15, marginBottom: 8 }}>
               <div><strong>{n.dispute.dispute_no}</strong> — raised by the {String(n.dispute.raised_by_role).toLowerCase()} on {String(n.dispute.charge_line).replace(/_/g, ' ')} for {fmtCurrency(n.dispute.disputed_amount)} ({String(n.dispute.reason_code).replace(/_/g, ' ').toLowerCase()})</div>
               {n.dispute.issue_description && <div style={{ marginTop: 4 }}>Their case: {n.dispute.issue_description}</div>}
               <div style={{ marginTop: 4 }}>Resolution: {String(n.dispute.outcome || '').replace(/_/g, ' ').toLowerCase()}, {fmtCurrency(n.dispute.accepted_amount)} accepted — <em>{n.dispute.resolution_notes}</em>{n.dispute.resolved_by ? ` (${n.dispute.resolved_by}${n.dispute.resolved_at ? `, ${fmtDate(n.dispute.resolved_at)}` : ''})` : ''}</div>

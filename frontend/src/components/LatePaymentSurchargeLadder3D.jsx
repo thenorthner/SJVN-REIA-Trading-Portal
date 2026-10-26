@@ -157,7 +157,7 @@ export default function LatePaymentSurchargeLadder3D({
                 background: 'rgba(147, 51, 234, 0.2)',
                 color: '#c084fc',
                 border: '1px solid rgba(147, 51, 234, 0.4)',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -166,7 +166,7 @@ export default function LatePaymentSurchargeLadder3D({
                 MoP LPS RULES 2022
               </span>
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 2 }}>
               {beneficiary ? `${beneficiary} — ` : ''}Prompt Rebate Window (1-30d) ➔ Due Date Grace (45d) ➔ LPS Trigger (MCLR+350bps) ➔ Grid Power Regulation (75d+)
             </div>
           </div>
@@ -186,7 +186,7 @@ export default function LatePaymentSurchargeLadder3D({
               type="button"
               className={`btn btn-xs ${activeDay === btn.day ? 'btn-primary' : 'btn-ghost'}`}
               style={{
-                fontSize: 12,
+                fontSize: 13.5,
                 padding: '4px 10px',
                 background: activeDay === btn.day ? 'rgba(147, 51, 234, 0.35)' : 'rgba(255, 255, 255, 0.04)',
                 borderColor: activeDay === btn.day ? '#a855f7' : 'rgba(255, 255, 255, 0.1)',
@@ -231,11 +231,11 @@ export default function LatePaymentSurchargeLadder3D({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: tier.color, letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: tier.color, letterSpacing: '0.04em' }}>
                   {tier.name}
                 </span>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 6px',
                   borderRadius: 4,
@@ -246,16 +246,16 @@ export default function LatePaymentSurchargeLadder3D({
                 </span>
               </div>
 
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
                 {tier.title}
               </div>
-              <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+              <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 2 }}>
                 {tier.rule}
               </div>
 
               <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>Status at Day {activeDay}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: isCurrentActive ? tier.color: 'var(--slate-500)', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Status at Day {activeDay}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: isCurrentActive ? tier.color: 'var(--slate-500)', marginTop: 2 }}>
                   {isCurrentActive ? tier.status : 'INACTIVE'}
                 </div>
               </div>
@@ -280,21 +280,21 @@ export default function LatePaymentSurchargeLadder3D({
         gap: 16,
       }}>
         <div>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Invoice Principal Sum</div>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Invoice Principal Sum</div>
           <div style={{ fontSize: 19, fontWeight: 700, color: '#f8fafc' }}>
             {fmtCurrency(principal)}
           </div>
         </div>
 
         <div>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Settlement At Day {activeDay}</div>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Settlement At Day {activeDay}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: currentTier === 1 ? '#4ade80' : currentTier === 2 ? '#38bdf8' : '#f87171' }}>
             {currentTier === 1 ? `Rebate Earned: -${fmtCurrency(rebateAmount)} (${rebatePct}%)` : currentTier === 2 ? 'Par Value (No Rebate / No Surcharge)' : `LPS Surcharge: +${fmtCurrency(surchargeAmount)} (${lpsAnnualRatePct}% p.a.)`}
           </div>
         </div>
 
         <div>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>Net Payable Amount</div>
+          <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Net Payable Amount</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: currentTier === 1 ? '#4ade80' : currentTier === 2 ? '#f8fafc' : '#f87171', fontVariantNumeric: 'tabular-nums' }}>
             {fmtCurrency(netPayable)}
           </div>
@@ -309,7 +309,7 @@ export default function LatePaymentSurchargeLadder3D({
           border: '1px solid rgba(147, 51, 234, 0.3)',
           borderRadius: 8,
           padding: '12px 16px',
-          fontSize: 13,
+          fontSize: 14.5,
           color: '#cbd5e1',
           lineHeight: 1.5,
           position: 'relative',

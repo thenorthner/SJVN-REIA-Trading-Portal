@@ -36,12 +36,26 @@ import { ROLE_GROUPS } from '../../roles.js';
 // left out REIA_CHECKER and IT_SUPER_ADMIN, so those two were allowed by the API
 // and never offered the buttons — a REIA admin could not approve a bill on screen.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
-const CAN_APPROVE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER', 'MANAGEMENT'];
-// Recording a buyer's payment is Finance's group; releasing to a generator is
-// open to the REIA desk as well.
+// Phase B.2: the maker raises, verifies, submits and sends a bill; the checker
+// waives a mismatch, signs level 1 and sends a bill back.
+const CAN_MAKE = ROLE_GROUPS.REIA_MAKE;
+const CAN_CHECK = ROLE_GROUPS.REIA_CHECK;
+// A bill still on the maker's desk is the maker's to withdraw; once it is with
+// the reviewers, cancelling it is the checker's (routes/invoices.js /cancel).
+const MAKERS_DESK = ['DRAFT', 'REJECTED', 'PENDING_L2'];
+// Everyone the server lets act on an approval level (routes/invoices.js): the
+// checker (level 1), Finance (level 2) and the REIA HOD or Management (level 3).
+// Which level is whose comes from each step's approver_roles.
+const CAN_APPROVE = [...new Set([...ROLE_GROUPS.REIA_CHECK, 'FINANCE_USER', ...ROLE_GROUPS.REIA_APPROVE])];
+// Debit / credit notes on a bill (routes/notes.js): the maker or Finance raises
+// and applies; the checker or Finance approves, rejects and cancels.
+const CAN_MAKE_NOTES = [...ROLE_GROUPS.REIA_MAKE, 'FINANCE_USER'];
+const CAN_CHECK_NOTES = [...ROLE_GROUPS.REIA_CHECK, 'FINANCE_USER'];
+// Recording a buyer's payment is Finance's group (Finance and the REIA maker).
 // Mirrors ROLE_GROUPS.FINANCE on the server; the administrators record no payments (Target #2 Phase B).
 const CAN_RECORD_PAYMENT = ['FINANCE_USER', 'REIA_MAKER'];
-const CAN_RELEASE = [...new Set([...CAN_RECORD_PAYMENT, ...ROLE_GROUPS.REIA_WRITE])];
+// Paying a generator out is Finance's or the REIA checker's (Phase B.2).
+const CAN_RELEASE = ['FINANCE_USER', ...ROLE_GROUPS.REIA_CHECK];
 // The total can be changed until the bill goes for approval; after that the
 // figure is what somebody is signing, or has signed.
 const CHARGES_EDITABLE = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'REJECTED'];
@@ -515,8 +529,8 @@ export default function Invoices() {
     { key: 'invoice_type', header: 'Type', render: (r) => (
       r.invoice_type === 'PROVISIONAL' ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, padding: '2px 6px', background: 'var(--t-amber-100)', color: 'var(--on-amber)', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
-          {CAN_WRITE.includes(user?.role) && !['CANCELLED'].includes(r.status) && (
+          <span style={{ fontSize: 14.5, padding: '2px 6px', background: 'var(--t-amber-100)', color: 'var(--on-amber)', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
+          {CAN_MAKE.includes(user?.role) && !['CANCELLED'].includes(r.status) && (
             <button 
               className="btn btn-xs btn-outline" 
               onClick={(e) => {
@@ -525,7 +539,7 @@ export default function Invoices() {
                 setSuppError('');
                 setShowSupp(true);
               }}
-              style={{ fontSize: 12.5, padding: '2px 6px' }}
+              style={{ fontSize: 14, padding: '2px 6px' }}
             >
               True-Up
             </button>
@@ -579,7 +593,7 @@ export default function Invoices() {
         actions={
           <>
             <button className="btn btn-secondary" onClick={() => navigate('/reia/reports')}>Billing Report</button>
-            {CAN_WRITE.includes(user?.role) && (
+            {CAN_MAKE.includes(user?.role) && (
               <>
                 <button className="btn btn-secondary" onClick={openWaterfall}>Receive Buyer Payment</button>
                 <button className="btn btn-secondary" onClick={() => { setArrearForm(ARREAR_FORM); setArrearError(''); setShowArrear(true); }}>+ Arrear Bill</button>
@@ -616,7 +630,7 @@ export default function Invoices() {
             borderBottom: activeTab === 'INVOICES' ? '3px solid var(--primary)' : '3px solid transparent',
             color: activeTab === 'INVOICES' ? 'var(--primary)' : 'var(--text-muted)',
             fontWeight: activeTab === 'INVOICES' ? 700 : 500,
-            fontSize: 14.5,
+            fontSize: 15.5,
             cursor: 'pointer',
           }}
         >
@@ -633,7 +647,7 @@ export default function Invoices() {
             borderBottom: activeTab === 'TRAIL' ? '3px solid #0284c7' : '3px solid transparent',
             color: activeTab === 'TRAIL' ? 'var(--on-blue)' : 'var(--text-muted)',
             fontWeight: activeTab === 'TRAIL' ? 700 : 500,
-            fontSize: 14.5,
+            fontSize: 15.5,
             cursor: 'pointer',
           }}
         >
@@ -680,7 +694,7 @@ export default function Invoices() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: 14.5, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
                   Select Contract (PPA / PSA)
                 </label>
                 <select
@@ -692,7 +706,7 @@ export default function Invoices() {
                     color: '#f8fafc',
                     padding: '8px 12px',
                     borderRadius: 6,
-                    fontSize: 13,
+                    fontSize: 14.5,
                     minWidth: 280,
                   }}
                 >
@@ -705,7 +719,7 @@ export default function Invoices() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: 14.5, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
                   Billing Period
                 </label>
                 <input
@@ -718,13 +732,13 @@ export default function Invoices() {
                     color: '#f8fafc',
                     padding: '8px 12px',
                     borderRadius: 6,
-                    fontSize: 13,
+                    fontSize: 14.5,
                   }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: 14.5, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
                   Flow Direction
                 </label>
                 <select
@@ -736,7 +750,7 @@ export default function Invoices() {
                     color: '#f8fafc',
                     padding: '8px 12px',
                     borderRadius: 6,
-                    fontSize: 13,
+                    fontSize: 14.5,
                   }}
                 >
                   <option value="">Auto-Detect from Linked Pair</option>
@@ -767,7 +781,7 @@ export default function Invoices() {
       <Modal open={showGenerate} onClose={() => setShowGenerate(false)} title="Generate Invoice" width={520}>
         <form onSubmit={handleGenerate}>
           <Field label="Contract">
-            <select required value={genForm.contract_id} onChange={(e) => setGenForm({ ...genForm, contract_id: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 14 }}>
+            <select required value={genForm.contract_id} onChange={(e) => setGenForm({ ...genForm, contract_id: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 15.5 }}>
               <option value="">Select contract...</option>
               {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
             </select>
@@ -775,10 +789,10 @@ export default function Invoices() {
           
           <div className="form-grid" style={{ marginTop: 16, marginBottom: 16 }}>
             <Field label="Billing Period">
-              <input required type="month" max={lastCompleteMonth()} value={genForm.period_month} onChange={(e) => setGenForm({ ...genForm, period_month: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 14 }} />
+              <input required type="month" max={lastCompleteMonth()} value={genForm.period_month} onChange={(e) => setGenForm({ ...genForm, period_month: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 15.5 }} />
             </Field>
             <Field label="Invoice Type">
-              <select value={genForm.invoice_type} onChange={(e) => setGenForm({ ...genForm, invoice_type: e.target.value })} style={{ padding: '10px 12px', fontSize: 14 }}>
+              <select value={genForm.invoice_type} onChange={(e) => setGenForm({ ...genForm, invoice_type: e.target.value })} style={{ padding: '10px 12px', fontSize: 15.5 }}>
                 <option value="PROVISIONAL">Provisional</option>
                 <option value="FINAL">Final</option>
               </select>
@@ -795,7 +809,7 @@ export default function Invoices() {
             return (
               <Field label="Link Developer / Seller Invoices (Optional)" style={{ marginTop: 20 }}>
                 {validInvoices.length === 0 ? (
-                  <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', border: '1px dashed var(--border)' }}>
+                  <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 14.5, textAlign: 'center', border: '1px dashed var(--border)' }}>
                     No developer bill for {genForm.period_month} on a PPA feeding this PSA. (Optional — you can still generate the DISCOM bill directly.)
                   </div>
                 ) : (
@@ -817,12 +831,12 @@ export default function Invoices() {
                           />
                           <div style={{ flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? 'var(--primary-dark)' : 'var(--text)' }}>{r.invoice_no}</div>
-                              <span style={{ fontSize: 12.5, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-muted)', border: '1px solid var(--border)', textTransform: 'uppercase', fontWeight: 600 }}>
+                              <div style={{ fontSize: 14.5, fontWeight: 600, color: isSelected ? 'var(--primary-dark)' : 'var(--text)' }}>{r.invoice_no}</div>
+                              <span style={{ fontSize: 14, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-muted)', border: '1px solid var(--border)', textTransform: 'uppercase', fontWeight: 600 }}>
                                 {r.status.replace(/_/g, ' ')}
                               </span>
                             </div>
-                            <div style={{ fontSize: 13, color: isSelected ? 'var(--primary)' : 'var(--text-muted)', marginTop: 2 }}>Period: {r.billing_period}  •  Amount: {fmtCurrency(r.total_amount)}</div>
+                            <div style={{ fontSize: 14.5, color: isSelected ? 'var(--primary)' : 'var(--text-muted)', marginTop: 2 }}>Period: {r.billing_period}  •  Amount: {fmtCurrency(r.total_amount)}</div>
                           </div>
                         </label>
                       );
@@ -830,7 +844,7 @@ export default function Invoices() {
                   </div>
                 )}
                 <div style={{ marginTop: 8, padding: '10px 14px', background: 'rgba(59, 130, 246, 0.06)', borderLeft: '3px solid var(--primary)', borderRadius: '0 6px 6px 0' }}>
-                  <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  <p style={{ margin: 0, fontSize: 15, color: 'var(--text-muted)', lineHeight: 1.4 }}>
                     <strong>Optional:</strong> Link incoming developer bills to this DISCOM bill for back-to-back audit tracking. You can also generate directly without linking.
                   </p>
                 </div>
@@ -842,7 +856,7 @@ export default function Invoices() {
             <div style={{ color: 'var(--primary)', marginTop: 2 }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             </div>
-            <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: 15, color: 'var(--text-muted)', lineHeight: 1.5 }}>
               The amount is worked out from the month's <strong style={{color: 'var(--text)'}}>LOCKED</strong> energy and the contract tariff — lock the month on the Energy Data desk first. A <strong style={{color: 'var(--text)'}}>FINAL</strong> bill needs locked FINAL energy. Only a month that has ended can be billed.
             </p>
           </div>
@@ -865,11 +879,11 @@ export default function Invoices() {
             </select>
           </Field>
           {wfOutstanding && (
-            <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, var(--t-blue-50))', borderRadius: 8, fontSize: 13 }}>
+            <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, var(--t-blue-50))', borderRadius: 8, fontSize: 14.5 }}>
               Outstanding: <strong>{fmtCurrency(wfOutstanding.total_due)}</strong>
               {'  ·  '}LPS <strong>{fmtCurrency(wfOutstanding.total_lps)}</strong>
               {'  ·  '}Principal <strong>{fmtCurrency(wfOutstanding.total_principal)}</strong>
-              <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>{wfOutstanding.items.length} outstanding bill(s)</div>
+              <div style={{ fontSize: 14.5, color: 'var(--text-light)', marginTop: 2 }}>{wfOutstanding.items.length} outstanding bill(s)</div>
             </div>
           )}
           <div className="form-grid">
@@ -885,12 +899,12 @@ export default function Invoices() {
           {wfResult && (
             <div style={{ marginTop: 8 }}>
               <div className="inline-note">Allocated {fmtCurrency(wfResult.allocated)}{wfResult.unallocated > 0 ? ` · ${fmtCurrency(wfResult.unallocated)} unallocated (no more dues)` : ''}:</div>
-              <table className="data-table" style={{ width: '100%', fontSize: 13.5, marginTop: 4 }}>
+              <table className="data-table" style={{ width: '100%', fontSize: 15, marginTop: 4 }}>
                 <tbody>
                   {wfResult.allocations.map((a) => (
                     <tr key={a.invoice_no}>
                       <td><strong>{a.invoice_no}</strong> <span style={{ color: 'var(--text-light)' }}>{a.billing_period}</span></td>
-                      <td style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
+                      <td style={{ fontSize: 15, color: 'var(--text-light)' }}>
                         {a.to_lps > 0 ? `Surcharge ${fmtCurrency(a.to_lps)}` : ''}{a.to_lps > 0 && a.to_principal > 0 ? ' · ' : ''}{a.to_principal > 0 ? `Bill ${fmtCurrency(a.to_principal)}` : ''}
                       </td>
                       <td className="text-right mono">{fmtCurrency(a.allocated)}</td>
@@ -1025,7 +1039,7 @@ export default function Invoices() {
                   <span className="detail-label">Cancel Reason</span>
                   <span className="detail-value">
                     {selected.cancel_reason}
-                    <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>
+                    <div style={{ fontSize: 14.5, color: 'var(--text-light)', marginTop: 2 }}>
                       {selected.cancelled_by || '—'} · {fmtDateTime(selected.cancelled_at, '')}
                     </div>
                   </span>
@@ -1033,7 +1047,7 @@ export default function Invoices() {
               )}
               <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">
                 {selected.contract_id ? (
-                  <button type="button" className="btn-link" onClick={() => openContract(selected.contract_id)} title="View contract details" style={{ fontSize: 15.5 }}>
+                  <button type="button" className="btn-link" onClick={() => openContract(selected.contract_id)} title="View contract details" style={{ fontSize: 16.5 }}>
                     {selected.contract_no} &rsaquo;
                   </button>
                 ) : (selected.contract_no || '-')}
@@ -1047,7 +1061,7 @@ export default function Invoices() {
                   <span className="detail-label">Overdue / Accrued LPS</span>
                   <span className="detail-value" style={{ color: 'var(--error)', fontWeight: 600 }}>
                     {selected.days_past_due || selected.days_overdue} day(s) past due · {fmtCurrency(selected.accrued_lps)}
-                    <span style={{ fontWeight: 400, color: 'var(--slate-500)', fontSize: 13.5 }}>
+                    <span style={{ fontWeight: 400, color: 'var(--slate-500)', fontSize: 15 }}>
                       {' '}(accruing until paid{selected.days_past_due > 0 && selected.days_overdue !== selected.days_past_due ? `; surcharge is counted on ${selected.days_overdue} working day(s)` : ''})
                     </span>
                   </span>
@@ -1112,7 +1126,7 @@ export default function Invoices() {
                     key={`${selected.id}-${selected.status}`}
                     invoiceId={selected.id}
                     totalAmount={selected.total_amount}
-                    canWrite={CAN_WRITE.includes(user?.role)}
+                    canWrite={CAN_MAKE.includes(user?.role)}
                     onSaved={() => refreshSelected(selected.id)}
                   />
                 </div>
@@ -1143,7 +1157,7 @@ export default function Invoices() {
                 {approvalError && (
                   <div className="form-error" role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px' }}>
                     <div>{approvalError}</div>
-                    {approvalError.includes('waive the validation') && CAN_WRITE.includes(user?.role) && (
+                    {approvalError.includes('waive the validation') && CAN_CHECK.includes(user?.role) && (
                       <div>
                         <button
                           type="button"
@@ -1179,29 +1193,29 @@ export default function Invoices() {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                           <div>
                             <span style={{ fontWeight: 700, fontSize: 16 }}>Level {a.level}: {stageTitle}</span>
-                            <span style={{ marginLeft: 10, fontSize: 14, color: 'var(--text-muted)' }}>• Post: <strong style={{ color: 'var(--text)' }}>{postName}</strong></span>
+                            <span style={{ marginLeft: 10, fontSize: 15.5, color: 'var(--text-muted)' }}>• Post: <strong style={{ color: 'var(--text)' }}>{postName}</strong></span>
                           </div>
                           <div>
-                            <Badge status={a.status} /> {a.approver_name ? <span style={{ fontWeight: 600, fontSize: 14 }}> · Approved by <strong>{a.approver_name}</strong></span> : ''}
-                            {a.acted_at && <span style={{ color: 'var(--text-light)', fontSize: 13 }}> · {fmtDateTime(a.acted_at)}</span>}
+                            <Badge status={a.status} /> {a.approver_name ? <span style={{ fontWeight: 600, fontSize: 15.5 }}> · Approved by <strong>{a.approver_name}</strong></span> : ''}
+                            {a.acted_at && <span style={{ color: 'var(--text-light)', fontSize: 14.5 }}> · {fmtDateTime(a.acted_at)}</span>}
                           </div>
                         </div>
 
-                        {a.comments && <div className="t-meta" style={{ marginTop: 4, marginBottom: 6, fontSize: 14 }}><strong>Note:</strong> {a.comments}</div>}
+                        {a.comments && <div className="t-meta" style={{ marginTop: 4, marginBottom: 6, fontSize: 15.5 }}><strong>Note:</strong> {a.comments}</div>}
                         
                         {approvalsOpen && a.status === 'PENDING' && !isNext && (
-                          <div className="t-meta" style={{ marginTop: 6, fontSize: 14, color: 'var(--text-muted)' }}>
+                          <div className="t-meta" style={{ marginTop: 6, fontSize: 15.5, color: 'var(--text-muted)' }}>
                             Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''} · Waits for Level {a.level - 1} approval.
                           </div>
                         )}
 
                         {(canApprove || canReject) && (raisedByMe ? (
-                          <div className="t-meta" style={{ marginTop: 8, fontSize: 14, color: 'var(--amber-strong)', background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                          <div className="t-meta" style={{ marginTop: 8, fontSize: 15.5, color: 'var(--amber-strong)', background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
                             You raised this bill as Maker ({selected.created_by || 'You'}). Designated Approver for Level {a.level}: <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>].
                           </div>
                         ) : (
                           <div style={{ marginTop: 10 }}>
-                            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
+                            <div style={{ fontSize: 15.5, color: 'var(--text-muted)', marginBottom: 8 }}>
                               Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''}
                               {!myLevel && <div style={{ color: 'var(--amber-strong)', marginTop: 4 }}>This level is not yours to approve; you can still send the bill back.</div>}
                             </div>
@@ -1210,16 +1224,16 @@ export default function Invoices() {
                               aria-label={`Comments for level ${a.level}`}
                               value={approveComments[a.level] || ''}
                               onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })}
-                              style={{ marginBottom: 10, width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', fontSize: 15 }}
+                              style={{ marginBottom: 10, width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', fontSize: 16 }}
                             />
                             {canReject && approvalsOpen && mySignedLevel != null && (
-                              <div className="t-meta" style={{ marginBottom: 8, fontSize: 14, color: 'var(--amber-strong)' }}>
+                              <div className="t-meta" style={{ marginBottom: 8, fontSize: 15.5, color: 'var(--amber-strong)' }}>
                                 You approved Level {mySignedLevel}. Level {a.level} must be approved by <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>]. You can still send the bill back.
                               </div>
                             )}
                             <div className="cell-actions" style={{ gap: 10 }}>
-                              {canReject && <button className="btn btn-danger" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'REJECTED')}>{approvalsOpen ? 'Reject' : 'Return to seller'}</button>}
-                              {canApprove && <button className="btn btn-success" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve Level ${a.level}`}</button>}
+                              {canReject && <button className="btn btn-danger" style={{ padding: '8px 18px', fontSize: 15.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'REJECTED')}>{approvalsOpen ? 'Reject' : 'Return to seller'}</button>}
+                              {canApprove && <button className="btn btn-success" style={{ padding: '8px 18px', fontSize: 15.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve Level ${a.level}`}</button>}
                             </div>
                           </div>
                         ))}
@@ -1290,17 +1304,17 @@ export default function Invoices() {
             </div>
 
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
-              {!isCancelled && CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
+              {!isCancelled && CAN_MAKE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
                 <button className="btn btn-secondary" disabled={!!busy} onClick={handleSubmitForApproval}>{busy === 'submit' ? 'Submitting…' : 'Submit for SJVN Approval'}</button>
               )}
-              {!isCancelled && CAN_WRITE.includes(user?.role) && ['APPROVED', 'SENT'].includes(selected.status) && (
+              {!isCancelled && CAN_MAKE.includes(user?.role) && ['APPROVED', 'SENT'].includes(selected.status) && (
                 <button className="btn btn-primary" disabled={!!busy} onClick={handleSend}>
                   {selected.status === 'SENT'
                     ? (selected.direction === 'SJVN_TO_BUYER' ? 'Resend Email to Buyer' : 'Resend Email to Seller')
                     : (selected.direction === 'SJVN_TO_BUYER' ? 'Send Email to Buyer' : 'Send Email to Seller')}
                 </button>
               )}
-              {!isCancelled && CAN_WRITE.includes(user?.role) && selected.invoice_type === 'PROVISIONAL' && (
+              {!isCancelled && CAN_MAKE.includes(user?.role) && selected.invoice_type === 'PROVISIONAL' && (
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1327,13 +1341,13 @@ export default function Invoices() {
               {!isCancelled && CAN_WRITE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN' && (
                 <button className="btn btn-secondary" onClick={handleValidate}>Validate vs System</button>
               )}
-              {!isCancelled && CAN_WRITE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN'
+              {!isCancelled && CAN_CHECK.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN'
                 && ['MISMATCH', 'PARTIAL', 'NO_COUNTERPART'].includes(selected.validation_status) && (
                 <button className="btn btn-secondary" onClick={() => { setWaiveReason(''); setWaiveError(''); setShowWaive(true); }}>
                   Waive Validation
                 </button>
               )}
-              {!isCancelled && CAN_WRITE.includes(user?.role) && CANCELABLE.includes(selected.status) && (
+              {!isCancelled && CANCELABLE.includes(selected.status) && (MAKERS_DESK.includes(selected.status) ? CAN_MAKE : CAN_CHECK).includes(user?.role) && (
                 <button className="btn btn-danger" onClick={() => { setCancelReason(''); setCancelError(''); setShowCancel(true); }}>
                   Cancel Invoice
                 </button>
@@ -1346,11 +1360,11 @@ export default function Invoices() {
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Release Payment to Generator (Pay-when-paid)</div>
                 {selected.generator_realization && (
-                  <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, var(--t-blue-50))', borderRadius: 8, fontSize: 13 }}>
+                  <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, var(--t-blue-50))', borderRadius: 8, fontSize: 14.5 }}>
                     DISCOM realized: <strong>{fmtCurrency(selected.generator_realization.realized)}</strong>
                     {'  ·  '}Already released from realization: <strong>{fmtCurrency(selected.generator_realization.released_from_realization)}</strong>
                     {'  ·  '}Available: <strong style={{ color: 'var(--green)' }}>{fmtCurrency(selected.generator_realization.available)}</strong>
-                    <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>
+                    <div style={{ fontSize: 14.5, color: 'var(--text-light)', marginTop: 2 }}>
                       {selected.generator_realization.linked_psa ? `${selected.generator_realization.linked_psa} PSA invoice(s) linked` : 'No PSA invoice mapped — use Own Fund / Security Fund'}
                     </div>
                   </div>
@@ -1447,14 +1461,14 @@ export default function Invoices() {
               <>
                 <div className="section-title" style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Other / Pass-through Charges</span>
-                  {CAN_WRITE.includes(user?.role) && CHARGES_EDITABLE.includes(selected.status) && (
+                  {CAN_MAKE.includes(user?.role) && CHARGES_EDITABLE.includes(selected.status) && (
                     <button type="button" className="btn btn-xs btn-outline" onClick={() => (showOC ? setShowOC(false) : openOtherCharges())}>
                       {showOC ? 'Close' : 'Edit Charges'}
                     </button>
                   )}
                 </div>
                 {(selected.other_charges || []).length > 0 ? (
-                  <table className="data-table" style={{ width: '100%', fontSize: 13, marginBottom: 8 }}>
+                  <table className="data-table" style={{ width: '100%', fontSize: 14.5, marginBottom: 8 }}>
                     <tbody>
                       {selected.other_charges.map((c, i) => (
                         <tr key={i}><td>{c.label}</td><td className="text-right mono">{fmtCurrency(c.amount)}</td></tr>
@@ -1462,7 +1476,7 @@ export default function Invoices() {
                     </tbody>
                   </table>
                 ) : <p className="inline-note" style={{ marginTop: 4 }}>No pass-through charges. (Rebate is never allowed on these.)</p>}
-                {CAN_WRITE.includes(user?.role) && !CHARGES_EDITABLE.includes(selected.status) && (
+                {CAN_MAKE.includes(user?.role) && !CHARGES_EDITABLE.includes(selected.status) && (
                   <p className="inline-note" style={{ marginTop: 4 }}>These change the bill&apos;s total, so they are fixed once it goes for approval. Raise a debit or credit note for a later change.</p>
                 )}
 
@@ -1498,7 +1512,8 @@ export default function Invoices() {
               <NotesPanel
                 invoice={selected}
                 user={user}
-                canWrite={CAN_APPROVE.includes(user?.role)}
+                canMake={CAN_MAKE_NOTES.includes(user?.role)}
+                canCheck={CAN_CHECK_NOTES.includes(user?.role)}
                 onChanged={() => refreshSelected(selected.id)}
               />
             )}
@@ -1582,7 +1597,7 @@ export default function Invoices() {
       </Modal>
 
       <Modal open={showCancel} onClose={() => setShowCancel(false)} title="Cancel Invoice" width={480}>
-        <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+        <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 14.5 }}>
           Cancels <strong>{selected?.invoice_no}</strong> and blocks further approval/send. Only allowed for draft / submitted / rejected / under-approval invoices with no payments or open disputes.
         </p>
         <form onSubmit={handleCancel}>
@@ -1604,7 +1619,7 @@ export default function Invoices() {
       </Modal>
 
       <Modal open={showWaive} onClose={() => setShowWaive(false)} title="Waive Validation" width={480}>
-        <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+        <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 14.5 }}>
           Mark seller vs system validation as waived for <strong>{selected?.invoice_no}</strong> despite mismatch/partial result.
         </p>
         <form onSubmit={handleWaive}>
@@ -1631,7 +1646,7 @@ export default function Invoices() {
         validationResult={validationResult}
         selectedInvoiceNo={selected?.invoice_no}
         perspective="reia"
-        canWaive={CAN_WRITE.includes(user?.role)}
+        canWaive={CAN_CHECK.includes(user?.role)}
         onWaive={() => { setShowValidation(false); setShowWaive(true); }}
       />
 
@@ -1641,7 +1656,7 @@ export default function Invoices() {
         message={genPopup?.message}
         items={genPopup?.suggested ? [`Suggested: a ${genPopup.suggested.note_type.toLowerCase()} note of ${fmtCurrency(genPopup.suggested.amount)} on ${genPopup.suggested.invoice_no} — raised as a draft for Finance to approve.`] : undefined}
         okLabel={genPopup?.suggested ? 'Not now' : 'OK'}
-        actions={genPopup?.suggested && CAN_WRITE.includes(user?.role) ? (
+        actions={genPopup?.suggested && CAN_MAKE.includes(user?.role) ? (
           <button type="button" className="btn btn-primary" disabled={!!busy} onClick={async () => {
             setBusy('note');
             try {

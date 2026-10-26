@@ -4,6 +4,7 @@ import { api } from '../../api/client.js';
 import { PageHeader, Card, Badge } from '../../components/ui.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { showAlert } from '../../lib/dialogs.js';
 
 const RECEIPT_COLUMNS = ['utr_no', 'van', 'amount', 'transaction_date', 'portfolio_id'];
 
@@ -87,7 +88,7 @@ export default function BankTransactionsList() {
       await api.tradingOps.applyReceipt(tx.id, clientId);
       fetchTransactions();
     } catch (err) {
-      alert(err.response?.data?.error || 'Could not credit this receipt.');
+      showAlert(err.response?.data?.error || 'Could not credit this receipt.');
     }
   }
 
@@ -117,27 +118,27 @@ export default function BankTransactionsList() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 15, alignItems: 'end' }}>
           
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-portfolio-name">Portfolio Name:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-portfolio-name">Portfolio Name:</label>
             <PortfolioSelect id="banktransactionslist-portfolio-name" includeAll value={portfolio} onChange={setPortfolio} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-from-date">From Date:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-from-date">From Date:</label>
             <input id="banktransactionslist-from-date" type="date" className="input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-to-date">To Date:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-to-date">To Date:</label>
             <input id="banktransactionslist-to-date" type="date" className="input" value={toDate} onChange={e => setToDate(e.target.value)} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-virtual-account-number">Virtual Account Number:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-virtual-account-number">Virtual Account Number:</label>
             <input id="banktransactionslist-virtual-account-number" type="text" className="input" value={van} onChange={e => setVan(e.target.value)} placeholder="VAN-SJVN-..." />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-utr-no">UTR NO:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-utr-no">UTR NO:</label>
             <input id="banktransactionslist-utr-no" type="text" className="input" value={utr} onChange={e => setUtr(e.target.value)} placeholder="Search by UTR" />
           </div>
 
@@ -146,7 +147,7 @@ export default function BankTransactionsList() {
           <button className="btn btn-primary" onClick={fetchTransactions} disabled={loading}>
             {loading ? 'Searching...' : '[ Search ]'}
           </button>
-          <button className="btn" style={{ background: '#28a745', color: '#fff' }} onClick={() => alert('Not available yet — Excel export is not built for this screen.')}>
+          <button className="btn" style={{ background: '#28a745', color: '#fff' }} onClick={() => showAlert('Not available yet — Excel export is not built for this screen.')}>
             [ EXCEL v ] Export File
           </button>
         </div>
@@ -154,7 +155,7 @@ export default function BankTransactionsList() {
 
       {canWrite && (
         <Card style={{ marginBottom: 20 }} title="Record bank receipts">
-          <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+          <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginTop: 0 }}>
             Paste lines from the bank statement as <code>UTR, virtual account no., amount, date, portfolio (optional)</code>.
             A receipt whose virtual account belongs to a client is credited to that client's pre-payment straight away;
             the same UTR is never credited twice. Anything unmatched is kept below until you credit it to a client.
@@ -163,7 +164,7 @@ export default function BankTransactionsList() {
           <textarea id="banktransactionslist-receipts" className="input" rows={4} style={{ width: '100%', fontFamily: 'monospace' }}
             value={receiptText} onChange={(e) => setReceiptText(e.target.value)}
             placeholder={'SBIN2610180001, VAN0001234, 250000, 2026-10-18'} />
-          {receiptError && <div role="alert" style={{ color: 'var(--red-strong)', marginTop: 8, fontSize: 13 }}>{receiptError}</div>}
+          {receiptError && <div role="alert" style={{ color: 'var(--red-strong)', marginTop: 8, fontSize: 14.5 }}>{receiptError}</div>}
           <div style={{ marginTop: 10 }}>
             <button type="button" className="btn btn-primary" onClick={submitReceipts} disabled={receiptBusy || !receiptText.trim()}>
               {receiptBusy ? 'Recording...' : 'Record receipts'}

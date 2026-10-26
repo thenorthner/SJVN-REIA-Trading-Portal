@@ -8,6 +8,7 @@ import { PageHeader, Card, StatCard, Modal, Field } from '../components/ui.jsx';
 import KYCBanner from '../components/KYCBanner.jsx';
 import { fmtDateTime } from '../datetime.js';
 import { getNotificationAction } from '../lib/notificationRouting.js';
+import { showAlert, askConfirm } from '../lib/dialogs.js';
 
 const SEV = {
   CRITICAL: { label: 'Critical', cls: 'sev-critical', dot: 'var(--red-strong)' },
@@ -151,7 +152,7 @@ function History({ groups }) {
 
       <Card>
         {!data.items.length ? (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-light)', fontSize: 13 }}>
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-light)', fontSize: 14.5 }}>
             {loading ? 'Loading history…' : filtered
               ? 'Nothing in the history matches.'
               : 'Nothing has been recorded yet. Alerts are logged here from the moment they first appear on the board.'}
@@ -251,19 +252,19 @@ export default function NotificationBoard() {
       setForm(EMPTY_BROADCAST);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to post message');
+      showAlert(err.response?.data?.error || 'Failed to post message');
     } finally {
       setSaving(false);
     }
   }
 
   async function removeBroadcast(id) {
-    if (!window.confirm('Remove this message from the board?')) return;
+    if (!(await askConfirm('Remove this message from the board?'))) return;
     try {
       await api.alerts.deleteBroadcast(id);
       load();
     } catch {
-      alert('Failed to remove message');
+      showAlert('Failed to remove message');
     }
   }
 
@@ -386,7 +387,7 @@ export default function NotificationBoard() {
             <Card>
               <div style={{ padding: 40, textAlign: 'center' }}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{filtering ? 'Nothing matches' : 'All clear'}</div>
-                <div style={{ color: 'var(--text-light)', fontSize: 13 }}>
+                <div style={{ color: 'var(--text-light)', fontSize: 14.5 }}>
                   {filtering
                     ? 'No alert on the board matches that search or category.'
                     : view.acked.length

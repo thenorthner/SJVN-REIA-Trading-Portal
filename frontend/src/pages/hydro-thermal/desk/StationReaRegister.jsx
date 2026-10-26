@@ -33,10 +33,10 @@ export default function StationReaRegister({ vertical = 'HYDRO' }) {
   const t = data?.totals || {};
   const billLink = pathFor(vertical, 'billing');
   const billCell = (b) => (b
-    ? <span>{b.bill_no} <Badge status={b.status} /><div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{muKwh(b.saleable_kwh)} MU saleable · {fmtCurrency(b.total)}</div></span>
+    ? <span>{b.bill_no} <Badge status={b.status} /><div style={{ fontSize: 14, color: 'var(--text-light)' }}>{muKwh(b.saleable_kwh)} MU saleable · {fmtCurrency(b.total)}</div></span>
     : '—');
   const reaCell = (r, fetch) => (r
-    ? <span>{mu(r.energy_mwh)} MU<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>free {mu(r.free_mwh)} · PAF {r.paf ?? '—'}%</div></span>
+    ? <span>{mu(r.energy_mwh)} MU<div style={{ fontSize: 14, color: 'var(--text-light)' }}>free {mu(r.free_mwh)} · PAF {r.paf ?? '—'}%</div></span>
     : <span style={{ color: 'var(--text-light)' }}>{fetch ? `fetch ${fetch.toLowerCase()}` : 'not in'}</span>);
 
   return (
@@ -58,7 +58,7 @@ export default function StationReaRegister({ vertical = 'HYDRO' }) {
         <StatCard label={`Final awaited > ${data?.final_rea_expected_days || 90} days`} value={t.final_awaited ?? 0} tone={t.final_awaited ? 'amber' : 'default'} onClick={() => setOnlyFlagged(true)} />
       </div>
       <div className="filters-bar">
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5 }}>
           <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} /> Only months with something to act on
         </label>
       </div>
@@ -73,7 +73,7 @@ export default function StationReaRegister({ vertical = 'HYDRO' }) {
               { key: 'frea', header: 'Final REA', render: (r) => reaCell(r.final_rea, r.final_fetch) },
               { key: 'fbill', header: 'Final bill', render: (r) => billCell(r.final_bill) },
               { key: 'move', header: 'Final vs provisional', render: (r) => (r.final_vs_provisional_kwh != null
-                ? <span>{muKwh(r.final_vs_provisional_kwh)} MU<div style={{ fontSize: 12.5, color: r.final_vs_provisional_amount < 0 ? 'var(--red-deep)' : 'var(--text-light)' }}>{fmtCurrency(r.final_vs_provisional_amount)}</div></span>
+                ? <span>{muKwh(r.final_vs_provisional_kwh)} MU<div style={{ fontSize: 14, color: r.final_vs_provisional_amount < 0 ? 'var(--red-deep)' : 'var(--text-light)' }}>{fmtCurrency(r.final_vs_provisional_amount)}</div></span>
                 : '—') },
               { key: 'rev', header: 'Revisions', render: (r) => (r.revisions ? `${r.revisions} · ${fmtCurrency(r.revision_amount)}` : '—') },
               { key: 'flags', header: 'Check', render: (r) => (r.flags.length

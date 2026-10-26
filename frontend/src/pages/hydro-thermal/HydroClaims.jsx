@@ -208,7 +208,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
               </span>
             )}
           >
-            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
               Entries accrue against the month they arose in and are claimed together later. Tick
               specific entries to claim only those; with nothing ticked the claim takes everything
               outstanding up to the month you choose. A negative entry is a credit and nets off.
@@ -271,7 +271,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
             </button>
           )}
         >
-          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 14.5 }}>
             Tax collected at source is charged on money actually received, so a claim is against one
             beneficiary and carries the receipt it was computed on. It is never split across the
             station the way a capacity charge is.
@@ -349,7 +349,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
                 : `All ${unclaimed.length} outstanding entry(ies)`}
               {' — '}
               <strong>{fmtCurrency(claimTotal)}</strong>
-              <div style={{ color: 'var(--text-light)', fontSize: 13.5 }}>
+              <div style={{ color: 'var(--text-light)', fontSize: 15 }}>
                 Split across the beneficiaries on the same basis as the capacity charge, because
                 these are costs of the station rather than of anyone&apos;s energy.
               </div>

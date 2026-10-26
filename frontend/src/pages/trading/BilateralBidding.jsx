@@ -370,7 +370,7 @@ export default function BilateralBidding() {
               <Field label="Whether Transaction Under GTAM" required>
                 <div style={{ display: 'flex', gap: 18, height: 36, alignItems: 'center' }}>
                   {['Yes', 'No'].map((opt) => (
-                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                       <input type="radio" name="under_gtam" checked={form.under_gtam === opt} onChange={() => set('under_gtam', opt)} />
                       {opt}
                     </label>
@@ -380,7 +380,7 @@ export default function BilateralBidding() {
               <Field label="Type" required>
                 <div style={{ display: 'flex', gap: 18, height: 36, alignItems: 'center' }}>
                   {['GNA', 'T-GNA'].map((opt) => (
-                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                       <input type="radio" name="access_type" checked={form.access_type === opt} onChange={() => set('access_type', opt)} />
                       {opt}
                     </label>
@@ -392,7 +392,7 @@ export default function BilateralBidding() {
             <Field label="Granting T-GNA/T-GNARE application with conditions for accepting the partial quantum / period in case of congestion / constraints?" required>
               <div style={{ display: 'flex', gap: 18, marginTop: 6, marginBottom: 14 }}>
                 {['Yes', 'No'].map((opt) => (
-                  <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                  <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                     <input type="radio" name="accept_partial" checked={form.accept_partial === opt} onChange={() => set('accept_partial', opt)} />
                     {opt}
                   </label>
@@ -414,7 +414,7 @@ export default function BilateralBidding() {
                 <input className="input" value={form.alternate_route} onChange={(e) => set('alternate_route', e.target.value)} />
               </Field>
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
                   Generating Source <span style={{ color: 'var(--red)' }}>*</span>
                 </div>
                 {form.generating_sources.map((src, idx) => (
@@ -435,19 +435,19 @@ export default function BilateralBidding() {
           </FormSection>
 
           <div style={{ marginTop: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 8 }}>
               Upload Request details in CSV format <span style={{ color: 'var(--red)' }}>*</span>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="input" style={{ maxWidth: 280 }} />
               <WriteOnly><button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button></WriteOnly>
               <button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={downloadSampleCsv}>Download Sample File</button>
-              {csvName && <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{csvName}</span>}
+              {csvName && <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>{csvName}</span>}
             </div>
           </div>
 
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
               <thead>
                 <tr style={{ background: 'var(--slate-50)' }}>
                   <th colSpan={2} style={{ padding: 8, border: '1px solid var(--slate-200)', textAlign: 'center' }}>Date</th>
@@ -455,7 +455,7 @@ export default function BilateralBidding() {
                   <th style={{ padding: 8, border: '1px solid var(--slate-200)', textAlign: 'center' }}>Capacity</th>
                   <th style={{ padding: 8, border: '1px solid var(--slate-200)', width: 70, textAlign: 'center' }}>Action</th>
                 </tr>
-                <tr style={{ background: 'var(--slate-50)', fontSize: 13, color: 'var(--slate-500)', fontWeight: 500 }}>
+                <tr style={{ background: 'var(--slate-50)', fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 500 }}>
                   <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>From *</th>
                   <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>To *</th>
                   <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>From *</th>
@@ -497,7 +497,7 @@ export default function BilateralBidding() {
             </table>
           </div>
 
-          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, marginBottom: 16, lineHeight: 1.45 }}>
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14.5, marginBottom: 16, lineHeight: 1.45 }}>
             <input
               type="checkbox"
               checked={form.declaration_accepted}
@@ -510,9 +510,9 @@ export default function BilateralBidding() {
             </span>
           </label>
 
-          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginBottom: 12 }}>{error}</div>}
           {success && (
-            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 12 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginBottom: 12 }}>
               Application <strong>{success.id}</strong> submitted — {success.application_type} · {success.seller_contract_no} → {success.buyer_contract_no}.
               {success.application?.application_id && (
                 <> Listed as <strong>{success.application.application_id}</strong> under Bilateral Applications.</>

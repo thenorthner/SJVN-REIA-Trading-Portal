@@ -179,7 +179,7 @@ export default function MyDisputes({ role, direction }) {
   }), [rows, view, text]);
 
   const columns = [
-    { key: 'dispute_no', header: 'Dispute ID', render: (r) => <span>{r.dispute_no}{r.group && <div style={{ fontSize: 13, color: 'var(--slate-500)' }} title={r.group.title}>{r.group.ref} · {r.group.disputes.length} bills</div>}</span> },
+    { key: 'dispute_no', header: 'Dispute ID', render: (r) => <span>{r.dispute_no}{r.group && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }} title={r.group.title}>{r.group.ref} · {r.group.disputes.length} bills</div>}</span> },
     { key: 'invoice_no', header: 'Invoice' },
     { key: 'reason_code', header: 'Category', render: (r) => reasonLabel(r.reason_code) },
     { key: 'disputed_amount', header: 'Amount', render: (r) => fmtCurrency(r.disputed_amount) },
@@ -233,22 +233,22 @@ export default function MyDisputes({ role, direction }) {
           <div className="field">
             <span className="field-label">Invoices — tick every bill this dispute is about</span>
             <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-              {!invoices.length && <div style={{ padding: 12, fontSize: 13, color: 'var(--slate-500)' }}>No bills to dispute.</div>}
+              {!invoices.length && <div style={{ padding: 12, fontSize: 14.5, color: 'var(--slate-500)' }}>No bills to dispute.</div>}
               {invoices.map((i) => {
                 const on = picked[i.id] !== undefined;
                 return (
-                  <label key={i.id} style={{ display: 'grid', gridTemplateColumns: '20px 1fr 170px', gap: 10, alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid var(--slate-100)', fontSize: 13, cursor: 'pointer' }}>
+                  <label key={i.id} style={{ display: 'grid', gridTemplateColumns: '20px 1fr minmax(190px, 230px)', gap: 10, alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid var(--slate-100)', fontSize: 14.5, cursor: 'pointer' }}>
                     <input type="checkbox" checked={on} onChange={() => { setError(''); setPicked((p) => { const n = { ...p }; if (on) delete n[i.id]; else n[i.id] = ''; return n; }); }} />
                     <span>
                       <strong>{i.invoice_no}</strong> · {i.billing_period} · {fmtCurrency(i.total_amount)}
-                      {on && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{chargeLabel(form.charge_line)} on this bill: {fmtCurrency(breakdownOf(i)[form.charge_line] || 0)}</div>}
+                      {on && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>{chargeLabel(form.charge_line)} on this bill: {fmtCurrency(breakdownOf(i)[form.charge_line] || 0)}</div>}
                     </span>
-                    {on && <input type="number" min="0.01" step="any" required placeholder="Amount disputed (₹)" value={picked[i.id]} onClick={(e) => e.preventDefault()} onChange={(e) => setPicked({ ...picked, [i.id]: e.target.value })} aria-label={`Amount disputed on ${i.invoice_no}`} />}
+                    {on && <input type="number" min="0.01" step="any" required placeholder="₹ in dispute" value={picked[i.id]} onClick={(e) => e.preventDefault()} onChange={(e) => setPicked({ ...picked, [i.id]: e.target.value })} aria-label={`Amount disputed on ${i.invoice_no}`} />}
                   </label>
                 );
               })}
             </div>
-            {chosen.length > 0 && <div style={{ fontSize: 13.5, marginTop: 6 }}>{chosen.length} bill{chosen.length === 1 ? '' : 's'} · <strong>{fmtCurrency(total)}</strong> in dispute</div>}
+            {chosen.length > 0 && <div style={{ fontSize: 15, marginTop: 6 }}>{chosen.length} bill{chosen.length === 1 ? '' : 's'} · <strong>{fmtCurrency(total)}</strong> in dispute</div>}
           </div>
           {chosen.length > 1 && (
             <Field label="Title for the linked disputes" required>
@@ -298,13 +298,13 @@ export default function MyDisputes({ role, direction }) {
 
             <DisputeExtrasPanel key={`${detail.id}-${detail.updated_at}`} disputeId={detail.id} onChanged={refreshDetail} />
 
-            {detail.status === 'INFO_REQUESTED' && <div className="alert alert-error" style={{ fontSize: 13 }}>SJVN has asked for more information — reply in the thread below to send it back for review.</div>}
+            {detail.status === 'INFO_REQUESTED' && <div className="alert alert-error" style={{ fontSize: 14.5 }}>SJVN has asked for more information — reply in the thread below to send it back for review.</div>}
 
             <div className="section-title" style={{ marginTop: 14 }}>Evidence</div>
-            {!(detail.supporting_docs || []).length && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No evidence filed yet.</div>}
+            {!(detail.supporting_docs || []).length && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No evidence filed yet.</div>}
             <ul style={{ paddingLeft: 18, margin: '4px 0 8px' }}>
               {(detail.supporting_docs || []).map((d) => (
-                <li key={d.filename} style={{ fontSize: 13 }}>
+                <li key={d.filename} style={{ fontSize: 14.5 }}>
                   <button type="button" className="btn-link" onClick={() => downloadEvidence(d)}>{d.original_name || d.filename}</button>
                   <span style={{ color: 'var(--slate-500)' }}> · {d.uploaded_by}{d.uploaded_at ? ` · ${fmtDate(d.uploaded_at)}` : ''}</span>
                 </li>
@@ -313,10 +313,10 @@ export default function MyDisputes({ role, direction }) {
             {detail.status !== 'CLOSED' && <input type="file" onChange={uploadEvidence} aria-label="Add evidence" />}
 
             <div className="section-title" style={{ marginTop: 14 }}>Thread</div>
-            {!(detail.comments || []).length && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No messages yet.</div>}
+            {!(detail.comments || []).length && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No messages yet.</div>}
             {(detail.comments || []).map((c) => (
               <div key={c.id} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 13.5, opacity: 0.65 }}>{c.user_name} · {fmtDateTime(c.created_at)}</div>
+                <div style={{ fontSize: 15, opacity: 0.65 }}>{c.user_name} · {fmtDateTime(c.created_at)}</div>
                 <div style={{ whiteSpace: 'pre-wrap' }}>{c.body}</div>
               </div>
             ))}
@@ -328,7 +328,7 @@ export default function MyDisputes({ role, direction }) {
             )}
 
             {(detail.events || []).length > 0 && (
-              <details style={{ marginTop: 12, fontSize: 13 }}>
+              <details style={{ marginTop: 12, fontSize: 14.5 }}>
                 <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary)' }}>Timeline ({detail.events.filter((e) => e.event_type !== 'INTERNAL_COMMENT').length} events)</summary>
                 <ul style={{ paddingLeft: 18, marginTop: 6 }}>
                   {detail.events.filter((e) => e.event_type !== 'INTERNAL_COMMENT').map((e) => (

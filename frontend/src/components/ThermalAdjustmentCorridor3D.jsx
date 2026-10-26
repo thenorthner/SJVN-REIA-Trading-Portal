@@ -136,7 +136,7 @@ export default function ThermalAdjustmentCorridor3D({
                   Thermal True-Up &amp; Supplementary Adjustment Corridor
                 </h3>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -149,15 +149,15 @@ export default function ThermalAdjustmentCorridor3D({
                   CERC THERMAL TRUE-UP (REG 10 &amp; 42)
                 </span>
               </div>
-              <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 3 }}>
+              <div style={{ fontSize: 14.5, color: '#94a3b8', marginTop: 3 }}>
                 Provisional Invoiced Baseline &rarr; Capital Cost &amp; Fuel True-up &rarr; Carrying Cost Corridor &rarr; Thermal Discom Net Adjustment
               </div>
             </div>
           </div>
 
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Reference</div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#fbbf24', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Reference</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fbbf24', fontFamily: 'monospace' }}>
               {orderRef}
             </div>
           </div>
@@ -188,22 +188,22 @@ export default function ThermalAdjustmentCorridor3D({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 STAGE 1: BASELINE
               </span>
-              <span style={{ fontSize: 11, color: 'var(--slate-500)' }}>Original</span>
+              <span style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>Original</span>
             </div>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
               Provisional Thermal Billing
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 12 }}>
               Period: {periodSpan}
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>Billed AFC Aggregate:</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Billed AFC Aggregate:</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
               {fmtCurrency(fallback.baseline_billed)}
             </div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
               Provisional REA &amp; ECR Invoices
             </div>
           </div>
@@ -223,18 +223,18 @@ export default function ThermalAdjustmentCorridor3D({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 STAGE 2: CERC DELTA
               </span>
-              <span style={{ fontSize: 11, color: '#38bdf8' }}>Approved Order</span>
+              <span style={{ fontSize: 12.5, color: '#38bdf8' }}>Approved Order</span>
             </div>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
               Thermal Tariff True-Up
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 8 }}>
               Capex, Coal &amp; RoE Restatement
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontFamily: 'monospace' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13.5, fontFamily: 'monospace' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#94a3b8' }}>Capital Capex:</span>
                 <span style={{ color: '#38bdf8', fontWeight: 600 }}>+{fmtCurrency(fallback.capital_addition)}</span>
@@ -265,22 +265,22 @@ export default function ThermalAdjustmentCorridor3D({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 STAGE 3: CARRYING COST
               </span>
-              <span style={{ fontSize: 11, color: '#fbbf24' }}>MCLR + 350 bps</span>
+              <span style={{ fontSize: 12.5, color: '#fbbf24' }}>MCLR + 350 bps</span>
             </div>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
               Interest Compounding
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 12 }}>
               Statutory Rate: {fallback.carrying_cost_rate}% p.a.
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>Carrying Interest Claim:</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Carrying Interest Claim:</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: '#fbbf24', fontFamily: 'monospace' }}>
               +{fmtCurrency(fallback.carrying_cost_amount)}
             </div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
               CERC Reg 10(7) compliant
             </div>
           </div>
@@ -300,22 +300,22 @@ export default function ThermalAdjustmentCorridor3D({
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 STAGE 4: ARREAR BILL
               </span>
-              <span style={{ fontSize: 11, color: '#34d399' }}>Recovery</span>
+              <span style={{ fontSize: 12.5, color: '#34d399' }}>Recovery</span>
             </div>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
               Net Supplementary Bill
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 12 }}>
               Across {beneficiaries.length} Thermal Off-takers
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>Total Arrear Payable:</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Total Arrear Payable:</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: '#34d399', fontFamily: 'monospace' }}>
               {fmtCurrency(totalAdjustment)}
             </div>
-            <div style={{ fontSize: 11.5, color: '#34d399', marginTop: 4, fontWeight: 600 }}>
+            <div style={{ fontSize: 13, color: '#34d399', marginTop: 4, fontWeight: 600 }}>
               Ready for approval dispatch
             </div>
           </div>
@@ -327,7 +327,7 @@ export default function ThermalAdjustmentCorridor3D({
           border: '1px solid rgba(245, 158, 11, 0.22)',
           borderRadius: 8,
           padding: '10px 14px',
-          fontSize: 12.5,
+          fontSize: 14,
           color: '#cbd5e1',
           marginBottom: 16,
           display: 'flex',
@@ -342,7 +342,7 @@ export default function ThermalAdjustmentCorridor3D({
 
         {/* Thermal Beneficiaries Matrix */}
         <div>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#94a3b8', marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginBottom: 10 }}>
             Thermal Beneficiary Supplementary Arrear Apportionment (STPP Buxar 1,320 MW):
           </div>
           <div style={{
@@ -365,13 +365,13 @@ export default function ThermalAdjustmentCorridor3D({
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#ffffff' }}>{b.name}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#34d399', fontFamily: 'monospace', marginTop: 2 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff' }}>{b.name}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: '#34d399', fontFamily: 'monospace', marginTop: 2 }}>
                     +{fmtCurrency(b.net_delta)}
                   </div>
                 </div>
                 <span style={{
-                  fontSize: 12,
+                  fontSize: 13.5,
                   fontWeight: 700,
                   fontFamily: 'monospace',
                   color: '#fbbf24',

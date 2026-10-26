@@ -14,9 +14,9 @@ function StatCard({ label, value, sub, tone }) {
   const color = tone === 'good' ? '#047857' : tone === 'bad' ? 'var(--red-deep)' : 'var(--slate-900)';
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '14px 16px' }}>
-      <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 13.5, color: 'var(--text-subtle)', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 15, color: 'var(--text-subtle)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -218,7 +218,7 @@ export default function Reports() {
             </button>
           )}
         </div>
-        <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--slate-500)' }}>
+        <p style={{ margin: '10px 0 0', fontSize: 14.5, color: 'var(--slate-500)' }}>
           Preview below matches the PDF. Click <strong>Download PDF Report</strong> for a landscape SJVN-branded document with executive summary, month table, and notes.
         </p>
       </Card>

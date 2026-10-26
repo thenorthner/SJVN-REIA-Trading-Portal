@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, StatCard, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { showAlert } from '../../lib/dialogs.js';
 
 const EMPTY = {
   quantum_mwh: '', days: '1', on_date: '', injection_state: '', drawal_state: '',
@@ -43,21 +44,21 @@ export default function OAChargeCalculator() {
     try {
       setResult(await api.oaCharges.estimate(payload()));
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to calculate');
+      showAlert(err.response?.data?.error || err.message || 'Failed to calculate');
     } finally {
       setBusy(false);
     }
   }
 
   async function save() {
-    if (!form.bilateral_id) return alert('Pick the deal to save this estimate against.');
+    if (!form.bilateral_id) return showAlert('Pick the deal to save this estimate against.');
     setBusy(true);
     try {
       await api.oaCharges.save({ ...payload(), bilateral_id: form.bilateral_id });
       await loadSaved(form.bilateral_id);
-      alert('Estimate saved against the deal.');
+      showAlert('Estimate saved against the deal.');
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to save estimate');
+      showAlert(err.response?.data?.error || err.message || 'Failed to save estimate');
     } finally {
       setBusy(false);
     }
@@ -87,7 +88,7 @@ export default function OAChargeCalculator() {
     {
       key: 'rate_source',
       label: 'Rate from',
-      render: r => <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.rate_source === 'OVERRIDE' ? 'Manual override' : 'Rate master'}</span>,
+      render: r => <span style={{ fontSize: 15, color: 'var(--slate-500)' }}>{r.rate_source === 'OVERRIDE' ? 'Manual override' : 'Rate master'}</span>,
     },
   ];
 
@@ -135,7 +136,7 @@ export default function OAChargeCalculator() {
               <input type="number" step="0.01" className="input" value={form.ists_rate} onChange={e => setForm({ ...form, ists_rate: e.target.value })} placeholder="blank = rate master" />
             </Field>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 15.5 }}>
             <input type="checkbox" checked={form.include_ists} onChange={e => setForm({ ...form, include_ists: e.target.checked })} />
             Include ISTS charge
           </label>
@@ -156,7 +157,7 @@ export default function OAChargeCalculator() {
 
           {result.warnings?.length > 0 && (
             <Card title="Warnings">
-              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--danger, #b91c1c)', fontSize: 14 }}>
+              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--danger, #b91c1c)', fontSize: 15.5 }}>
                 {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </Card>

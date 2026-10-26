@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { fmtDateTime } from '../../datetime.js';
+import { askText } from '../../lib/dialogs.js';
 
 const STATUSES = ['APPLIED', 'ISSUED', 'LISTED', 'SOLD', 'REDEEMED', 'CANCELLED'];
 
@@ -255,7 +256,7 @@ export default function RECManagement() {
   // Offsetting entry rather than erasure — the certificates that moved stay
   // on record for registry reconciliation.
   async function reverseTxn(txn) {
-    const reason = window.prompt(`Reverse ${txn.txn_no} (${fmtNumber(txn.quantity, 0)} RECs)? An offsetting entry will be posted.\n\nReason:`);
+    const reason = (await askText(`Reverse ${txn.txn_no} (${fmtNumber(txn.quantity, 0)} RECs)? An offsetting entry will be posted.\n\nReason:`));
     if (reason === null) return;
     runOnDetail(() => api.rec.reverseTxn(txn.id, reason), 'Failed to reverse the transaction.');
   }
@@ -272,7 +273,7 @@ export default function RECManagement() {
       key: 'technology',
       header: 'Tech',
       render: (r) => (r.technology
-        ? <span title={`Certificate multiplier ${r.certificate_multiplier}×`}>{r.technology} <span style={{ color: 'var(--text-light)', fontSize: 13 }}>{r.certificate_multiplier}×</span></span>
+        ? <span title={`Certificate multiplier ${r.certificate_multiplier}×`}>{r.technology} <span style={{ color: 'var(--text-light)', fontSize: 14.5 }}>{r.certificate_multiplier}×</span></span>
         : '—'),
     },
     { key: 'vintage_month', header: 'Vintage' },
@@ -317,7 +318,7 @@ export default function RECManagement() {
     { key: 'amount', header: 'Amount', render: (t) => (t.amount ? fmtCurrency(t.amount) : '—') },
     { key: 'platform', header: 'Platform', render: (t) => t.platform || '—' },
     { key: 'counterparty', header: 'Counterparty', render: (t) => t.buyer || t.obligated_entity || '—' },
-    { key: 'reference', header: 'Reference', render: (t) => <span style={{ fontSize: 13 }}>{t.reference || '—'}</span> },
+    { key: 'reference', header: 'Reference', render: (t) => <span style={{ fontSize: 14.5 }}>{t.reference || '—'}</span> },
     ...(canWrite ? [{
       key: 'actions',
       header: '',
@@ -429,8 +430,8 @@ export default function RECManagement() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={agingData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="bucket" tick={{ fontSize: 13 }} />
-                  <YAxis tick={{ fontSize: 13 }} />
+                  <XAxis dataKey="bucket" tick={{ fontSize: 14.5 }} />
+                  <YAxis tick={{ fontSize: 14.5 }} />
                   <Tooltip formatter={(v) => [`${fmtNumber(v, 0)} RECs`, 'Held']} />
                   <Bar dataKey="recs" name="Held RECs" fill="var(--primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -448,8 +449,8 @@ export default function RECManagement() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={techData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="technology" tick={{ fontSize: 13 }} />
-                  <YAxis tick={{ fontSize: 13 }} />
+                  <XAxis dataKey="technology" tick={{ fontSize: 14.5 }} />
+                  <YAxis tick={{ fontSize: 14.5 }} />
                   <Tooltip formatter={(v, name) => [`${fmtNumber(v, 0)} RECs`, name]} />
                   <Legend />
                   <Bar dataKey="sold" name="Sold" fill="var(--green)" radius={[6, 6, 0, 0]} />

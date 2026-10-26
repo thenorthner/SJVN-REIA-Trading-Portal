@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtNumber } from '../../components/ui.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
+import { askConfirm } from '../../lib/dialogs.js';
 
 // What the client asks the desk to do, and who in the client's office agreed.
 //
@@ -96,7 +97,7 @@ export default function ClientBidRequests() {
   }
 
   async function withdraw(row) {
-    if (!window.confirm(`Withdraw the request for ${fmtNumber(row.quantum_mw)} MW on ${fmtDate(row.delivery_date)}?`)) return;
+    if (!(await askConfirm(`Withdraw the request for ${fmtNumber(row.quantum_mw)} MW on ${fmtDate(row.delivery_date)}?`))) return;
     setError('');
     try {
       await api.clientBidRequests.withdraw(row.id, {});
@@ -233,7 +234,7 @@ export default function ClientBidRequests() {
       <Modal open={!!checking} onClose={() => setChecking(null)} title="Review the request" width={560}>
         {checking && (
           <>
-            <div style={{ display: 'grid', gap: 6, fontSize: 13, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gap: 6, fontSize: 14.5, marginBottom: 12 }}>
               <div><strong>{checking.side}</strong> {fmtNumber(checking.quantum_mw)} MW on {checking.exchange} · {checking.product}</div>
               <div>Delivery {fmtDate(checking.delivery_date)}</div>
               <div>

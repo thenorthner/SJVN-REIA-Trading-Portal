@@ -202,17 +202,17 @@ export default function RecBidEntry() {
     <div style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>REC Order Details</div>
+          <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>REC Order Details</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>REC Bid Entry</h1>
         </div>
-        <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 14.5 }}>
           {/* The ledger position is what actually binds a sell bid; the registry
               figure is the Central Agency's separate ceiling. */}
           {inventory && (
             <div>
               <span style={{ color: 'var(--slate-500)' }}>Sellable · </span>
               <strong>{fmtNumber(inventory.sellable_qty, 0)}</strong> RECs
-              <span style={{ color: '#94a3b8', fontSize: 13.5 }}>
+              <span style={{ color: '#94a3b8', fontSize: 15 }}>
                 {' '}({fmtNumber(inventory.held_qty, 0)} held − {fmtNumber(inventory.committed_qty, 0)} committed)
               </span>
             </div>
@@ -264,8 +264,8 @@ export default function RecBidEntry() {
             </Field>
             <Field label="Price (Rs./Certificate)" required>
               <input type="number" step="any" min="0" className="input" value={form.price} onChange={(e) => set('price', e.target.value)} required />
-              {priceError && <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--on-red)', fontWeight: 600 }}>{priceError}</div>}
-              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--slate-500)' }}>{priceNote}</div>}
+              {priceError && <div style={{ marginTop: 4, fontSize: 15, color: 'var(--on-red)', fontWeight: 600 }}>{priceError}</div>}
+              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 15, color: 'var(--slate-500)' }}>{priceNote}</div>}
             </Field>
             <Field label="Quantity (Nos.)" required>
               <input type="number" min="1" step="1" className="input" value={form.quantity} onChange={(e) => set('quantity', e.target.value)} required />
@@ -273,7 +273,7 @@ export default function RecBidEntry() {
             <Field label="BUY OR SELL?" required>
               <div style={{ display: 'flex', gap: 18, height: 36, alignItems: 'center' }}>
                 {['Buy', 'Sell'].map((opt) => (
-                  <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                  <label key={opt} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 14.5 }}>
                     <input type="radio" name="side" checked={form.side === opt} onChange={() => set('side', opt)} />
                     {opt}
                   </label>
@@ -283,18 +283,18 @@ export default function RecBidEntry() {
           </div>
 
           {notional != null && !priceError && (
-            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--slate-50)', borderRadius: 6, fontSize: 13 }}>
+            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--slate-50)', borderRadius: 6, fontSize: 14.5 }}>
               Estimated notional · <strong>₹{fmtNumber(notional, 2)}</strong>
             </div>
           )}
 
-          <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 14 }}>
+          <p style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 14 }}>
             * 1 Certificate is equivalent to 1 MWh (1000 Kwh) of Energy Injected for each type of Contract
           </p>
 
-          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginBottom: 10 }}>{error}</div>}
           {success && (
-            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 10 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 14.5, marginBottom: 10 }}>
               Bid <strong>{success.id}</strong> submitted — {success.side} {success.quantity} {success.rec_type} @ ₹{success.price} on {success.exchange}.
             </div>
           )}
@@ -308,19 +308,19 @@ export default function RecBidEntry() {
 
       <Card style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <strong style={{ fontSize: 14 }}>Recent REC bids</strong>
+          <strong style={{ fontSize: 15.5 }}>Recent REC bids</strong>
           <button type="button" className="btn btn-sm btn-outline" onClick={loadBids}>Refresh</button>
         </div>
         {actionMsg && (
           <div style={{
-            marginBottom: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
+            marginBottom: 10, padding: '8px 12px', borderRadius: 6, fontSize: 14.5,
             background: actionMsg.ok ? 'var(--t-green-50)' : 'var(--t-red-50)',
             border: `1px solid ${actionMsg.ok ? 'var(--t-green-line)' : 'var(--t-red-line)'}`,
             color: actionMsg.ok ? 'var(--on-green)' : 'var(--on-red)',
           }}>{actionMsg.text}</div>
         )}
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
             <thead>
               <tr style={{ background: 'var(--slate-100)' }}>
                 {['Bid', 'Entity', 'Exchange', 'Type', 'Side', 'Qty', 'Price', 'Notional', 'Status', 'Created', 'Action'].map((h) => (
@@ -346,7 +346,7 @@ export default function RecBidEntry() {
                       {o.status}
                     </Badge>
                     {o.status === 'EXECUTED' && o.executed_quantity != null && (
-                      <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+                      <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
                         {fmtNumber(o.executed_quantity, 0)} @ ₹{fmtNumber(o.discovered_rate, 2)}
                       </div>
                     )}
@@ -390,7 +390,7 @@ export default function RecBidEntry() {
         }}>
           <form onSubmit={confirmExecute} style={{ background: 'var(--surface)', borderRadius: 8, padding: 24, maxWidth: 460, width: '100%' }}>
             <h3 style={{ marginTop: 0 }}>Record execution — {execRow.id}</h3>
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginTop: 0 }}>
               {execRow.side} {execRow.quantity} × {execRow.rec_type} bid at ₹{fmtNumber(execRow.price, 2)} on {execRow.exchange}.
               {execRow.side === 'Sell'
                 ? ' Certificates leave the ledger oldest vintage first.'
@@ -421,7 +421,7 @@ export default function RecBidEntry() {
               )}
             </div>
             {execRow.side === 'Sell' && Number(execForm.executed_quantity) > 0 && Number(execForm.discovered_rate) > 0 && (
-              <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 10 }}>
+              <p style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 10 }}>
                 Trade obligation{' '}
                 <strong>₹{fmtNumber(Number(execForm.executed_quantity) * Number(execForm.discovered_rate), 0)}</strong>
                 {' '}before exchange fees.
@@ -444,11 +444,11 @@ export default function RecBidEntry() {
         }}>
           <div style={{ background: 'var(--surface)', borderRadius: 8, padding: 24, maxWidth: 420, width: '100%' }}>
             <h3 style={{ marginTop: 0 }}>Confirm REC bid</h3>
-            <p style={{ fontSize: 14, lineHeight: 1.5 }}>
+            <p style={{ fontSize: 15.5, lineHeight: 1.5 }}>
               {form.side} <strong>{form.quantity}</strong> × {form.rec_type} @ <strong>₹{form.price}</strong> on {form.exchange}
               {notional != null && <> (₹{fmtNumber(notional, 2)})</>}.
             </p>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{form.entity_name} · {form.portfolio_code}</p>
+            <p style={{ fontSize: 15, color: 'var(--slate-500)' }}>{form.entity_name} · {form.portfolio_code}</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button type="button" className="btn btn-outline" onClick={() => setConfirmOpen(false)} disabled={busy}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={confirmSubmit} disabled={busy}>

@@ -49,7 +49,7 @@ function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 13.5, boxShadow: 'var(--shadow-md)' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 15, boxShadow: 'var(--shadow-md)' }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{row.time_block || `${weekday(label)} ${fmtDate(label)}`}</div>
       {row.actual != null && <div>Actual {rs(row.actual)}/kWh</div>}
       {row.forecast != null && <div>Forecast {rs(row.forecast)}/kWh</div>}
@@ -64,10 +64,10 @@ function ForecastChart({ rows, height = 300 }) {
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
-          <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} domain={['auto', 'auto']} />
+          <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} />
+          <YAxis tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} domain={['auto', 'auto']} />
           <Tooltip content={<ChartTooltip />} />
-          <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />
+          <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 15 }} />
           <Area dataKey="band" name="80% range" stroke="none" fill={FORECAST} fillOpacity={0.12} isAnimationActive={false} />
           <Line dataKey="actual" name="Actual" stroke={ACTUAL} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
           <Line dataKey="forecast" name="Forecast" stroke={FORECAST} strokeWidth={2} strokeDasharray="6 4" dot={{ r: 4, fill: FORECAST, stroke: 'var(--surface)', strokeWidth: 2 }} isAnimationActive={false} />
@@ -141,10 +141,10 @@ function BlockCard({ detail, onDate }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={blocks.rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="time_block" interval={11} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
-            <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
+            <XAxis dataKey="time_block" interval={11} tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} />
+            <YAxis tick={{ fontSize: 14.5, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
             <Tooltip content={<ChartTooltip />} />
-            {hasActual && <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />}
+            {hasActual && <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 15 }} />}
             {hasActual && <Line dataKey="actual" name="Actual" stroke={ACTUAL} strokeWidth={2} dot={false} isAnimationActive={false} />}
             <Line dataKey="forecast" name="Forecast" stroke={FORECAST} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
           </LineChart>

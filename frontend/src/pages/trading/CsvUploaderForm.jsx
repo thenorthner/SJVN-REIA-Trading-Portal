@@ -199,7 +199,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                 color: 'var(--on-blue)', 
                 cursor: 'pointer', 
                 padding: '8px 16px', 
-                fontSize: 13,
+                fontSize: 14.5,
                 fontWeight: 500,
                 borderRadius: 20,
                 display: 'flex',
@@ -215,18 +215,18 @@ export default function CsvUploaderForm({ kind, title, fields }) {
           </div>
 
           {error && (
-            <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: 'var(--t-red-50)', borderLeft: '4px solid #ef4444', color: 'var(--on-red)', borderRadius: '4px 8px 8px 4px', fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: 'var(--t-red-50)', borderLeft: '4px solid #ef4444', color: 'var(--on-red)', borderRadius: '4px 8px 8px 4px', fontSize: 15.5, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <AlertCircle size={20} style={{ flexShrink: 0, marginTop: 2 }} color="#dc2626" />
               <div style={{ fontWeight: 500 }}>{error}</div>
             </div>
           )}
           
           {success && (
-            <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: 'var(--t-green-50)', borderLeft: '4px solid #22c55e', color: 'var(--on-green)', borderRadius: '4px 8px 8px 4px', fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: 'var(--t-green-50)', borderLeft: '4px solid #22c55e', color: 'var(--on-green)', borderRadius: '4px 8px 8px 4px', fontSize: 15.5, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <CheckCircle2 size={20} style={{ flexShrink: 0, marginTop: 2 }} color="#16a34a" />
               <div>
                 <div style={{ fontWeight: 600 }}>Upload Successful ({success.id})</div>
-                <div style={{ marginTop: 4, fontSize: 13, color: 'var(--on-green-2)' }}>Processed {success.filename} with {success.row_count} rows.</div>
+                <div style={{ marginTop: 4, fontSize: 14.5, color: 'var(--on-green-2)' }}>Processed {success.filename} with {success.row_count} rows.</div>
               </div>
             </div>
           )}
@@ -235,7 +235,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
             {show('dates') && (
               <>
                 <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                     <Calendar size={14} /> {kind.startsWith('REFUND') ? 'Starting Date' : 'Start Date'} <span style={{ color: 'var(--on-red)' }}>*</span>
                   </label>
                   <input 
@@ -248,7 +248,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                   />
                 </div>
                 <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                     <Calendar size={14} /> {kind.startsWith('REFUND') ? 'Ending Date' : 'End Date'} <span style={{ color: 'var(--on-red)' }}>*</span>
                   </label>
                   <input 
@@ -266,7 +266,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
             {show('reading') && (
               <>
                 <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                     <Calendar size={14} /> Reading Date <span style={{ color: 'var(--on-red)' }}>*</span>
                   </label>
                   <input 
@@ -279,7 +279,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                   />
                 </div>
                 <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                     <Tag size={14} /> Revision No. <span style={{ color: 'var(--on-red)' }}>*</span>
                   </label>
                   <input 
@@ -296,7 +296,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
 
             {show('charges_type') && (
               <div className="form-group" style={{ gridColumn: show('dates') || show('reading') ? '1 / -1' : 'auto' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                   <Tag size={14} /> Charges Type <span style={{ color: 'var(--on-red)' }}>*</span>
                 </label>
                 <select 
@@ -314,7 +314,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
 
             {show('upload_type') && (
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                   <Tag size={14} /> Upload Type <span style={{ color: 'var(--on-red)' }}>*</span>
                 </label>
                 <select 
@@ -332,7 +332,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
 
             {show('rldc') && (
               <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                   <MapPin size={14} /> RLDC Region <span style={{ color: 'var(--on-red)' }}>*</span>
                 </label>
                 <select 
@@ -350,7 +350,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
           </div>
 
           <div className="form-group" style={{ marginBottom: 32 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>
+            <label style={{ display: 'block', marginBottom: 8, fontSize: 14.5, fontWeight: 600, color: 'var(--slate-600)' }}>
               Data Source (CSV) <span style={{ color: 'var(--on-red)' }}>*</span>
             </label>
             
@@ -384,8 +384,8 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                     <FileSpreadsheet size={28} color="#16a34a" />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, color: 'var(--on-green)', fontSize: 15 }}>{file.name}</div>
-                    <div style={{ color: 'var(--on-green-2)', fontSize: 13, marginTop: 4 }}>{rowCount} data row{rowCount === 1 ? '' : 's'} · {(file.size / 1024).toFixed(1)} KB</div>
+                    <div style={{ fontWeight: 600, color: 'var(--on-green)', fontSize: 16 }}>{file.name}</div>
+                    <div style={{ color: 'var(--on-green-2)', fontSize: 14.5, marginTop: 4 }}>{rowCount} data row{rowCount === 1 ? '' : 's'} · {(file.size / 1024).toFixed(1)} KB</div>
                   </div>
                   <button 
                     type="button" 
@@ -402,8 +402,8 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                     <UploadCloud size={28} color={isDragging ? '#2563eb' : '#64748b'} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, color: 'var(--slate-700)', fontSize: 15 }}>{isDragging ? 'Drop CSV here' : 'Click or drag CSV file to upload'}</div>
-                    <div style={{ color: 'var(--slate-500)', fontSize: 13, marginTop: 4 }}>Only .csv files are supported</div>
+                    <div style={{ fontWeight: 600, color: 'var(--slate-700)', fontSize: 16 }}>{isDragging ? 'Drop CSV here' : 'Click or drag CSV file to upload'}</div>
+                    <div style={{ color: 'var(--slate-500)', fontSize: 14.5, marginTop: 4 }}>Only .csv files are supported</div>
                   </div>
                 </div>
               )}
@@ -420,7 +420,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                 border: 'none',
                 padding: '10px 28px',
                 borderRadius: 8,
-                fontSize: 14,
+                fontSize: 15.5,
                 fontWeight: 600,
                 cursor: (!busy && file) ? 'pointer' : 'not-allowed',
                 display: 'flex',
@@ -454,10 +454,10 @@ export default function CsvUploaderForm({ kind, title, fields }) {
           overflow: 'hidden'
         }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', background: 'var(--slate-50)' }}>
-            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--slate-700)' }}>Recent Submissions</h4>
+            <h4 style={{ margin: 0, fontSize: 15.5, fontWeight: 600, color: 'var(--slate-700)' }}>Recent Submissions</h4>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--slate-200)' }}>
                   <th style={{ padding: '12px 20px', textAlign: 'left', color: 'var(--slate-500)', fontWeight: 600 }}>ID</th>
@@ -485,7 +485,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                           background: statusColor.bg, 
                           color: statusColor.text, 
                           borderRadius: 20, 
-                          fontSize: 13, 
+                          fontSize: 14.5, 
                           fontWeight: 600,
                           letterSpacing: '0.02em'
                         }}>

@@ -42,17 +42,17 @@ export default function PendingScreen() {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14,
             background: 'var(--t-blue-50)', color: 'var(--on-blue)', border: '1px solid var(--t-blue-line)',
-            borderRadius: 999, padding: '4px 12px', fontSize: 13.5, fontWeight: 600,
+            borderRadius: 999, padding: '4px 12px', fontSize: 15, fontWeight: 600,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }} />
             Planned
           </div>
 
-          <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--slate-700)', margin: '0 0 12px' }}>
+          <p style={{ fontSize: 15.5, lineHeight: 1.65, color: 'var(--slate-700)', margin: '0 0 12px' }}>
             <strong>{title}</strong> exists in ISET and is on our list. Nothing is broken here —
             the screen simply has not been written yet.
           </p>
-          <p style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--slate-500)', margin: 0 }}>
+          <p style={{ fontSize: 14.5, lineHeight: 1.65, color: 'var(--slate-500)', margin: 0 }}>
             It is listed in the menu so the structure matches ISET while we build these one at a
             time. When it is ready this placeholder is replaced by the real screen and the route
             stays the same, so any link you save now will keep working.
@@ -60,13 +60,13 @@ export default function PendingScreen() {
 
           {built.length > 0 && (
             <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-500)', marginBottom: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--slate-500)', marginBottom: 8 }}>
                 Working now under {group}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {built.map((s) => (
                   <a key={s.to} href={s.to} style={{
-                    fontSize: 13.5, color: 'var(--on-blue)', textDecoration: 'none',
+                    fontSize: 15, color: 'var(--on-blue)', textDecoration: 'none',
                     border: '1px solid var(--t-blue-100)', background: 'var(--slate-50)',
                     borderRadius: 6, padding: '5px 10px',
                   }}>
@@ -77,7 +77,7 @@ export default function PendingScreen() {
             </div>
           )}
 
-          <div style={{ marginTop: 18, fontSize: 13, color: '#9ca3af' }}>
+          <div style={{ marginTop: 18, fontSize: 14.5, color: '#9ca3af' }}>
             Route <code style={{ background: 'var(--slate-100)', padding: '1px 5px', borderRadius: 3 }}>{pathname}</code>
           </div>
         </div>

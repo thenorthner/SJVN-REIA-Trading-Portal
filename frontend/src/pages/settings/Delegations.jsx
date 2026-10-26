@@ -134,7 +134,7 @@ export default function Delegations() {
             { key: 'role', header: 'Role asked', render: (g) => `${label(g.role)} · ${g.hours} h` },
             { key: 'reason', header: 'Reason' },
             { key: 'approvals', header: 'Approved by', render: (g) => [g.approver1_name, g.approver2_name].filter(Boolean).join(', ') || '—' },
-            { key: 'status', header: 'Status', render: (g) => <><Badge status={g.status === 'ACTIVE' ? 'ACTIVE' : g.status === 'REQUESTED' ? 'PENDING' : g.status === 'REJECTED' ? 'REJECTED' : 'CLOSED'} label={g.status.toLowerCase()} />{g.status === 'ACTIVE' && <div style={{ fontSize: 12.5 }}>until {fmtDateTime(g.expires_at)}</div>}</> },
+            { key: 'status', header: 'Status', render: (g) => <><Badge status={g.status === 'ACTIVE' ? 'ACTIVE' : g.status === 'REQUESTED' ? 'PENDING' : g.status === 'REJECTED' ? 'REJECTED' : 'CLOSED'} label={g.status.toLowerCase()} />{g.status === 'ACTIVE' && <div style={{ fontSize: 14 }}>until {fmtDateTime(g.expires_at)}</div>}</> },
             {
               key: 'act', header: <span className="sr-only">Decide</span>, render: (g) => (
                 <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

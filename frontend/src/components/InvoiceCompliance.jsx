@@ -3,6 +3,7 @@ import api from '../api/client.js';
 import { Field, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
+import { askConfirm } from '../lib/dialogs.js';
 
 // What goes with a seller's invoice besides its figures: the TDS to expect,
 // the e-invoice reference, the digitally signed copy, and the hard copy's
@@ -11,7 +12,7 @@ import { fmtDate, fmtDateTime } from '../datetime.js';
 
 const errText = (e) => e.response?.data?.error || e.message;
 const Tick = ({ ok, children }) => (
-  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3, color: ok === true ? 'var(--on-green-2)' : ok === false ? 'var(--red-deep)' : 'var(--slate-500)' }}>
+  <div style={{ fontSize: 15, fontWeight: 600, marginTop: 3, color: ok === true ? 'var(--on-green-2)' : ok === false ? 'var(--red-deep)' : 'var(--slate-500)' }}>
     {ok === true ? '✓' : ok === false ? '✗' : '·'} {children}
   </div>
 );
@@ -30,7 +31,7 @@ export function TdsEstimate({ tds, total }) {
         <Row label={`TDS u/s ${tds.section} @ ${tds.rate_pct}%`}><strong style={{ color: tds.tds_amount > 0 ? 'var(--amber-strong)' : 'inherit' }}>{fmtCurrency(tds.tds_amount)}</strong></Row>
         <Row label="Expected net payment"><strong style={{ color: 'var(--on-green-2)' }}>{fmtCurrency(tds.net_payable ?? (total - tds.tds_amount))}</strong></Row>
       </div>
-      <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 13.5, color: 'var(--slate-500)', lineHeight: 1.5 }}>
+      <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 15, color: 'var(--slate-500)', lineHeight: 1.5 }}>
         {tds.notes.map((n) => <li key={n}>{n}</li>)}
       </ul>
     </div>
@@ -127,24 +128,24 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
       {e ? (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 260 }}>
-            <div style={{ fontSize: 13.5, wordBreak: 'break-all' }}><strong>IRN</strong> {e.irn}</div>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>
+            <div style={{ fontSize: 15, wordBreak: 'break-all' }}><strong>IRN</strong> {e.irn}</div>
+            <div style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 2 }}>
               {e.ack_no ? `Ack No. ${e.ack_no}` : 'No acknowledgement number'}{e.ack_date ? ` · ${fmtDate(e.ack_date)}` : ''}
             </div>
             {e.checks.map((k) => <Tick key={k.text} ok={k.ok}>{k.text}</Tick>)}
-            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 6 }}>
+            <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 6 }}>
               Compared with this bill as given. The portal's signature on the QR is not verified here — scan the QR with the GST e-invoice verifier app for that.
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               {e.has_qr && !qr && <button type="button" className="btn btn-secondary btn-sm" onClick={() => api.invoiceCompliance.qr(invoice.id).then((r) => setQr(r.data_url)).catch((x) => setError(errText(x)))}>Show QR code</button>}
               {c.can_edit && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIrnForm({ irn: e.irn, ack_no: e.ack_no || '', ack_date: e.ack_date || '', signed_qr: '' })}>Change</button>}
-              {c.can_edit && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => window.confirm('Remove the e-invoice details from this invoice?') && run(() => api.invoiceCompliance.removeEinvoice(invoice.id))}>Remove</button>}
+              {c.can_edit && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={async () => (await askConfirm('Remove the e-invoice details from this invoice?')) && run(() => api.invoiceCompliance.removeEinvoice(invoice.id))}>Remove</button>}
             </div>
           </div>
           {qr && <img src={qr} alt="Signed e-invoice QR code" width={150} height={150} style={{ border: '1px solid var(--border)', borderRadius: 6 }} />}
         </div>
       ) : (
-        <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+        <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
           No e-invoice reference is recorded on this invoice.
           {seller && ' If you registered it on the GST invoice portal, add the IRN here. The sale of electricity is not itself a taxable supply, so many power invoices have none.'}
           {c.can_edit && !irnForm && <div style={{ marginTop: 8 }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => setIrnForm({ irn: '', ack_no: '', ack_date: '', signed_qr: '' })}>Add IRN &amp; QR</button></div>}
@@ -156,14 +157,14 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
             <input type="file" accept=".json,application/json" onChange={(ev) => readIrpFile(ev.target.files[0])} />
           </Field>
           <Field label="IRN (64 characters)" required>
-            <input required value={irnForm.irn} onChange={(ev) => setIrnForm({ ...irnForm, irn: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 13.5 }} />
+            <input required value={irnForm.irn} onChange={(ev) => setIrnForm({ ...irnForm, irn: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 15 }} />
           </Field>
           <div className="form-grid">
             <Field label="Acknowledgement No."><input placeholder="e.g. 122010012345678 (digits only)" value={irnForm.ack_no} onChange={(ev) => setIrnForm({ ...irnForm, ack_no: ev.target.value.trim() })} /></Field>
             <Field label="Acknowledgement date"><input type="date" value={irnForm.ack_date} onChange={(ev) => setIrnForm({ ...irnForm, ack_date: ev.target.value })} /></Field>
           </div>
           <Field label="Signed QR code text (SignedQRCode)">
-            <textarea rows={3} value={irnForm.signed_qr} onChange={(ev) => setIrnForm({ ...irnForm, signed_qr: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 13 }} placeholder="eyJhbGciOi…" />
+            <textarea rows={3} value={irnForm.signed_qr} onChange={(ev) => setIrnForm({ ...irnForm, signed_qr: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 14.5 }} placeholder="eyJhbGciOi…" />
           </Field>
           <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setIrnForm(null)}>Cancel</button><button type="submit" className="btn btn-primary" disabled={busy}>Save</button></div>
         </form>
@@ -174,19 +175,19 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
       </div>
       {s ? (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 14.5 }}>
             <span><strong>{s.file_name}</strong> · attached {fmtDateTime(s.created_at)}</span>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPreview(s)}>View</button>
           </div>
           {s.signed
             ? <Tick ok>A digital signature is present{s.signer ? ` — signer: ${s.signer}` : ''}{s.signed_on ? `, signed ${s.signed_on}` : ''}{s.signatures > 1 ? ` (${s.signatures} signatures)` : ''}.</Tick>
             : <Tick ok={false}>No digital signature was found in this PDF. Sign it with your DSC or Aadhaar e-Sign and attach it again.</Tick>}
-          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
+          <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginTop: 4 }}>
             This reads the signature in the file. It does not validate the certificate — open the PDF in a reader that does for that.
           </div>
         </div>
       ) : (
-        <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+        <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
           No signed copy is attached.{seller && ' Download the PDF bill above, sign it with your DSC token or Aadhaar e-Sign, and attach the signed file here.'}
         </div>
       )}
@@ -199,18 +200,18 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
 
       {!sjvnBill && <div className="section-title" style={{ marginTop: 18 }}>Hard copy by courier</div>}
       {sjvnBill ? null : h ? (
-        <div style={{ fontSize: 13 }}>
+        <div style={{ fontSize: 14.5 }}>
           Sent by <strong>{h.courier}</strong>, docket / AWB <strong>{h.docket_no}</strong>, on {fmtDate(h.dispatched_on)}.
           {h.received_on
             ? <Tick ok>Received by SJVN on {fmtDate(h.received_on)}{h.received_by ? ` — ${h.received_by}` : ''}{h.note ? ` (${h.note})` : ''}.</Tick>
             : <Tick ok={null}>Not yet recorded as received by SJVN.</Tick>}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             {seller && !h.received_on && !courier && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCourier({ courier: h.courier, docket_no: h.docket_no, dispatched_on: h.dispatched_on })}>Correct</button>}
-            {c.can_manage && !h.received_on && !receipt && <button type="button" className="btn btn-primary btn-sm" onClick={() => setReceipt({ received_on: new Date().toISOString().slice(0, 10), note: '' })}>Mark received</button>}
+            {c.can_check && !h.received_on && !receipt && <button type="button" className="btn btn-primary btn-sm" onClick={() => setReceipt({ received_on: new Date().toISOString().slice(0, 10), note: '' })}>Mark received</button>}
           </div>
         </div>
       ) : (
-        <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+        <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
           No hard copy has been recorded as sent.
           {seller && afterSubmit && !courier && <div style={{ marginTop: 8 }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => setCourier({ courier: '', docket_no: '', dispatched_on: new Date().toISOString().slice(0, 10) })}>Enter courier docket / AWB number</button></div>}
           {seller && !afterSubmit && ' You can enter the courier details once the invoice has been submitted to SJVN.'}

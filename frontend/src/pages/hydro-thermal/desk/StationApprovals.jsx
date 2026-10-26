@@ -76,16 +76,16 @@ export default function StationApprovals({ vertical = 'HYDRO' }) {
       <Card
         title="Bills in the approval chain"
         actions={(
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5 }}>
             <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> Only with me
           </label>
         )}
       >
         <Table
           columns={[
-            { key: 'bill_no', header: 'Bill', render: (r) => <span>{r.bill_no}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.station_name} · {monthName(r.billing_month)} · {r.bill_kind.toLowerCase()}</div></span> },
+            { key: 'bill_no', header: 'Bill', render: (r) => <span>{r.bill_no}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.station_name} · {monthName(r.billing_month)} · {r.bill_kind.toLowerCase()}</div></span> },
             { key: 'amount', header: 'Amount', render: (r) => fmtCurrency(r.bill_kind === 'REVISION' ? r.differential_amount : r.total_charges) },
-            { key: 'with', header: 'With', render: (r) => <span>{r.approver_name || '—'} {r.is_final ? <Badge type="primary">Final</Badge> : <span style={{ fontSize: 12.5, color: 'var(--text-light)' }}>level {r.level}</span>}</span> },
+            { key: 'with', header: 'With', render: (r) => <span>{r.approver_name || '—'} {r.is_final ? <Badge type="primary">Final</Badge> : <span style={{ fontSize: 14, color: 'var(--text-light)' }}>level {r.level}</span>}</span> },
             { key: 'prepared_by', header: 'Prepared by', render: (r) => r.prepared_by || '—' },
             { key: 'age', header: 'Waiting', render: (r) => <span style={{ color: r.age_days > 3 ? 'var(--amber-strong)' : undefined }}>{age(r.age_days)}</span> },
             { key: 'act', header: '', render: (r) => (r.is_mine && r.is_final ? (
@@ -106,10 +106,10 @@ export default function StationApprovals({ vertical = 'HYDRO' }) {
       <Card title="Station invoices on the approval chain (DSM pool bills)">
         <Table
           columns={[
-            { key: 'invoice_no', header: 'Invoice', render: (r) => <span>{r.invoice_no}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.billing_period} · {r.status.replace(/_/g, ' ').toLowerCase()}</div></span> },
+            { key: 'invoice_no', header: 'Invoice', render: (r) => <span>{r.invoice_no}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.billing_period} · {r.status.replace(/_/g, ' ').toLowerCase()}</div></span> },
             { key: 'amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
             { key: 'level', header: 'Next', render: (r) => (r.to_submit ? 'Submit for approval' : `Level ${r.next_level}`) },
-            { key: 'by', header: 'Raised by', render: (r) => <span>{r.created_by || '—'}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{age(r.age_days)} ago</div></span> },
+            { key: 'by', header: 'Raised by', render: (r) => <span>{r.created_by || '—'}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{age(r.age_days)} ago</div></span> },
             { key: 'act', header: '', render: (r) => (!canWrite ? null : r.to_submit
               ? <button type="button" className="btn btn-secondary btn-sm" onClick={async () => { try { await api.invoices.submitForApproval(r.id); load(); } catch (e) { setPopup({ title: 'Not submitted', message: e.response?.data?.error || e.message }); } }}>Submit</button>
               : (
@@ -127,13 +127,13 @@ export default function StationApprovals({ vertical = 'HYDRO' }) {
       <Card title="Debit / credit notes awaiting the checker">
         <Table
           columns={[
-            { key: 'note_no', header: 'Note', render: (r) => <span>{r.note_no} <Badge type={r.note_type === 'CREDIT' ? 'success' : 'warning'}>{r.note_type === 'CREDIT' ? 'Credit' : 'Debit'}</Badge><div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.station_name} · {fmtDate(r.note_date)}</div></span> },
+            { key: 'note_no', header: 'Note', render: (r) => <span>{r.note_no} <Badge type={r.note_type === 'CREDIT' ? 'success' : 'warning'}>{r.note_type === 'CREDIT' ? 'Credit' : 'Debit'}</Badge><div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.station_name} · {fmtDate(r.note_date)}</div></span> },
             { key: 'beneficiary_name', header: 'Beneficiary' },
             { key: 'amount', header: 'Amount', render: (r) => fmtCurrency(r.amount) },
-            { key: 'reason', header: 'Why', render: (r) => <span style={{ fontSize: 13 }}>{r.remarks}{r.against_doc_no ? <div style={{ color: 'var(--text-light)' }}>Against {r.against_doc_no}</div> : null}</span> },
-            { key: 'by', header: 'Raised by', render: (r) => <span>{r.created_by_name || '—'}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{age(r.age_days)} ago</div></span> },
+            { key: 'reason', header: 'Why', render: (r) => <span style={{ fontSize: 14.5 }}>{r.remarks}{r.against_doc_no ? <div style={{ color: 'var(--text-light)' }}>Against {r.against_doc_no}</div> : null}</span> },
+            { key: 'by', header: 'Raised by', render: (r) => <span>{r.created_by_name || '—'}<div style={{ fontSize: 14, color: 'var(--text-light)' }}>{age(r.age_days)} ago</div></span> },
             { key: 'act', header: '', render: (r) => (!canWrite ? null : r.own
-              ? <span style={{ fontSize: 12.5, color: 'var(--text-light)' }}>Your note — needs another checker</span>
+              ? <span style={{ fontSize: 14, color: 'var(--text-light)' }}>Your note — needs another checker</span>
               : (
                 <span style={{ display: 'flex', gap: 6 }}>
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => { setComment(''); setDeciding({ kind: 'note', row: r, action: 'APPROVE' }); }}>Approve</button>

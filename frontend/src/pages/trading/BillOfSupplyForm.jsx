@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Field, Badge, fmtNumber } from '../../components/ui.jsx';
+import { askConfirm } from '../../lib/dialogs.js';
 
 /**
  * Supply Bill Entry — the Bill of Supply register.
@@ -84,7 +85,7 @@ export default function BillOfSupplyForm() {
   }
 
   async function onCancel(row) {
-    if (!window.confirm(`Cancel ${row.bill_no}?`)) return;
+    if (!(await askConfirm(`Cancel ${row.bill_no}?`))) return;
     try {
       await api.billing.cancelBillOfSupply(row.id);
       setMessage({ ok: true, text: `${row.bill_no} cancelled.` });
@@ -156,23 +157,23 @@ export default function BillOfSupplyForm() {
             <Field label="Remarks"><input className="input" value={form.remarks} onChange={(e) => set('remarks', e.target.value)} /></Field>
           </div>
 
-          <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, display: 'flex', gap: 28, fontSize: 13 }}>
+          <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, display: 'flex', gap: 28, fontSize: 14.5 }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>Amount</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none' }}>Amount</div>
               <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.amount, 2)}</strong>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>After rebate</div>
+              <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none' }}>After rebate</div>
               <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.after, 2)}</strong>
             </div>
-            <div style={{ alignSelf: 'center', color: 'var(--slate-500)', fontSize: 13.5 }}>
+            <div style={{ alignSelf: 'center', color: 'var(--slate-500)', fontSize: 15 }}>
               Quantity × rate, less the rebate — computed, not typed.
             </div>
           </div>
 
           {message && (
             <div style={{
-              marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
+              marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 14.5,
               background: message.ok ? 'var(--t-green-50)' : 'var(--t-red-50)',
               border: `1px solid ${message.ok ? 'var(--t-green-line)' : 'var(--t-red-line)'}`,
               color: message.ok ? 'var(--on-green)' : 'var(--on-red)',
@@ -188,11 +189,11 @@ export default function BillOfSupplyForm() {
 
       <Card style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <strong style={{ fontSize: 14 }}>Recent bills of supply</strong>
+          <strong style={{ fontSize: 15.5 }}>Recent bills of supply</strong>
           <button type="button" className="btn btn-sm btn-outline" onClick={load}>Refresh</button>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
             <thead>
               <tr style={{ background: 'var(--slate-100)' }}>
                 {['Bill No', 'Client', 'Invoice Date', 'Supply Period', 'Qty', 'Rate', 'After Rebate', 'Status', ''].map((h) => (
@@ -205,7 +206,7 @@ export default function BillOfSupplyForm() {
                 <tr><td colSpan={9} style={{ padding: 16, textAlign: 'center', color: 'var(--slate-500)' }}>No bills of supply yet.</td></tr>
               ) : rows.slice(0, 20).map((r) => (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
-                  <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 13.5 }}>{r.bill_no}</td>
+                  <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 15 }}>{r.bill_no}</td>
                   <td style={{ padding: '8px 10px' }}>{r.client_name}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.invoice_date}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.supply_from_date} → {r.supply_to_date}</td>

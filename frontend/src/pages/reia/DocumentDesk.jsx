@@ -33,13 +33,13 @@ function exportReport(rows) {
 }
 
 function Progress({ pct }) {
-  if (pct === null || pct === undefined) return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>No checklist</span>;
+  if (pct === null || pct === undefined) return <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>No checklist</span>;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 130 }}>
       <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'var(--slate-100, var(--slate-100))', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#16a34a' : '#2563eb' }} />
       </div>
-      <span style={{ fontSize: 13.5, fontWeight: 600, width: 34, textAlign: 'right' }}>{pct}%</span>
+      <span style={{ fontSize: 15, fontWeight: 600, width: 34, textAlign: 'right' }}>{pct}%</span>
     </div>
   );
 }
@@ -144,10 +144,10 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
         <AlertPopup open={!!error} title="Not uploaded" message={error} onClose={() => setError('')} />
 
         <div style={{ background: 'var(--slate-50, var(--slate-50))', border: '1px solid var(--slate-200, var(--slate-200))', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--on-blue)', fontWeight: 600, fontSize: 13.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--on-blue)', fontWeight: 600, fontSize: 15 }}>
             <span>SJVN Admin direct stakeholder onboarding</span>
           </div>
-          <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 15, color: 'var(--slate-600)' }}>
             Directly upload regulatory and compliance proofs on behalf of stakeholders to instantly complete KYC verification requirements without counterparty maker-checker delays.
           </p>
         </div>
@@ -207,7 +207,8 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
 }
 
 const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro', THERMAL: 'Thermal' };
-const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'THERMAL_ADMIN', 'THERMAL_USER'];
+// Taking papers in (routes/documents.js canTakeIn): the REIA maker, the station desks and the administrators.
+const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_MAKER', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'THERMAL_ADMIN', 'THERMAL_USER'];
 // Direct admission, and admitting a scanned paper as verified, are administrators' (as on the server).
 const DIRECT_ADMIT_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
@@ -393,17 +394,17 @@ export default function DocumentDesk({ vertical = 'REIA', embedded = false }) {
                       <td><strong>{d.entity_name || (d.contract_no ? `Contract ${d.contract_no}` : '—')}</strong></td>
                       <td>
                         {d.title} <span style={{ color: 'var(--slate-500)' }}>(v{d.version_number})</span>
-                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{d.document_type}</div>
+                        <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{d.document_type}</div>
                       </td>
                       <td>
                         {fmtDateTime(d.uploaded_at)}
-                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{d.uploaded_by_name || '—'}</div>
+                        <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{d.uploaded_by_name || '—'}</div>
                       </td>
                       <td style={{ fontWeight: 600, color: d.waiting_days > 7 ? 'var(--red-deep)' : d.waiting_days > 2 ? 'var(--amber-strong)' : 'inherit' }}>
                         {d.waiting_days === 0 ? 'Today' : `${d.waiting_days} day${d.waiting_days === 1 ? '' : 's'}`}
                       </td>
                       <td><ExpiryTag doc={d} /></td>
-                      <td style={{ fontSize: 13.5, fontWeight: 600 }}>
+                      <td style={{ fontSize: 15, fontWeight: 600 }}>
                         {bad > 0 && <span style={{ color: 'var(--red-deep)' }}>✗ {bad} mismatch{bad === 1 ? '' : 'es'}</span>}
                         {bad === 0 && good > 0 && <span style={{ color: 'var(--on-green-2)' }}>✓ Matches record</span>}
                         {bad === 0 && good === 0 && <span style={{ color: 'var(--slate-500)', fontWeight: 400 }}>Not checked</span>}
@@ -463,12 +464,12 @@ export default function DocumentDesk({ vertical = 'REIA', embedded = false }) {
                     <tr key={r.entity_id}>
                       <td>
                         <strong>{r.name}</strong>
-                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.entity_type}</div>
+                        <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>{r.entity_type}</div>
                       </td>
                       <td><Badge status={r.onboarding_status} /></td>
                       <td>
                         <Progress pct={r.progress_pct} />
-                        {r.mandatory_total > 0 && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{r.mandatory_verified} of {r.mandatory_total}</div>}
+                        {r.mandatory_total > 0 && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>{r.mandatory_verified} of {r.mandatory_total}</div>}
                       </td>
                       {num(r.verified, '#15803d')}
                       {num(r.pending, '#b45309')}

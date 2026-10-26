@@ -191,14 +191,14 @@ export default function BilateralApplications() {
     color: '#fff',
     padding: '10px 12px',
     fontWeight: 600,
-    fontSize: 13,
+    fontSize: 14.5,
     cursor: 'pointer',
     userSelect: 'none',
     whiteSpace: 'nowrap',
   };
 
   const exportBtn = { background: '#3b82f6', color: '#fff', border: 'none' };
-  const linkBtn = { color: 'var(--on-blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, fontWeight: 500 };
+  const linkBtn = { color: 'var(--on-blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 14.5, fontWeight: 500 };
 
   return (
     <div style={{ padding: 20 }}>
@@ -214,7 +214,7 @@ export default function BilateralApplications() {
             <button type="button" className="btn btn-sm" style={exportBtn} onClick={exportExcel}>Excel</button>
             <button type="button" className="btn btn-sm" style={exportBtn} onClick={exportPdf}>PDF</button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
             Search:
             <input
               type="search"
@@ -228,7 +228,7 @@ export default function BilateralApplications() {
         </div>
 
         {message && (
-          <div style={{ marginBottom: 10, fontSize: 13, color: message.includes('fail') ? 'var(--on-red)' : 'var(--on-green)' }}>{message}</div>
+          <div style={{ marginBottom: 10, fontSize: 14.5, color: message.includes('fail') ? 'var(--on-red)' : 'var(--on-green)' }}>{message}</div>
         )}
 
         {loading ? (
@@ -236,7 +236,7 @@ export default function BilateralApplications() {
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                 <thead>
                   <tr>
                     {[
@@ -271,7 +271,7 @@ export default function BilateralApplications() {
                   ) : filtered.map((r, i) => (
                     <tr key={r.id} style={{ background: i % 2 ? 'var(--slate-50)' : 'var(--surface)', borderBottom: '1px solid var(--slate-200)' }}>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{fmtDate(r.application_date)}</td>
-                      <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 13.5 }}>{r.application_id}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 15 }}>{r.application_id}</td>
                       <td style={{ padding: '10px 12px' }}>{r.applicant}</td>
                       <td style={{ padding: '10px 12px', maxWidth: 280 }}>{r.seller_name}</td>
                       <td style={{ padding: '10px 12px' }}>{r.buyer_name}</td>
@@ -305,7 +305,7 @@ export default function BilateralApplications() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
+            <div style={{ marginTop: 12, fontSize: 15, color: 'var(--slate-500)' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
               {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
             </div>
@@ -316,7 +316,7 @@ export default function BilateralApplications() {
       {convertRow && (
         <Modal open={true} onClose={() => setConvertRow(null)} title={`Create contract from ${convertRow.application_id}`}>
           <form onSubmit={submitConvert}>
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginBottom: 14 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-600)', marginBottom: 14 }}>
               The parties, corridor and schedule come across from the application.
               The format-generation form carries no rate, so the commercial terms are set here.
             </p>
@@ -341,7 +341,7 @@ export default function BilateralApplications() {
               </Field>
             </div>
             {convertForm.sale_rate_per_unit && (
-              <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 10 }}>
+              <p style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 10 }}>
                 Purchase rate works out to{' '}
                 <strong>
                   ₹{(Number(convertForm.sale_rate_per_unit) - Number(convertForm.trading_margin_per_unit || 0)).toFixed(4)}
@@ -350,7 +350,7 @@ export default function BilateralApplications() {
               </p>
             )}
             {convertError && (
-              <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, color: 'var(--on-red)', fontSize: 13 }}>
+              <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, color: 'var(--on-red)', fontSize: 14.5 }}>
                 {convertError}
               </div>
             )}

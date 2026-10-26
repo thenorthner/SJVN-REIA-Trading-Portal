@@ -128,21 +128,21 @@ export default function StationPpaRegister({ vertical = 'HYDRO' }) {
         <Card key={s.contract_id} title={`${s.station_name}${s.allocation_month ? ` · allocation as of ${s.allocation_month}` : ''}`}>
           <Table
             columns={[
-              { key: 'beneficiary_name', header: 'Beneficiary', render: (r) => <span>{r.beneficiary_name}{r.parent_state && r.parent_state !== r.beneficiary_name ? <div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.parent_state}</div> : null}</span> },
+              { key: 'beneficiary_name', header: 'Beneficiary', render: (r) => <span>{r.beneficiary_name}{r.parent_state && r.parent_state !== r.beneficiary_name ? <div style={{ fontSize: 14, color: 'var(--text-light)' }}>{r.parent_state}</div> : null}</span> },
               { key: 'alloc', header: 'Share billed', render: (r) => (r.billed_now
-                ? <span>{pct(r.allocation_pct)}{r.allocation_min_12m != null && r.allocation_min_12m !== r.allocation_max_12m ? <div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>12 m: {pct(r.allocation_min_12m)} – {pct(r.allocation_max_12m)}</div> : null}</span>
+                ? <span>{pct(r.allocation_pct)}{r.allocation_min_12m != null && r.allocation_min_12m !== r.allocation_max_12m ? <div style={{ fontSize: 14, color: 'var(--text-light)' }}>12 m: {pct(r.allocation_min_12m)} – {pct(r.allocation_max_12m)}</div> : null}</span>
                 : <span style={{ color: 'var(--text-light)' }}>not on current allocation</span>) },
               { key: 'ppa', header: 'PPA', render: (r) => (
                 <span>
                   <Badge type={STANDING[r.ppa_standing].tone}>{STANDING[r.ppa_standing].label}</Badge>
-                  {r.ppa && <div style={{ fontSize: 12.5, marginTop: 2 }}>{r.ppa.ppa_ref} · {fmtDate(r.ppa.valid_from)} – {r.ppa.valid_to ? fmtDate(r.ppa.valid_to) : 'station life'}{r.ppa.days_to_expiry != null && r.ppa.days_to_expiry >= 0 && r.ppa_standing === 'EXPIRING' ? ` (${r.ppa.days_to_expiry} days left)` : ''}</div>}
+                  {r.ppa && <div style={{ fontSize: 14, marginTop: 2 }}>{r.ppa.ppa_ref} · {fmtDate(r.ppa.valid_from)} – {r.ppa.valid_to ? fmtDate(r.ppa.valid_to) : 'station life'}{r.ppa.days_to_expiry != null && r.ppa.days_to_expiry >= 0 && r.ppa_standing === 'EXPIRING' ? ` (${r.ppa.days_to_expiry} days left)` : ''}</div>}
                 </span>
               ) },
               { key: 'entity', header: 'Stakeholder', render: (r) => (r.entity ? <span>{r.entity.name} <Badge status={r.entity.status} /></span> : <span style={{ color: 'var(--amber-strong)' }}>Not onboarded</span>) },
               { key: 'security', header: 'Security held / required', render: (r) => (
                 <span>
                   {fmtCurrency(r.security_held)}{r.security_required != null ? ` / ${fmtCurrency(r.security_required)}` : ''}
-                  {r.security_short > 0 && <div style={{ fontSize: 12.5, color: 'var(--red-deep)' }}>Short {fmtCurrency(r.security_short)}</div>}
+                  {r.security_short > 0 && <div style={{ fontSize: 14, color: 'var(--red-deep)' }}>Short {fmtCurrency(r.security_short)}</div>}
                 </span>
               ) },
               { key: 'outstanding', header: 'Outstanding', render: (r) => <Link to={`${pathFor(vertical, 'ledger')}?beneficiary=${encodeURIComponent(r.beneficiary_name)}`}>{fmtCurrency(r.outstanding)}</Link> },

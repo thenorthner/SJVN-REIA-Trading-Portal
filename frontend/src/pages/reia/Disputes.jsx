@@ -13,7 +13,15 @@ import { ROLE_GROUPS } from '../../roles.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
-const CAN_RAISE = ['SELLER', 'BUYER', ...ROLE_GROUPS.REIA_WRITE];
+// Phase B.2 (Target #2 H6): the maker raises a dispute for SJVN and keeps the
+// forum record; the checker acknowledges, reviews, asks for information, assigns
+// and closes; the REIA approver or Management decides it.
+const CAN_RUN = ROLE_GROUPS.REIA_CHECK;
+const CAN_DECIDE = ROLE_GROUPS.REIA_APPROVE;
+const CAN_RAISE = ['SELLER', 'BUYER', ...ROLE_GROUPS.REIA_MAKE];
+// Who GET /api/disputes/stats answers: the REIA desk, its approver, Finance,
+// Management and the SJVN administrator (read-only oversight).
+const STATS_READERS = [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE, 'FINANCE_USER', 'SJVN_ADMIN'];
 
 const EMPTY_FORM = {
   invoice_id: '', reason_code: '', charge_line: 'energy_charges',
@@ -29,9 +37,9 @@ const RESOLVE_FORM = { outcome: 'PARTIAL_CREDIT', accepted_amount: '', resolutio
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
-      <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 14.5, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+      {sub != null && <div style={{ fontSize: 15, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -93,7 +101,7 @@ export default function Disputes() {
     params.order = filters.order;
     Promise.all([
       api.disputes.list(params),
-      CAN_WRITE.includes(user?.role) || ['FINANCE_USER', 'MANAGEMENT'].includes(user?.role)
+      STATS_READERS.includes(user?.role)
         ? api.disputes.stats().catch(() => null)
         : Promise.resolve(null),
     ]).then(([list, s]) => {
@@ -252,7 +260,7 @@ export default function Disputes() {
     { key: 'ageing_days', header: 'Age', render: (r) => `${r.ageing_days ?? 0}d` },
     { key: 'sla', header: 'Clock', render: (r) => (clock[r.id] ? <SlaTag sla={clock[r.id].sla} sjvn /> : (r.sla_breached || r.status === 'ESCALATED' ? <Badge status="ESCALATED" /> : 'OK')) },
     { key: 'lps', header: 'LPS at stake', render: (r) => (clock[r.id]?.lps_estimate?.amount > 0 ? <span style={{ color: clock[r.id].lps_estimate.running ? 'var(--amber-strong)' : 'inherit' }}>{fmtCurrency(clock[r.id].lps_estimate.amount)}</span> : '—') },
-    { key: 'group', header: 'Linked', render: (r) => { const g = clock[r.id]?.group || (r.group_ref ? { ref: r.group_ref, title: r.group_title } : null); return g?.ref ? <span title={g.title || ''} style={{ fontSize: 13.5 }}>{g.ref}</span> : '—'; } },
+    { key: 'group', header: 'Linked', render: (r) => { const g = clock[r.id]?.group || (r.group_ref ? { ref: r.group_ref, title: r.group_title } : null); return g?.ref ? <span title={g.title || ''} style={{ fontSize: 15 }}>{g.ref}</span> : '—'; } },
   ];
 
   return (
@@ -297,7 +305,7 @@ export default function Disputes() {
         </div>
       )}
 
-      <ForumTrackerPanel canWrite={ROLE_GROUPS.REIA_WRITE.includes(user?.role)} />
+      <ForumTrackerPanel canWrite={ROLE_GROUPS.REIA_MAKE.includes(user?.role)} />
 
       {stats?.by_reason?.length > 0 && (
         <Card title="Category patterns (root-cause)">
@@ -307,7 +315,7 @@ export default function Disputes() {
                 key={r.reason_code}
                 type="button"
                 className="btn btn-ghost"
-                style={{ fontSize: 13.5 }}
+                style={{ fontSize: 15 }}
                 onClick={() => setFilters({ ...filters, reason_code: r.reason_code })}
               >
                 {reasonLabel(r.reason_code)} · {r.count} · {fmtCurrency(r.amount)}
@@ -451,7 +459,7 @@ export default function Disputes() {
             )}
 
 
-            {CAN_WRITE.includes(user?.role) && OPEN_STATUSES.includes(detail.status) && (
+            {CAN_RUN.includes(user?.role) && OPEN_STATUSES.includes(detail.status) && (
               <div className="form-actions" style={{ flexWrap: 'wrap' }}>
                 {/* Acknowledging is the desk's act, so the 2-day SLA runs on a person (17-Oct-2026). */}
                 {detail.status === 'RAISED' && (
@@ -473,7 +481,7 @@ export default function Disputes() {
               </div>
             )}
 
-            {CAN_WRITE.includes(user?.role) && ['RAISED', 'UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'].includes(detail.status) && (
+            {CAN_DECIDE.includes(user?.role) && ['RAISED', 'UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'].includes(detail.status) && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Resolve</div>
                 <form onSubmit={handleResolve}>
@@ -513,7 +521,7 @@ export default function Disputes() {
               </>
             )}
 
-            {CAN_WRITE.includes(user?.role) && ['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) && detail.resolution_response !== 'CONTESTED' && (() => {
+            {CAN_RUN.includes(user?.role) && ['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) && detail.resolution_response !== 'CONTESTED' && (() => {
               // The party answers a resolution first; the desk closes it after
               // that, or once the answer window has run out.
               const windowDays = detail.response_window_days ?? 15;
@@ -561,7 +569,7 @@ export default function Disputes() {
                       <tr key={d.filename}>
                         <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                           <strong>{d.original_name || d.filename}</strong>
-                          {d.note && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>{d.note}</div>}
+                          {d.note && <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 2 }}>{d.note}</div>}
                         </td>
                         <td>{d.uploaded_by || '—'}</td>
                         <td>{fmtDate(d.uploaded_at)}</td>
@@ -579,7 +587,7 @@ export default function Disputes() {
             <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border, var(--border))', borderRadius: 8, padding: 10, marginBottom: 10 }}>
               {(detail.comments || []).map((c) => (
                 <div key={c.id} style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 13.5, opacity: 0.7 }}>
+                  <div style={{ fontSize: 15, opacity: 0.7 }}>
                     {c.user_name} ({c.role}) · {fmtDateTime(c.created_at)}
                     {c.is_internal ? ' · INTERNAL' : ''}
                   </div>
@@ -593,7 +601,7 @@ export default function Disputes() {
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} />
               </Field>
               {CAN_WRITE.includes(user?.role) && (
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 8 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14.5, marginBottom: 8 }}>
                   <input type="checkbox" checked={internalComment} onChange={(e) => setInternalComment(e.target.checked)} />
                   Internal only (hidden from buyer/seller)
                 </label>
@@ -604,7 +612,7 @@ export default function Disputes() {
             </form>
 
             <div className="section-title" style={{ marginTop: 18 }}>Audit trail</div>
-            <ul style={{ paddingLeft: 18, fontSize: 13 }}>
+            <ul style={{ paddingLeft: 18, fontSize: 14.5 }}>
               {(detail.events || []).map((ev) => (
                 <li key={ev.id}>
                   {fmtDateTime(ev.created_at)} — {String(ev.event_type || '').replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())}

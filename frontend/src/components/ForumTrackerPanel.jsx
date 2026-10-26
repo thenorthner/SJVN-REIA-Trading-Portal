@@ -32,13 +32,13 @@ export default function ForumTrackerPanel({ canWrite }) {
           <tbody>
             {data.rows.map((r) => (
               <tr key={r.id}>
-                <td>{r.dispute_no}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.invoice_no} · {r.contract_no}</div></td>
-                <td>{r.forum_label || '—'}<div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.case_no ? `${r.case_no}${r.filed_on ? ` · filed ${fmtDate(r.filed_on)}` : ''}` : 'Case no. not recorded'}</div></td>
+                <td>{r.dispute_no}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.invoice_no} · {r.contract_no}</div></td>
+                <td>{r.forum_label || '—'}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.case_no ? `${r.case_no}${r.filed_on ? ` · filed ${fmtDate(r.filed_on)}` : ''}` : 'Case no. not recorded'}</div></td>
                 <td>{fmtCurrency(r.contested_amount)}</td>
                 <td>{r.status === 'DECIDED' ? (r.awarded_amount != null ? `Awarded ${fmtCurrency(r.awarded_amount)}` : '—') : fmtCurrency(r.expected_exposure)}</td>
                 <td>
-                  {r.next_hearing ? <>{fmtDate(r.next_hearing)}{r.days_to_hearing != null && r.days_to_hearing >= 0 && <div style={{ fontSize: 12, color: r.days_to_hearing <= 7 ? 'var(--amber-strong)' : 'var(--slate-500)' }}>in {r.days_to_hearing} day(s)</div>}</> : '—'}
-                  {r.hearings.length > 0 && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.hearings.length} hearing(s) held</div>}
+                  {r.next_hearing ? <>{fmtDate(r.next_hearing)}{r.days_to_hearing != null && r.days_to_hearing >= 0 && <div style={{ fontSize: 13.5, color: r.days_to_hearing <= 7 ? 'var(--amber-strong)' : 'var(--slate-500)' }}>in {r.days_to_hearing} day(s)</div>}</> : '—'}
+                  {r.hearings.length > 0 && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.hearings.length} hearing(s) held</div>}
                 </td>
                 <td><Badge status={r.status === 'DECIDED' ? 'ACTIVE' : 'PENDING'} label={r.status === 'DECIDED' ? (r.outcome || 'Decided') : 'Pending'} /></td>
                 {canWrite && (

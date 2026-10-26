@@ -8,6 +8,7 @@ import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../c
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { ScheduleGridModal } from './ScheduleGridModal.jsx';
 import BilateralRevisionsPanel from '../../components/BilateralRevisionsPanel.jsx';
+import { showAlert, askText } from '../../lib/dialogs.js';
 
 // Why a deviating block carries no DSM charge. Spelled out in the tracker so an
 // unpriced block reads as an open item rather than as a block that cost nothing.
@@ -58,7 +59,7 @@ function SlaChip({ sla }) {
   return (
     <span
       title={`${sla.oa_type} target ${sla.target_days} days, measured submission → approval`}
-      style={{ background: style.bg, color: style.tone, padding: '2px 8px', borderRadius: 10, fontSize: 13.5, whiteSpace: 'nowrap' }}
+      style={{ background: style.bg, color: style.tone, padding: '2px 8px', borderRadius: 10, fontSize: 15, whiteSpace: 'nowrap' }}
     >
       {style.label} · {detail}
     </span>
@@ -90,7 +91,7 @@ function fmtStamp(s) {
 function FormSection({ title, children }) {
   return (
     <div style={{ marginBottom: 24 }}>
-      <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--slate-900)', borderBottom: '2px solid var(--slate-200)', paddingBottom: 8, marginBottom: 16, marginTop: 0 }}>{title}</h4>
+      <h4 style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-900)', borderBottom: '2px solid var(--slate-200)', paddingBottom: 8, marginBottom: 16, marginTop: 0 }}>{title}</h4>
       {children}
     </div>
   );
@@ -99,7 +100,7 @@ function FormSection({ title, children }) {
 function BearerRow({ label, field, form, setForm }) {
   return (
     <tr style={{ borderBottom: '1px solid var(--slate-100)' }}>
-      <td style={{ padding: '10px 12px', color: 'var(--slate-700)', fontSize: 13 }}>{label}</td>
+      <td style={{ padding: '10px 12px', color: 'var(--slate-700)', fontSize: 14.5 }}>{label}</td>
       {['Seller', 'Buyer', 'SJVN', 'Both'].map(opt => (
         <td key={opt} style={{ padding: '10px 12px', textAlign: 'center' }}>
           <input type="radio" name={field} checked={form[field] === opt} onChange={() => setForm({...form, [field]: opt})} style={{ margin: 0, cursor: 'pointer', width: 16, height: 16 }} />
@@ -218,7 +219,7 @@ export default function Bilateral() {
       setShowScheduleGrid(false);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to add schedule");
+      showAlert(err.response?.data?.error || "Failed to add schedule");
     }
   }
 
@@ -231,14 +232,14 @@ export default function Bilateral() {
     const next = current === 'REJECTED' ? 'SUBMITTED' : NOAR_FLOW[Math.min(idx + 1, NOAR_FLOW.length - 1)];
     let contractNo = tx.noar_contract_no;
     if (next === 'CONTRACT_CREATED' && !contractNo) {
-      contractNo = prompt('NOAR contract number:') || '';
+      contractNo = (await askText('NOAR contract number:')) || '';
     }
     // Optional, but it is what makes the history readable months later.
-    const note = prompt(`Note for "${NOAR_STEP_LABEL[next]}" (optional):`) || '';
+    const note = (await askText(`Note for "${NOAR_STEP_LABEL[next]}" (optional):`, { required: false })) || '';
     try {
       const updated = await api.bilateral.updateNoar(tx.id, { noar_status: next, noar_contract_no: contractNo, note });
       setSelectedTx(updated); load();
-    } catch (err) { alert('Failed to update NOAR status'); }
+    } catch (err) { showAlert('Failed to update NOAR status'); }
   }
   /** Downloads go through the API client so the JWT is attached. */
   async function download(fetcher, filename) {
@@ -250,7 +251,7 @@ export default function Bilateral() {
       document.body.appendChild(a); a.click(); a.remove();
       window.URL.revokeObjectURL(url);
     } catch {
-      alert(`Could not download ${filename}.`);
+      showAlert(`Could not download ${filename}.`);
     }
   }
 
@@ -292,7 +293,7 @@ export default function Bilateral() {
       });
       setSelectedTx(updated); setRejectForm(null); load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to record rejection');
+      showAlert(err.response?.data?.error || 'Failed to record rejection');
     }
   }
 
@@ -303,7 +304,7 @@ export default function Bilateral() {
       const a = document.createElement('a');
       a.href = url; a.download = `FormatD_${tx.counterparty}.csv`;
       document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-    } catch (err) { alert('Failed to download Format-D'); }
+    } catch (err) { showAlert('Failed to download Format-D'); }
   }
 
   async function handleDownloadLoi(tx) {
@@ -320,7 +321,7 @@ export default function Bilateral() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Failed to download LoI:', err);
-      alert('Failed to download LoI');
+      showAlert('Failed to download LoI');
     }
   }
 
@@ -330,7 +331,7 @@ export default function Bilateral() {
       setSelectedTx(updated);
       load();
     } catch (err) {
-      alert("Failed to update node approval");
+      showAlert("Failed to update node approval");
     }
   }
 
@@ -358,7 +359,7 @@ export default function Bilateral() {
       refreshSettlement(selectedTx.id, billPeriod);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || "Failed to record actuals");
+      showAlert(err.response?.data?.error || "Failed to record actuals");
     }
   }
 
@@ -371,14 +372,14 @@ export default function Bilateral() {
       setSyncResult(res);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'WBES sync failed');
+      showAlert(err.response?.data?.error || 'WBES sync failed');
     } finally {
       setSyncBusy(false);
     }
   }
 
   async function handleCurtail(schedId) {
-    const mw = prompt("Enter Curtailed MW:");
+    const mw = (await askText("Enter Curtailed MW:"));
     if (!mw) return;
     try {
       const updated = await api.bilateral.curtail(schedId, Number(mw));
@@ -386,7 +387,7 @@ export default function Bilateral() {
       refreshSettlement(selectedTx.id, billPeriod);
       load();
     } catch (err) {
-      alert("Failed to curtail");
+      showAlert("Failed to curtail");
     }
   }
 
@@ -478,7 +479,7 @@ export default function Bilateral() {
         <span>
           {sale != null ? Number(sale).toFixed(3) : '—'}
           {margin != null && (
-            <span style={{ fontSize: 13, color: 'var(--slate-500)', marginLeft: 6 }}>
+            <span style={{ fontSize: 14.5, color: 'var(--slate-500)', marginLeft: 6 }}>
               (buy {r.purchase_rate_per_unit != null ? Number(r.purchase_rate_per_unit).toFixed(3) : '—'} + {Number(margin).toFixed(3)})
             </span>
           )}
@@ -515,9 +516,9 @@ export default function Bilateral() {
         <Card>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Pending approvals</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>Pending approvals</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>{sla.pending_total}</div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                 {sla.counts.ON_TRACK} on track · <span style={{ color: 'var(--on-amber)' }}>{sla.counts.AT_RISK} at risk</span> ·{' '}
                 <span style={{ color: 'var(--on-red)' }}>{sla.counts.BREACHED} overdue</span>
                 {sla.counts.REJECTED > 0 && (
@@ -526,20 +527,20 @@ export default function Bilateral() {
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>On-time rate</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>On-time rate</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>
                 {sla.on_time_rate_pct === null ? '—' : `${sla.on_time_rate_pct}%`}
               </div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                 {sla.counts.MET + sla.counts.MISSED} decided ({sla.counts.MISSED} missed)
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Avg approval time</div>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>Avg approval time</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>
                 {sla.avg_approval_days === null ? '—' : `${sla.avg_approval_days}d`}
               </div>
-              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                 Targets: {Object.entries(sla.targets).map(([k, v]) => `${k} ${v}d`).join(' · ')}
               </div>
             </div>
@@ -555,9 +556,9 @@ export default function Bilateral() {
             </div>
             {sla.needs_attention.length > 0 && (
               <div style={{ flex: 1, minWidth: 260 }}>
-                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 4 }}>Needs attention</div>
+                <div style={{ fontSize: 15, color: 'var(--slate-500)', marginBottom: 4 }}>Needs attention</div>
                 {sla.needs_attention.slice(0, 4).map((a) => (
-                  <div key={a.id} style={{ fontSize: 13.5, marginBottom: 2 }}>
+                  <div key={a.id} style={{ fontSize: 15, marginBottom: 2 }}>
                     <span style={{ color: a.state === 'BREACHED' ? 'var(--on-red)' : 'var(--on-amber)' }}>●</span>{' '}
                     {a.counterparty} — {a.elapsed_days}d of {a.target_days}d ({a.noar_contract_no || a.id})
                   </div>
@@ -574,7 +575,7 @@ export default function Bilateral() {
       {canWrite && picked.length > 0 && (
         <Card>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: 13, marginBottom: 8 }}>{picked.length} selected</strong>
+            <strong style={{ fontSize: 14.5, marginBottom: 8 }}>{picked.length} selected</strong>
             <Field label="Move to">
               <select className="input" value={bulkTo} onChange={(e) => { setBulkTo(e.target.value); setBulkPreview(null); }}>
                 <option value="FORMAT_D_PREPARED">Format-D prepared</option>
@@ -618,16 +619,16 @@ export default function Bilateral() {
           {bulkPreview && (
             <div style={{ marginTop: 12 }}>
               {bulkPreview.error ? (
-                <div style={{ color: 'var(--on-red)', fontSize: 13 }}>{bulkPreview.error}</div>
+                <div style={{ color: 'var(--on-red)', fontSize: 14.5 }}>{bulkPreview.error}</div>
               ) : (
                 <>
-                  <div style={{ fontSize: 13, marginBottom: 6 }}>
+                  <div style={{ fontSize: 14.5, marginBottom: 6 }}>
                     {bulkPreview.dry_run
                       ? `${bulkPreview.will_apply} of ${bulkPreview.requested} can move · ${bulkPreview.skipped} skipped`
                       : ` ${bulkPreview.applied} moved · ${bulkPreview.skipped} skipped`}
                   </div>
                   {bulkPreview.results.map((r) => (
-                    <div key={r.id} style={{ fontSize: 13.5, color: r.ok ? 'var(--on-green)' : 'var(--on-amber)' }}>
+                    <div key={r.id} style={{ fontSize: 15, color: r.ok ? 'var(--on-green)' : 'var(--on-amber)' }}>
                       {r.ok ? '' : '•'} {r.id} ({r.counterparty}) — {r.ok ? `${r.from} → ${r.to}` : r.reason}
                     </div>
                   ))}
@@ -667,10 +668,10 @@ export default function Bilateral() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
                 <Field label="Type of Contract *">
                   <div style={{ display: 'flex', gap: 20, height: '36px', alignItems: 'center' }}>
-                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 15.5 }}>
                       <input type="radio" name="type_of_contract" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.type_of_contract === 'Purchase Side'} onChange={() => setForm({...form, type_of_contract: 'Purchase Side'})} /> Purchase Side
                     </label>
-                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 15.5 }}>
                       <input type="radio" name="type_of_contract" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.type_of_contract === 'Sell Side'} onChange={() => setForm({...form, type_of_contract: 'Sell Side'})} /> Sell Side
                     </label>
                   </div>
@@ -701,7 +702,7 @@ export default function Bilateral() {
 
             <FormSection title="Order Details">
               <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, overflowX: 'auto', marginBottom: 20 }}>
-                <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14.5 }}>
                   <thead style={{ background: 'var(--slate-50)', borderBottom: '2px solid var(--slate-200)' }}>
                     <tr>
                       <th colSpan="2" style={{ padding: '10px 12px', borderRight: '1px solid var(--slate-200)', textAlign: 'center', color: 'var(--slate-700)' }}>Date</th>
@@ -712,7 +713,7 @@ export default function Bilateral() {
                       <th style={{ padding: '10px 12px', borderRight: '1px solid var(--slate-200)', color: 'var(--slate-700)' }}>Variation</th>
                       <th style={{ padding: '10px 12px', width: 70, textAlign: 'center', color: 'var(--slate-700)' }}>Action</th>
                     </tr>
-                    <tr style={{ background: 'var(--slate-100)', color: 'var(--slate-600)', fontSize: 13.5 }}>
+                    <tr style={{ background: 'var(--slate-100)', color: 'var(--slate-600)', fontSize: 15 }}>
                       <th style={{ padding: '6px 12px', borderRight: '1px solid var(--slate-200)', borderTop: '1px solid var(--slate-200)', fontWeight: 500 }}>From *</th>
                       <th style={{ padding: '6px 12px', borderRight: '1px solid var(--slate-200)', borderTop: '1px solid var(--slate-200)', fontWeight: 500 }}>To *</th>
                       <th style={{ padding: '6px 12px', borderRight: '1px solid var(--slate-200)', borderTop: '1px solid var(--slate-200)', fontWeight: 500 }}>From *</th>
@@ -722,7 +723,7 @@ export default function Bilateral() {
                       <th style={{ borderRight: '1px solid var(--slate-200)', borderTop: '1px solid var(--slate-200)' }}></th>
                       <th style={{ borderRight: '1px solid var(--slate-200)', borderTop: '1px solid var(--slate-200)' }}></th>
                       <th style={{ textAlign: 'center', borderTop: '1px solid var(--slate-200)', padding: '6px' }}>
-                        <button type="button" className="btn btn-sm btn-primary" style={{ padding: '4px 8px', fontSize: 13, borderRadius: 4 }} onClick={addOrderRow}>Add Row</button>
+                        <button type="button" className="btn btn-sm btn-primary" style={{ padding: '4px 8px', fontSize: 14.5, borderRadius: 4 }} onClick={addOrderRow}>Add Row</button>
                       </th>
                     </tr>
                   </thead>
@@ -730,32 +731,32 @@ export default function Bilateral() {
                     {form.order_details.map((row, idx) => (
                       <tr key={row.id} style={{ borderBottom: '1px solid var(--slate-200)', background: 'var(--surface)' }}>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="date" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.date_from} onChange={e => updateOrderRow(idx, 'date_from', e.target.value)} />
+                          <input type="date" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} value={row.date_from} onChange={e => updateOrderRow(idx, 'date_from', e.target.value)} />
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="date" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.date_to} onChange={e => updateOrderRow(idx, 'date_to', e.target.value)} />
+                          <input type="date" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} value={row.date_to} onChange={e => updateOrderRow(idx, 'date_to', e.target.value)} />
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="time" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.time_from} onChange={e => updateOrderRow(idx, 'time_from', e.target.value)} />
+                          <input type="time" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} value={row.time_from} onChange={e => updateOrderRow(idx, 'time_from', e.target.value)} />
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="time" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.time_to} onChange={e => updateOrderRow(idx, 'time_to', e.target.value)} />
+                          <input type="time" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} value={row.time_to} onChange={e => updateOrderRow(idx, 'time_to', e.target.value)} />
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <select style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13, cursor: 'pointer' }} value={row.rate_type} onChange={e => updateOrderRow(idx, 'rate_type', e.target.value)}>
+                          <select style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5, cursor: 'pointer' }} value={row.rate_type} onChange={e => updateOrderRow(idx, 'rate_type', e.target.value)}>
                             <option value="">Select</option>
                             <option value="Fixed">Fixed</option>
                             <option value="Variable">Variable</option>
                           </select>
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="number" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} placeholder="0.00" value={row.rate} onChange={e => updateOrderRow(idx, 'rate', e.target.value)} />
+                          <input type="number" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} placeholder="0.00" value={row.rate} onChange={e => updateOrderRow(idx, 'rate', e.target.value)} />
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="number" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} placeholder="0.00" value={row.quantum} onChange={e => updateOrderRow(idx, 'quantum', e.target.value)} />
+                          <input type="number" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} placeholder="0.00" value={row.quantum} onChange={e => updateOrderRow(idx, 'quantum', e.target.value)} />
                         </td>
                         <td style={{ padding: 0, borderRight: '1px solid var(--slate-200)' }}>
-                          <input type="text" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} placeholder="-" value={row.variation} onChange={e => updateOrderRow(idx, 'variation', e.target.value)} />
+                          <input type="text" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 14.5 }} placeholder="-" value={row.variation} onChange={e => updateOrderRow(idx, 'variation', e.target.value)} />
                         </td>
                         <td style={{ padding: '6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           <button type="button" className="icon-btn" style={{ padding: '4px 8px', color: 'var(--slate-500)', display: 'inline-flex', alignItems: 'center' }} onClick={addOrderRow} title="Add Row">
@@ -784,10 +785,10 @@ export default function Bilateral() {
             <FormSection title="Renewable Details">
               <Field label="Is source of energy renewable? *">
                 <div style={{ display: 'flex', gap: 20, height: '36px', alignItems: 'center' }}>
-                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 15.5 }}>
                     <input type="radio" name="is_renewable" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.is_renewable === 'Yes'} onChange={() => setForm({...form, is_renewable: 'Yes'})} /> Yes
                   </label>
-                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 15.5 }}>
                     <input type="radio" name="is_renewable" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.is_renewable === 'No'} onChange={() => setForm({...form, is_renewable: 'No'})} /> No
                   </label>
                 </div>
@@ -806,7 +807,7 @@ export default function Bilateral() {
 
             <FormSection title="Fee and Charges">
               <div style={{ marginBottom: 20, border: '1px solid var(--slate-200)', borderRadius: 8, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                   <thead style={{ background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-200)' }}>
                     <tr>
                       <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--slate-600)', width: '40%' }}>Charge / Fee Type</th>
@@ -862,7 +863,7 @@ export default function Bilateral() {
             <div style={{ flex: 1 }}>
               <p>
                 <strong>Total Losses:</strong> {totalLosses(selectedTx).toFixed(2)}%
-                <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>
+                <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>
                   {' '}(inj {Number(selectedTx.loss_injection_state) || 0} · ISTS {Number(selectedTx.loss_inter_state) || 0} · drawee {Number(selectedTx.loss_drawee_state) || 0})
                 </span>
               </p>
@@ -877,24 +878,24 @@ export default function Bilateral() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: 'var(--slate-50)', borderRadius: 8, border: '1px solid var(--slate-200)' }}>
-            <strong style={{ fontSize: 13 }}>NOAR Portal:</strong>
+            <strong style={{ fontSize: 14.5 }}>NOAR Portal:</strong>
             <Badge status={selectedTx.noar_status === 'APPROVED' ? 'ACTIVE' : selectedTx.noar_status === 'NOT_INITIATED' ? 'DRAFT' : 'PENDING'} label={(selectedTx.noar_status || 'NOT_INITIATED').replace(/_/g, ' ')} />
-            {selectedTx.noar_contract_no && <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
+            {selectedTx.noar_contract_no && <span style={{ fontSize: 15, color: 'var(--slate-600)' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
             {selectedTx.noar_sla?.state && selectedTx.noar_sla.state !== 'NOT_APPLICABLE' && (
               <SlaChip sla={selectedTx.noar_sla} />
             )}
             {selectedTx.noar_timeline?.hours_in_current_status != null && (
-              <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>
+              <span style={{ fontSize: 15, color: 'var(--slate-600)' }}>
                 In this status: <strong>{fmtDuration(selectedTx.noar_timeline.hours_in_current_status)}</strong>
               </span>
             )}
             {selectedTx.noar_timeline?.approval_turnaround_hours != null && (
-              <span style={{ fontSize: 13.5, color: 'var(--on-green)' }}>
+              <span style={{ fontSize: 15, color: 'var(--on-green)' }}>
                 Approval took <strong>{fmtDuration(selectedTx.noar_timeline.approval_turnaround_hours)}</strong>
               </span>
             )}
             {selectedTx.noar_resubmit_count > 0 && (
-              <span style={{ fontSize: 13.5, color: 'var(--on-red)' }}>
+              <span style={{ fontSize: 15, color: 'var(--on-red)' }}>
                 Resubmitted {selectedTx.noar_resubmit_count}×
               </span>
             )}
@@ -917,13 +918,13 @@ export default function Bilateral() {
           {/* Why NOAR sent it back, so the desk knows what to fix before resubmitting. */}
           {selectedTx.noar_status === 'REJECTED' && selectedTx.noar_rejection_reason && (
             <div style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 8 }}>
-              <strong style={{ fontSize: 13, color: 'var(--on-red)' }}>Rejected by NLDC</strong>
+              <strong style={{ fontSize: 14.5, color: 'var(--on-red)' }}>Rejected by NLDC</strong>
               {selectedTx.noar_rejection_category && (
-                <span style={{ fontSize: 13.5, color: 'var(--on-red)' }}>
+                <span style={{ fontSize: 15, color: 'var(--on-red)' }}>
                   {' '}· {rejectReasons.find((r) => r.code === selectedTx.noar_rejection_category)?.label || selectedTx.noar_rejection_category}
                 </span>
               )}
-              <div style={{ fontSize: 13, color: 'var(--on-red)', marginTop: 3 }}>{selectedTx.noar_rejection_reason}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--on-red)', marginTop: 3 }}>{selectedTx.noar_rejection_reason}</div>
             </div>
           )}
 
@@ -956,7 +957,7 @@ export default function Bilateral() {
               Open Access Approval Timeline
             </h4>
             {!selectedTx.noar_timeline?.has_history ? (
-              <p style={{ color: 'var(--slate-500)', fontSize: 13 }}>
+              <p style={{ color: 'var(--slate-500)', fontSize: 14.5 }}>
                 No transitions recorded yet. This transaction currently sits at{' '}
                 <strong>{NOAR_STEP_LABEL[selectedTx.noar_status] || selectedTx.noar_status}</strong>
                 {selectedTx.noar_status !== 'NOT_INITIATED' && ' — it reached this status before timeline tracking was added, so earlier step times are not known'}.
@@ -976,7 +977,7 @@ export default function Bilateral() {
                       )}
                     </div>
                     <div style={{ paddingBottom: 14, flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 600 }}>
                         {NOAR_STEP_LABEL[e.status_to] || e.status_to}
                         {e.hours_in_previous_status != null && (
                           <span style={{ fontWeight: 400, color: 'var(--slate-500)' }}>
@@ -984,11 +985,11 @@ export default function Bilateral() {
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
+                      <div style={{ fontSize: 15, color: 'var(--slate-500)' }}>
                         {fmtStamp(e.changed_at)}{e.changed_by_name ? ` · ${e.changed_by_name}` : ''}
                         {e.noar_contract_no ? ` · ${e.noar_contract_no}` : ''}
                       </div>
-                      {e.note && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{e.note}</div>}
+                      {e.note && <div style={{ fontSize: 15, color: 'var(--slate-600)', marginTop: 2 }}>{e.note}</div>}
                     </div>
                   </div>
                 ))}
@@ -1026,14 +1027,14 @@ export default function Bilateral() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                 <strong>Multi-Hop Approval: {sched.schedule_date}</strong>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 13.5 }} onClick={() => handleCurtail(sched.id)}>Grid Curtailment</button>
-                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 13.5 }} onClick={() => openActuals(sched)}>Record Actuals (DSM)</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 15 }} onClick={() => handleCurtail(sched.id)}>Grid Curtailment</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 15 }} onClick={() => openActuals(sched)}>Record Actuals (DSM)</button>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 15 }}>
                 {sched.approvals?.map(app => (
                   <div key={app.id} style={{ flex: 1, padding: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4 }}>
-                    <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 5 }}>{app.node_type}</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 5 }}>{app.node_type}</div>
                     <Badge type={app.status === 'APPROVED' ? 'success' : app.status === 'REJECTED' ? 'danger' : 'warning'}>{app.status}</Badge>
                     {app.status === 'PENDING' && (
                       <div style={{ marginTop: 10, display: 'flex', gap: 5 }}>
@@ -1082,7 +1083,7 @@ export default function Bilateral() {
             </div>
 
             {!settlement ? (
-              <p style={{ color: 'var(--slate-500)', fontSize: 13 }}>
+              <p style={{ color: 'var(--slate-500)', fontSize: 14.5 }}>
                 {settleBusy ? 'Computing the settled position…' : 'No settled position yet — punch schedules first.'}
               </p>
             ) : (
@@ -1100,9 +1101,9 @@ export default function Bilateral() {
                     ['DSM charges', `₹${fmtNumber(settlement.money.dsm_penalty_amount)}`, `deviation ${fmtNumber(settlement.energy.deviation_mwh)} MWh`],
                   ].map(([label, value, sub]) => (
                     <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
-                      <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
+                      <div style={{ fontSize: 14.5, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
                       <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
-                      <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{sub}</div>
+                      <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>{sub}</div>
                     </div>
                   ))}
                 </div>
@@ -1110,8 +1111,8 @@ export default function Bilateral() {
                 {settlement.split && (
                   <div style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-                      <strong style={{ fontSize: 13 }}>Split between buyers</strong>
-                      <label style={{ fontSize: 13.5 }}>
+                      <strong style={{ fontSize: 14.5 }}>Split between buyers</strong>
+                      <label style={{ fontSize: 15 }}>
                         Settle and bill for{' '}
                         <select className="input" value={billBuyer} aria-label="Buyer"
                           onChange={(e) => { setBillBuyer(e.target.value); refreshSettlement(selectedTx.id, billPeriod, e.target.value); }}>
@@ -1137,7 +1138,7 @@ export default function Bilateral() {
                 )}
 
                 {settlement.rate_segments?.length > 1 && (
-                  <div style={{ marginBottom: 12, fontSize: 13.5, color: 'var(--slate-600)' }}>
+                  <div style={{ marginBottom: 12, fontSize: 15, color: 'var(--slate-600)' }}>
                     <strong>Rate revised in this period.</strong>{' '}
                     {settlement.rate_segments.map((g) => `${g.from} to ${g.to}: ${fmtNumber(g.delivered_mwh)} MWh @ ₹${g.sale_rate_per_unit}`).join(' · ')}
                   </div>
@@ -1145,7 +1146,7 @@ export default function Bilateral() {
 
                 {settlement.energy.unpriced_deviation_blocks > 0 && (
                   <div style={{
-                    marginBottom: 12, padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                    marginBottom: 12, padding: '8px 12px', borderRadius: 8, fontSize: 14.5,
                     background: 'var(--amber-50, var(--t-amber-50))', border: '1px solid var(--warning, #b45309)',
                     color: 'var(--warning, #b45309)',
                   }}>
@@ -1158,7 +1159,7 @@ export default function Bilateral() {
                   <Badge type={settlement.energy.is_final ? 'success' : 'warning'}>
                     {settlement.energy.is_final ? 'FINAL' : 'PROVISIONAL'}
                   </Badge>
-                  <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>
+                  <span style={{ fontSize: 15, color: 'var(--slate-600)' }}>
                     {settlement.energy.metered_blocks} of {settlement.energy.blocks} blocks metered
                     {settlement.energy.days ? ` · ${settlement.energy.days} day(s)` : ''}
                     {settlement.energy.period_from ? ` · ${settlement.energy.period_from} to ${settlement.energy.period_to}` : ''}
@@ -1167,13 +1168,13 @@ export default function Bilateral() {
 
                 {/* Energy cannot be billed until the portal has granted open access. */}
                 {!['APPROVED', 'PARTIAL'].includes(selectedTx.open_access_status) && (
-                  <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 13.5, color: 'var(--on-red)' }}>
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 15, color: 'var(--on-red)' }}>
                     Open access is <strong>{selectedTx.open_access_status}</strong> — the energy bill unlocks once NOAR approves it.
                   </div>
                 )}
 
                 {settlement.split && !billBuyer && (
-                  <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 13.5, color: 'var(--on-red)' }}>
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 15, color: 'var(--on-red)' }}>
                     Each buyer is billed its own energy and open access — choose the buyer above to raise them.
                   </div>
                 )}
@@ -1196,14 +1197,14 @@ export default function Bilateral() {
 
                 {billMsg && (
                   <div style={{
-                    marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
+                    marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 14.5,
                     background: billMsg.ok ? 'var(--t-green-50)' : 'var(--t-red-50)',
                     border: `1px solid ${billMsg.ok ? 'var(--t-green-line)' : 'var(--t-red-line)'}`,
                     color: billMsg.ok ? 'var(--on-green)' : 'var(--on-red)',
                   }}>
                     {billMsg.text}
                     {billMsg.warnings?.length > 0 && (
-                      <ul style={{ margin: '6px 0 0 18px', fontSize: 13.5 }}>
+                      <ul style={{ margin: '6px 0 0 18px', fontSize: 15 }}>
                         {billMsg.warnings.map((w, i) => <li key={i}>{w}</li>)}
                       </ul>
                     )}
@@ -1211,9 +1212,9 @@ export default function Bilateral() {
                 )}
 
                 <div style={{ marginTop: 18 }}>
-                  <strong style={{ fontSize: 13 }}>Bills raised against this contract</strong>
+                  <strong style={{ fontSize: 14.5 }}>Bills raised against this contract</strong>
                   {txInvoices.length === 0 ? (
-                    <p style={{ color: 'var(--slate-500)', fontSize: 13, marginTop: 6 }}>None yet.</p>
+                    <p style={{ color: 'var(--slate-500)', fontSize: 14.5, marginTop: 6 }}>None yet.</p>
                   ) : (
                     <div style={{ marginTop: 8 }}>
                       <Table
@@ -1295,7 +1296,7 @@ export default function Bilateral() {
       {actualsFor && (
         <Modal open={true} onClose={() => setActualsFor(null)} title={`Record Actuals — ${actualsFor.schedule_date} ${actualsFor.time_block}`}>
           <form onSubmit={handleRecordActuals}>
-            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 14 }}>
+            <p style={{ fontSize: 14.5, color: 'var(--slate-500)', marginBottom: 14 }}>
               Deviation charges are frequency-linked. Without the block's grid frequency the
               deviation is still recorded, but it cannot be priced off the DSM slab master.
             </p>
@@ -1309,7 +1310,7 @@ export default function Bilateral() {
                   onChange={e => setActualsForm({ ...actualsForm, grid_frequency_hz: e.target.value })} placeholder="49.90" />
               </Field>
             </div>
-            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 6 }}>
+            <div style={{ fontSize: 15, color: 'var(--slate-500)', marginTop: 6 }}>
               Scheduled after curtailment: {fmtNumber((actualsFor.approved_mw || 0) - (actualsFor.curtailed_mw || 0), 2)} MW
             </div>
 
@@ -1318,7 +1319,7 @@ export default function Bilateral() {
                 marginTop: 14, padding: '10px 12px', borderRadius: 8,
                 background: actualsResult.basis === 'CERC_SLAB' ? 'var(--slate-50)' : 'var(--amber-50, var(--t-amber-50))',
                 border: `1px solid ${actualsResult.basis === 'CERC_SLAB' ? 'var(--slate-200)' : 'var(--warning, #b45309)'}`,
-                fontSize: 13,
+                fontSize: 14.5,
               }}>
                 {actualsResult.basis === 'CERC_SLAB' && (
                   <span><strong>₹{fmtNumber(actualsResult.amount, 0)}</strong> at {fmtNumber(actualsResult.rate_paise_per_kwh, 2)} p/kWh · {actualsResult.slab_name}</span>

@@ -143,7 +143,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 CERC Two-Part Tariff Settlement Architecture
               </h3>
               <span style={{
-                fontSize: 11,
+                fontSize: 12.5,
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 999,
@@ -156,7 +156,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 CERC Tariff Reg 2024–2029 (Reg 42 &amp; 43)
               </span>
             </div>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '3px 0 0' }}>
+            <p style={{ fontSize: 14.5, color: '#94a3b8', margin: '3px 0 0' }}>
               Statutory decoupling of fixed capital cost recovery from variable fuel dispatch for thermal generating stations
             </p>
           </div>
@@ -190,7 +190,7 @@ export default function ThermalTariffArchitectureDoc3D({
                   gap: 6,
                   padding: '6px 12px',
                   borderRadius: 7,
-                  fontSize: 12.5,
+                  fontSize: 14,
                   fontWeight: 600,
                   border: 'none',
                   cursor: 'pointer',
@@ -230,12 +230,12 @@ export default function ThermalTariffArchitectureDoc3D({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <ShieldCheck size={18} color="#60a5fa" />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                  <span style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff' }}>
                     1. Fixed Capacity Charge (AFC Recovery)
                   </span>
                 </div>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -255,11 +255,11 @@ export default function ThermalTariffArchitectureDoc3D({
                 padding: '12px 14px',
                 marginBottom: 14,
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: 13,
+                fontSize: 14.5,
                 color: '#e2e8f0',
                 lineHeight: 1.6,
               }}>
-                <div style={{ color: '#93c5fd', fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                <div style={{ color: '#93c5fd', fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
                   Monthly Capacity Charge =
                 </div>
                 <div style={{ paddingLeft: 12 }}>
@@ -272,7 +272,7 @@ export default function ThermalTariffArchitectureDoc3D({
               </div>
 
               {/* Parameter explanation list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5, color: '#cbd5e1' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, color: '#cbd5e1' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                   <span style={{ minWidth: 62, fontWeight: 700, color: '#fbbf24', fontFamily: 'monospace' }}>AFC:</span>
                   <span>Approved Annual Fixed Cost pool (Depreciation + Loan Interest + RoE @ 15.5% + O&amp;M + Working Capital).</span>
@@ -293,7 +293,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 borderRadius: 8,
                 background: 'rgba(59, 130, 246, 0.08)',
                 border: '1px solid rgba(59, 130, 246, 0.2)',
-                fontSize: 12,
+                fontSize: 13.5,
                 color: '#93c5fd',
                 display: 'flex',
                 alignItems: 'center',
@@ -317,12 +317,12 @@ export default function ThermalTariffArchitectureDoc3D({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Flame size={18} color="#f59e0b" />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                  <span style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff' }}>
                     2. Variable Energy Charge (Fuel Cost Pass-Through)
                   </span>
                 </div>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -342,14 +342,14 @@ export default function ThermalTariffArchitectureDoc3D({
                 padding: '12px 14px',
                 marginBottom: 14,
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: 13,
+                fontSize: 14.5,
                 color: '#e2e8f0',
                 lineHeight: 1.6,
               }}>
-                <div style={{ color: '#fcd34d', fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                <div style={{ color: '#fcd34d', fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
                   Energy Charge = ECR × Ex-Bus Scheduled Generation (kWh)
                 </div>
-                <div style={{ paddingLeft: 12, fontSize: 12.5 }}>
+                <div style={{ paddingLeft: 12, fontSize: 14 }}>
                   <span style={{ color: '#f59e0b', fontWeight: 600 }}>ECR</span>
                   <span style={{ color: '#94a3b8' }}> = [ </span>
                   <span style={{ color: '#38bdf8' }}>(GHR − SFC × CVSF) × LPPF / CVPF</span>
@@ -361,7 +361,7 @@ export default function ThermalTariffArchitectureDoc3D({
               </div>
 
               {/* Parameter explanation list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5, color: '#cbd5e1' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, color: '#cbd5e1' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                   <span style={{ minWidth: 62, fontWeight: 700, color: '#38bdf8', fontFamily: 'monospace' }}>GHR:</span>
                   <span>Gross Station Heat Rate (<strong style={{ color: '#ffffff' }}>2,250 kCal/kWh</strong> for Supercritical Buxar).</span>
@@ -382,7 +382,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 borderRadius: 8,
                 background: 'rgba(245, 158, 11, 0.08)',
                 border: '1px solid rgba(245, 158, 11, 0.2)',
-                fontSize: 12,
+                fontSize: 13.5,
                 color: '#fcd34d',
                 display: 'flex',
                 alignItems: 'center',
@@ -422,10 +422,10 @@ export default function ThermalTariffArchitectureDoc3D({
                 <Layers size={18} />
               </div>
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
                   Total Monthly Thermal Bill = Capacity Charge + Energy Charge
                 </div>
-                <div style={{ fontSize: 12.5, color: '#94a3b8' }}>
+                <div style={{ fontSize: 14, color: '#94a3b8' }}>
                   Decoupled settlement ensures SJVN fixed capital recovery is guaranteed by plant availability, independent of grid dispatch.
                 </div>
               </div>
@@ -444,7 +444,7 @@ export default function ThermalTariffArchitectureDoc3D({
                   background: 'rgba(59, 130, 246, 0.2)',
                   border: '1px solid rgba(59, 130, 246, 0.4)',
                   color: '#93c5fd',
-                  fontSize: 12.5,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
@@ -465,7 +465,7 @@ export default function ThermalTariffArchitectureDoc3D({
                   background: 'rgba(16, 185, 129, 0.2)',
                   border: '1px solid rgba(16, 185, 129, 0.4)',
                   color: '#6ee7b7',
-                  fontSize: 12.5,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
@@ -498,16 +498,16 @@ export default function ThermalTariffArchitectureDoc3D({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Calendar size={18} color="#60a5fa" />
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff' }}>
                       Step 1: Annual Baseline Norms
                     </div>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 13.5, color: '#94a3b8' }}>
                       Configured once per Financial Year in <strong style={{ color: '#60a5fa' }}>Stations &amp; Tariff</strong>
                     </div>
                   </div>
                 </div>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -566,11 +566,11 @@ export default function ThermalTariffArchitectureDoc3D({
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{row.param}</div>
-                      <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{row.source}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 600, color: '#f1f5f9' }}>{row.param}</div>
+                      <div style={{ fontSize: 13, color: '#94a3b8' }}>{row.source}</div>
                     </div>
                     <span style={{
-                      fontSize: 12.5,
+                      fontSize: 14,
                       fontWeight: 700,
                       fontFamily: 'monospace',
                       color: '#60a5fa',
@@ -597,16 +597,16 @@ export default function ThermalTariffArchitectureDoc3D({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileText size={18} color="#34d399" />
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff' }}>
                       Step 2: Monthly Operational Inflow
                     </div>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 13.5, color: '#94a3b8' }}>
                       Entered with each monthly billing cycle in <strong style={{ color: '#34d399' }}>Monthly Bills</strong>
                     </div>
                   </div>
                 </div>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12.5,
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -665,11 +665,11 @@ export default function ThermalTariffArchitectureDoc3D({
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{row.param}</div>
-                      <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{row.source}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 600, color: '#f1f5f9' }}>{row.param}</div>
+                      <div style={{ fontSize: 13, color: '#94a3b8' }}>{row.source}</div>
                     </div>
                     <span style={{
-                      fontSize: 12.5,
+                      fontSize: 14,
                       fontWeight: 700,
                       fontFamily: 'monospace',
                       color: '#34d399',
@@ -700,16 +700,16 @@ export default function ThermalTariffArchitectureDoc3D({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sliders size={18} color="#38bdf8" />
               <div>
-                <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff' }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff' }}>
                   Interactive Thermal Tariff &amp; Recovery Simulator
                 </div>
-                <div style={{ fontSize: 12.5, color: '#94a3b8' }}>
+                <div style={{ fontSize: 14, color: '#94a3b8' }}>
                   Adjust operating parameters below to see how PAFM and landed fuel price govern two-part bill outputs in real time
                 </div>
               </div>
             </div>
             <span style={{
-              fontSize: 11,
+              fontSize: 12.5,
               fontWeight: 700,
               padding: '2px 8px',
               borderRadius: 999,
@@ -730,9 +730,9 @@ export default function ThermalTariffArchitectureDoc3D({
             {/* Control 1: PAFM */}
             <div style={{ background: '#020617', padding: '14px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#94a3b8' }}>Achieved PAFM (%):</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8' }}>Achieved PAFM (%):</span>
                 <span style={{
-                  fontSize: 14,
+                  fontSize: 15.5,
                   fontWeight: 700,
                   fontFamily: 'monospace',
                   color: isTargetAchieved ? '#4ade80' : '#f87171',
@@ -749,7 +749,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 onChange={(e) => setSimPafm(Number(e.target.value))}
                 style={{ width: '100%', cursor: 'pointer', accentColor: '#3b82f6' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--slate-500)', marginTop: 4 }}>
                 <span>65% (Penalty)</span>
                 <span>85% (Normative)</span>
                 <span>100% (Max Incentive)</span>
@@ -759,8 +759,8 @@ export default function ThermalTariffArchitectureDoc3D({
             {/* Control 2: Landed Coal Price */}
             <div style={{ background: '#020617', padding: '14px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#94a3b8' }}>Landed Coal Price:</span>
-                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'monospace', color: '#fbbf24' }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8' }}>Landed Coal Price:</span>
+                <span style={{ fontSize: 15.5, fontWeight: 700, fontFamily: 'monospace', color: '#fbbf24' }}>
                   ₹{fmtNumber(simCoalCost)} / Tonne
                 </span>
               </div>
@@ -773,7 +773,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 onChange={(e) => setSimCoalCost(Number(e.target.value))}
                 style={{ width: '100%', cursor: 'pointer', accentColor: '#f59e0b' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--slate-500)', marginTop: 4 }}>
                 <span>₹2,500/T (Low Cost)</span>
                 <span>₹3,850/T (Base)</span>
                 <span>₹5,500/T (High Imported Blend)</span>
@@ -783,8 +783,8 @@ export default function ThermalTariffArchitectureDoc3D({
             {/* Control 3: Coal GCV */}
             <div style={{ background: '#020617', padding: '14px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#94a3b8' }}>Coal GCV (as received):</span>
-                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'monospace', color: '#38bdf8' }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8' }}>Coal GCV (as received):</span>
+                <span style={{ fontSize: 15.5, fontWeight: 700, fontFamily: 'monospace', color: '#38bdf8' }}>
                   {fmtNumber(simCoalGcv)} kCal/kg
                 </span>
               </div>
@@ -797,7 +797,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 onChange={(e) => setSimCoalGcv(Number(e.target.value))}
                 style={{ width: '100%', cursor: 'pointer', accentColor: '#0ea5e9' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--slate-500)', marginTop: 4 }}>
                 <span>2,800 kCal (Low G13)</span>
                 <span>3,450 kCal (G10 CCL)</span>
                 <span>4,800 kCal (Blended)</span>
@@ -820,11 +820,11 @@ export default function ThermalTariffArchitectureDoc3D({
               border: '1px solid rgba(59, 130, 246, 0.25)',
               padding: '12px 14px',
             }}>
-              <div style={{ fontSize: 12, color: '#93c5fd', fontWeight: 600 }}>Capacity Recovery Ratio</div>
+              <div style={{ fontSize: 13.5, color: '#93c5fd', fontWeight: 600 }}>Capacity Recovery Ratio</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace', marginTop: 4 }}>
                 {capacityRecoveryPct}%
               </div>
-              <div style={{ fontSize: 11.5, color: isTargetAchieved ? '#4ade80' : '#f87171', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: isTargetAchieved ? '#4ade80' : '#f87171', marginTop: 2 }}>
                 Fixed Charge: ₹{totalCapacityChargeCr} Cr {simIncentiveCr > 0 ? `(+₹${simIncentiveCr} Cr Inc)` : ''}
               </div>
             </div>
@@ -836,11 +836,11 @@ export default function ThermalTariffArchitectureDoc3D({
               border: '1px solid rgba(245, 158, 11, 0.25)',
               padding: '12px 14px',
             }}>
-              <div style={{ fontSize: 12, color: '#fcd34d', fontWeight: 600 }}>Energy Charge Rate (ECR)</div>
+              <div style={{ fontSize: 13.5, color: '#fcd34d', fontWeight: 600 }}>Energy Charge Rate (ECR)</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace', marginTop: 4 }}>
-                ₹{simEcr} <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>/ kWh</span>
+                ₹{simEcr} <span style={{ fontSize: 14.5, fontWeight: 600, color: '#94a3b8' }}>/ kWh</span>
               </div>
-              <div style={{ fontSize: 11.5, color: '#cbd5e1', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 2 }}>
                 Ex-Bus Scheduled Fuel Cost
               </div>
             </div>
@@ -852,11 +852,11 @@ export default function ThermalTariffArchitectureDoc3D({
               border: '1px solid rgba(16, 185, 129, 0.25)',
               padding: '12px 14px',
             }}>
-              <div style={{ fontSize: 12, color: '#6ee7b7', fontWeight: 600 }}>Total Monthly Discom Bill</div>
+              <div style={{ fontSize: 13.5, color: '#6ee7b7', fontWeight: 600 }}>Total Monthly Discom Bill</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#10b981', fontFamily: 'monospace', marginTop: 4 }}>
-                ₹{simTotalBillCr} <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>Cr</span>
+                ₹{simTotalBillCr} <span style={{ fontSize: 14.5, fontWeight: 600, color: '#94a3b8' }}>Cr</span>
               </div>
-              <div style={{ fontSize: 11.5, color: '#cbd5e1', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 2 }}>
                 Capacity (₹{totalCapacityChargeCr} Cr) + Energy (₹{simEnergyCr} Cr)
               </div>
             </div>
@@ -868,11 +868,11 @@ export default function ThermalTariffArchitectureDoc3D({
               border: '1px solid rgba(147, 51, 234, 0.25)',
               padding: '12px 14px',
             }}>
-              <div style={{ fontSize: 12, color: '#c084fc', fontWeight: 600 }}>Effective Average Tariff</div>
+              <div style={{ fontSize: 13.5, color: '#c084fc', fontWeight: 600 }}>Effective Average Tariff</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#c084fc', fontFamily: 'monospace', marginTop: 4 }}>
-                ₹{levelizedTariff} <span style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>/ kWh</span>
+                ₹{levelizedTariff} <span style={{ fontSize: 14.5, fontWeight: 600, color: '#94a3b8' }}>/ kWh</span>
               </div>
-              <div style={{ fontSize: 11.5, color: '#cbd5e1', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 2 }}>
                 Levelized at {simScheduledMu} MU generation
               </div>
             </div>

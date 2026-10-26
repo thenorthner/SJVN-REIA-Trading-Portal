@@ -47,7 +47,7 @@ function Caveat({ children }) {
       background: 'var(--warning-bg, var(--t-amber-50))',
       border: '1px solid var(--warning-border, var(--t-amber-100))',
       color: 'var(--warning-text, #92400e)',
-      borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 13,
+      borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 14.5,
     }}>
       {children}
     </div>
@@ -236,13 +236,13 @@ export default function IexIntegration() {
         title="Connectivity"
         actions={<button className="btn btn-secondary" onClick={runProbe} disabled={probing}>{probing ? 'Checking…' : 'Test connection'}</button>}
       >
-        <p style={{ marginTop: 0, fontSize: 13, color: 'var(--text-muted, #64748b)' }}>
+        <p style={{ marginTop: 0, fontSize: 14.5, color: 'var(--text-muted, #64748b)' }}>
           One round trip to the exchange's business-configuration API. This is the check to run after IEX
           confirms an IP is whitelisted — it separates a wrong URL, a bad token and a blocked IP from
           "today's report is simply empty".
         </p>
         {probe && (
-          <div style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 14.5 }}>
             <strong>{probe.reachable ? 'Reachable' : 'Not reachable'}</strong>
             {probe.base_url && <> — {probe.base_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</>}
             {probe.elapsed_ms != null && <> — {probe.elapsed_ms} ms</>}
@@ -292,7 +292,7 @@ export default function IexIntegration() {
         )}
 
         {report?.bid_areas_queried && (
-          <p style={{ fontSize: 13.5, color: 'var(--text-muted, #64748b)', marginBottom: 4 }}>
+          <p style={{ fontSize: 15, color: 'var(--text-muted, #64748b)', marginBottom: 4 }}>
             Bid areas asked: {report.bid_areas_queried.join(', ')}{' '}
             {report.bid_area_source === 'PORTFOLIO_MAPPING'
               ? '— ours, from the first two characters of our portfolio ids.'
@@ -303,7 +303,7 @@ export default function IexIntegration() {
         )}
 
         {report?.scaling && (
-          <p style={{ fontSize: 13.5, color: 'var(--text-muted, #64748b)' }}>
+          <p style={{ fontSize: 15, color: 'var(--text-muted, #64748b)' }}>
             Quantities divided by {report.scaling.qty_factor}, prices by {report.scaling.price_factor}{' '}
             ({report.scaling.source === 'ASSET_MASTER' ? 'from the Asset Master' : 'default — not read from the exchange'}).
             {report.delivery_date_source && <> Delivery date {report.delivery_date_source === 'EXCHANGE' ? 'taken from the exchange' : 'computed locally as UTC midnight'}.</>}
@@ -322,7 +322,7 @@ export default function IexIntegration() {
       </Card>
 
       <Card title="Not implemented">
-        <ul style={{ fontSize: 13, marginTop: 0, lineHeight: 1.7 }}>
+        <ul style={{ fontSize: 14.5, marginTop: 0, lineHeight: 1.7 }}>
           <li><strong>Bid submission</strong> — two-way and money-moving. It stays manual until a controlled test window; the server refuses to place live orders rather than pretending to.</li>
           <li><strong>REC/EC order entry</strong> — read-only for now. The order book, trade book and product master are live; placing and cancelling orders needs the same controlled rollout as FO bid submission.</li>
           <li><strong>REC on UAT</strong> — the production host is known (recapi.iexindia.com), but on UAT the whitelist is per host and 49.50.97.173 is not yet on the REC one, so every REC call there returns the gateway&apos;s 403 until IEX add it.</li>

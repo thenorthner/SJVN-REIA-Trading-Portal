@@ -7,6 +7,7 @@ import api from '../../api/client';
 import { PageHeader, Card, Table, Badge, Modal } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
+import { showAlert, askText } from '../../lib/dialogs.js';
 
 export default function TradingClientProfile() {
   const { id: paramId } = useParams();
@@ -31,7 +32,7 @@ export default function TradingClientProfile() {
       setClient(res);
       setLoading(false);
     }).catch(err => {
-      alert("Failed to load profile");
+      showAlert("Failed to load profile");
       setLoading(false);
     });
   };
@@ -39,14 +40,14 @@ export default function TradingClientProfile() {
   const canWrite = ROLE_GROUPS.TRADING_WRITE.includes(user?.role);
 
   // Pre-payment moves only through this call, so each one carries who and why.
-  const handlePrepayment = () => {
-    const amount = Number(window.prompt('Amount received in ₹ (use a minus sign to take money off):'));
+  const handlePrepayment = async () => {
+    const amount = Number((await askText('Amount received in ₹ (use a minus sign to take money off):')));
     if (!amount) return;
-    const reason = window.prompt('Receipt / UTR reference or reason:');
+    const reason = (await askText('Receipt / UTR reference or reason:'));
     if (!reason || !reason.trim()) return;
     api.tradingClients.adjustPrepayment(id, amount, reason.trim())
       .then(setClient)
-      .catch((err) => alert(err.response?.data?.error || 'Could not update the pre-payment balance'));
+      .catch((err) => showAlert(err.response?.data?.error || 'Could not update the pre-payment balance'));
   };
 
   const handleSuspend = () => {
@@ -54,7 +55,7 @@ export default function TradingClientProfile() {
       setShowSuspendModal(false);
       fetchProfile();
     }).catch(err => {
-      alert("Failed to suspend client");
+      showAlert("Failed to suspend client");
     });
   };
 
@@ -93,7 +94,7 @@ export default function TradingClientProfile() {
           <div>
             <strong>Pre-payment Balance:</strong> ₹{client.pre_payment_balance.toLocaleString('en-IN')}
             {canWrite && !isClient && (
-              <button type="button" className="btn btn-outline" style={{ marginLeft: 10, padding: '2px 10px', fontSize: 12 }} onClick={handlePrepayment}>
+              <button type="button" className="btn btn-outline" style={{ marginLeft: 10, padding: '2px 10px', fontSize: 13.5 }} onClick={handlePrepayment}>
                 Record receipt
               </button>
             )}

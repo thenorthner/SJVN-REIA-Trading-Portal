@@ -13,7 +13,8 @@ const yes = (v) => <span style={{ fontWeight: 600, color: v ? 'var(--on-green-2)
 
 export default function BillingReadiness() {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  // Generating ready bills, running statements and raising LPS bills are the maker's (Phase B.2).
+  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
   const [period, setPeriod] = useState('');
   const [board, setBoard] = useState(null);
   const [close, setClose] = useState(null);
@@ -74,16 +75,16 @@ export default function BillingReadiness() {
     { key: 'counterparty', header: 'Counterparty', render: (r) => r.counterparty || '—' },
     { key: 'energy', header: 'Energy locked', render: (r) => (
       <span>{yes(r.energy.locked)} {r.energy.energy_mwh != null ? `${fmtNumber(r.energy.energy_mwh)} MWh` : ''}
-        {r.energy.detail && r.energy.detail.filter((d) => !d.locked).map((d) => <div key={d.ppa_contract_no} style={{ fontSize: 12.5, color: 'var(--amber-strong)' }}>{d.ppa_contract_no} not locked</div>)}
+        {r.energy.detail && r.energy.detail.filter((d) => !d.locked).map((d) => <div key={d.ppa_contract_no} style={{ fontSize: 14, color: 'var(--amber-strong)' }}>{d.ppa_contract_no} not locked</div>)}
       </span>
     ) },
     { key: 'ppa_bill_in', header: 'PPA bill in', render: (r) => (
-      <span>{yes(r.ppa_bill_in)} {r.ppa_bills.filter((p) => p.invoice_no).map((p) => <div key={p.ppa_contract_no} style={{ fontSize: 12.5 }}>{p.invoice_no}</div>)}</span>
+      <span>{yes(r.ppa_bill_in)} {r.ppa_bills.filter((p) => p.invoice_no).map((p) => <div key={p.ppa_contract_no} style={{ fontSize: 14 }}>{p.invoice_no}</div>)}</span>
     ) },
     { key: 'billed', header: 'Billed', render: (r) => (r.billed ? <span>{r.billed.invoice_no} <Badge status={r.billed.status} /></span> : '—') },
     { key: 'state', header: 'Standing', render: (r) => (
       <span><Badge type={TONE[r.state]}>{STATE[r.state] || r.state}</Badge>
-        {(r.blocker || r.note) && <div style={{ fontSize: 12.5, color: 'var(--text-light)', marginTop: 2 }}>{r.blocker || r.note}</div>}
+        {(r.blocker || r.note) && <div style={{ fontSize: 14, color: 'var(--text-light)', marginTop: 2 }}>{r.blocker || r.note}</div>}
       </span>
     ) },
   ];
@@ -118,7 +119,7 @@ export default function BillingReadiness() {
           <Table
             columns={[
               { key: 'contract_no', header: 'Contract', render: (r) => <span>{r.contract_no} <span style={{ color: 'var(--text-light)' }}>({r.contract_type})</span></span> },
-              { key: 'ready', header: 'Month closed', render: (r) => (r.ready ? yes(true) : <span style={{ color: 'var(--amber-strong)', fontSize: 13 }}>✗ {r.missing.join('; ')}</span>) },
+              { key: 'ready', header: 'Month closed', render: (r) => (r.ready ? yes(true) : <span style={{ color: 'var(--amber-strong)', fontSize: 14.5 }}>✗ {r.missing.join('; ')}</span>) },
               { key: 'statement', header: 'Statement', render: (r) => (r.statement ? <span>{r.statement.recon_no} <Badge status={r.statement.status} /></span> : '—') },
               { key: 'run', header: '', render: (r) => (canWrite && r.ready && !r.statement ? (
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => act(async () => { const x = await api.reconciliation.run({ contract_id: r.contract_id, period: close.period, scope: 'REIA_CONTRACT' }); return { message: `${x.recon_no} raised.` }; }, 'Reconciliation run')}>Run</button>
@@ -134,8 +135,8 @@ export default function BillingReadiness() {
           actions={canWrite && lps.total > 0 ? <button type="button" className="btn btn-primary btn-sm" onClick={() => act(async () => { const r = await api.invoices.raiseLpsBills({ period_month: lps.period }); return { message: 'Raised as drafts for approval.', items: r.raised.map((x) => `${x.contract_no}: ${x.invoice_no} — ${fmtCurrency(x.total)}`) }; }, 'LPS bills raised')}>Raise LPS bills</button> : null}>
           <Table
             columns={[
-              { key: 'contract_no', header: 'PSA', render: (r) => <>{r.contract_no}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.buyer}</div></> },
-              { key: 'lines', header: 'Overdue bills', render: (r) => r.lines.map((l) => <div key={l.invoice_id} style={{ fontSize: 13 }}>{l.invoice_no}: {l.days_overdue} days — {fmtCurrency(l.amount)}</div>) },
+              { key: 'contract_no', header: 'PSA', render: (r) => <>{r.contract_no}<div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>{r.buyer}</div></> },
+              { key: 'lines', header: 'Overdue bills', render: (r) => r.lines.map((l) => <div key={l.invoice_id} style={{ fontSize: 14.5 }}>{l.invoice_no}: {l.days_overdue} days — {fmtCurrency(l.amount)}</div>) },
               { key: 'total', header: 'Surcharge', render: (r) => (r.existing ? <span>{r.existing.invoice_no} <Badge status={r.existing.status} /></span> : fmtCurrency(r.total)) },
             ]}
             rows={lps.rows}
@@ -150,7 +151,7 @@ export default function BillingReadiness() {
             <div key={i.key} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 600, color: i.clear ? 'var(--on-green-2)' : 'var(--amber-strong)' }}>{i.clear ? '✓' : '✗'} {i.label}{!i.clear ? ` — ${i.count}${i.amount != null ? `, ${fmtCurrency(i.amount)}` : ''}` : ''}</div>
               {!i.clear && (
-                <div style={{ fontSize: 13, color: 'var(--text-light)' }}>
+                <div style={{ fontSize: 14.5, color: 'var(--text-light)' }}>
                   {i.rows.slice(0, 6).map((r) => r.invoice_no || r.contract_no || r.dispute_no || r.receipt_no).filter(Boolean).join(', ')}{i.count > 6 ? ` and ${i.count - 6} more` : ''}{i.hint ? ` · ${i.hint}` : ''}
                 </div>
               )}

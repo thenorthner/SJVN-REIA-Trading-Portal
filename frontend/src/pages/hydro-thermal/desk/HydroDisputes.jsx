@@ -205,7 +205,7 @@ export default function HydroDisputes({ vertical = 'HYDRO' }) {
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
                 {stats.by_reason.map(({ code, count }) => {
                   const label = reasons.find((r) => r.value === code)?.label || code.replaceAll('_', ' ');
-                  return <div key={code} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13.5 }}><strong>{count}</strong> {label}</div>;
+                  return <div key={code} style={{ padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 15 }}><strong>{count}</strong> {label}</div>;
                 })}
               </div>
             </Card>
@@ -304,21 +304,21 @@ export default function HydroDisputes({ vertical = 'HYDRO' }) {
             />
 
             <h4 style={{ margin: '18px 0 8px' }}>Communication thread</h4>
-            {comments.length === 0 && <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>No comments yet.</p>}
+            {comments.length === 0 && <p style={{ fontSize: 15, color: 'var(--text-muted)' }}>No comments yet.</p>}
             {comments.map((c) => (
               <div key={c.id} style={{ padding: '8px 12px', marginBottom: 6, background: c.is_internal ? 'var(--amber-50, var(--t-amber-50))' : 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 4 }}>
                   <span><strong>{c.author_name}</strong></span>
                   <span>{fmtDateTime(c.created_at)}{c.is_internal ? ' · Internal' : ''}</span>
                 </div>
-                <div style={{ fontSize: 14 }}>{c.body}</div>
+                <div style={{ fontSize: 15.5 }}>{c.body}</div>
               </div>
             ))}
             {canWrite && (
               <div style={{ marginTop: 10 }}>
                 <textarea rows={2} value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Add a comment…" style={{ width: '100%', resize: 'vertical' }} />
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-                  <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <label style={{ fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                     <input type="checkbox" checked={internalComment} onChange={(e) => setInternalComment(e.target.checked)} />
                     Internal only
                   </label>
@@ -355,7 +355,7 @@ export default function HydroDisputes({ vertical = 'HYDRO' }) {
             <Field label="Remarks (sent to the beneficiary)">
               <textarea rows={3} value={move.remarks} onChange={(e) => setMove({ ...move, remarks: e.target.value })} />
             </Field>
-            {move.to === 'RESOLVED_ACCEPTED' && <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>A draft credit note for the accepted amount is raised against the bill.</p>}
+            {move.to === 'RESOLVED_ACCEPTED' && <p style={{ fontSize: 15, color: 'var(--text-muted)' }}>A draft credit note for the accepted amount is raised against the bill.</p>}
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setMove(null)}>Cancel</button>
               <button type="submit" className="btn btn-primary">{STEP_LABEL[move.to]}</button>

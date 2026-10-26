@@ -92,15 +92,15 @@ export default function DailyObligationReport() {
       <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-trading-date">Trading Date:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-trading-date">Trading Date:</label>
             <input id="dailyobligationreport-trading-date" type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-portfolio-tag">Portfolio Tag:</label>
+            <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-portfolio-tag">Portfolio Tag:</label>
             <PortfolioSelect id="dailyobligationreport-portfolio-tag" scope="global" allLabel="-- Select portfolio --" />
           </div>
           <div style={{ marginLeft: 'auto', borderLeft: '1px solid var(--slate-100)', paddingLeft: 20 }}>
-            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</span>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</span>
             <div role="group" aria-label="Matrix Layout" style={{ display: 'flex', gap: 5 }}>
               <button 
                 className={`btn btn-sm ${layout === 'SPLIT' ? 'btn-primary' : 'btn-outline'}`}
@@ -143,7 +143,7 @@ export default function DailyObligationReport() {
                portfolio's clearance record. Check the client's clearance on the bidding screen.
             </div>
 
-            <div style={{ display: 'flex', gap: 15, marginBottom: 10, fontSize: 13.5 }}>
+            <div style={{ display: 'flex', gap: 15, marginBottom: 10, fontSize: 15 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: 'var(--t-green-50)', border: '1px solid var(--t-green-100)'}}></div> Cleared & Generating</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: 'var(--slate-50)', border: '1px solid var(--slate-100)'}}></div> Zero Cleared (Price Recorded)</span>
             </div>
@@ -151,14 +151,14 @@ export default function DailyObligationReport() {
             {layout === 'SPLIT' ? (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
                 {/* Left Column 1-48 */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                   <TableHeader />
                   <tbody>
                     {data.blocks.slice(0, 48).map(b => <TableRow key={b.block_no} block={b} />)}
                   </tbody>
                 </table>
                 {/* Right Column 49-96 */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                   <TableHeader />
                   <tbody>
                     {data.blocks.slice(48, 96).map(b => <TableRow key={b.block_no} block={b} />)}
@@ -166,7 +166,7 @@ export default function DailyObligationReport() {
                 </table>
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14.5 }}>
                 <TableHeader />
                 <tbody>
                   {data.blocks.map(b => <TableRow key={b.block_no} block={b} />)}
@@ -193,7 +193,7 @@ export default function DailyObligationReport() {
                 PORTAL" — every figure invented by the API stub. Those charges are
                 raised on the exchange invoice, which is where they can be read
                 against something real. */}
-            <p style={{ marginTop: 24, fontSize: 13.5, color: 'var(--slate-600)' }}>
+            <p style={{ marginTop: 24, fontSize: 15, color: 'var(--slate-600)' }}>
               This report is the cleared position from the bid book. The charges that turn it into a payout —
               NLDC, CTU, STU, SLDC, exchange fees and tax — are raised on the exchange invoice for the period.
             </p>

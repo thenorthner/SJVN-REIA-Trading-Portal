@@ -31,7 +31,7 @@ const CustomTooltip = ({ active, payload, label }) => {
           {payload.map((entry, index) => {
             const percentage = ((entry.value / total) * 100).toFixed(1);
             return (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, fontSize: 13 }}>
+              <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, fontSize: 14.5 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {/* One style prop: a second one replaced the first, and the
                       legend dot lost its size and shape. */}
@@ -50,7 +50,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             );
           })}
         </div>
-        <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+        <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>
           <span>Total Capacity</span>
           <span>{total.toLocaleString()} MW</span>
         </div>
@@ -73,7 +73,7 @@ const NationalCapacityChart = () => {
         <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
           Category Wise Installed Capacity (All India) (MW)
         </h3>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+        <p style={{ fontSize: 14.5, color: 'var(--text-muted)', marginTop: 4 }}>
           National grid generation asset tracking (Thermal/Hydro/Nuclear base load vs RES)
         </p>
       </div>
@@ -90,7 +90,7 @@ const NationalCapacityChart = () => {
               dataKey="month" 
               axisLine={{ stroke: '#E5E7EB' }}
               tickLine={false}
-              tick={{ fill: '#6B7280', fontSize: 13, dy: 10 }}
+              tick={{ fill: '#6B7280', fontSize: 14.5, dy: 10 }}
             />
             
             <YAxis 
@@ -100,7 +100,7 @@ const NationalCapacityChart = () => {
               axisLine={false}
               tickLine={false}
               tickFormatter={formatYAxisLeft}
-              tick={{ fill: '#9CA3AF', fontSize: 13 }}
+              tick={{ fill: '#9CA3AF', fontSize: 14.5 }}
               width={60}
             />
             
@@ -111,7 +111,7 @@ const NationalCapacityChart = () => {
               tickCount={5}
               axisLine={false}
               tickLine={false}
-              tick={{ fill: '#9CA3AF', fontSize: 13 }}
+              tick={{ fill: '#9CA3AF', fontSize: 14.5 }}
               width={60}
               label={{ value: 'Nuclear', angle: 90, position: 'insideRight', fill: '#9CA3AF', dy: -20 }}
             />
