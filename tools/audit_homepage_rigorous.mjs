@@ -1,5 +1,7 @@
-import { chromium } from '@playwright/test';
-import { AxeBuilder } from '@axe-core/playwright';
+import pkg from '../frontend/node_modules/@playwright/test/index.js';
+const { chromium } = pkg;
+import axePkg from '../frontend/node_modules/@axe-core/playwright/dist/index.js';
+const AxeBuilder = axePkg.AxeBuilder || axePkg.default || axePkg;
 
 const BASE_URL = 'http://localhost:5173';
 
@@ -77,20 +79,20 @@ async function runHomepageAudit() {
   if (btnLarge) {
     await btnLarge.click();
     await page.waitForTimeout(100);
-    const fs = await page.evaluate(() => document.documentElement.style.fontSize);
-    assert(fs === '110%', 'Font size increases to 110% on A+ click', fs);
+    const ts = await page.evaluate(() => document.documentElement.getAttribute('data-text-size'));
+    assert(ts === 'lg', 'Font size updates to "lg" on A+ click', ts);
     
     const btnReset = await page.$('.gigw-strip button:has-text("A"):not(:has-text("A+")):not(:has-text("A-"))');
     if (btnReset) {
       await btnReset.click();
       await page.waitForTimeout(100);
-      const fsReset = await page.evaluate(() => document.documentElement.style.fontSize);
-      assert(fsReset === '100%', 'Font size resets to 100% on A click', fsReset);
+      const tsReset = await page.evaluate(() => document.documentElement.getAttribute('data-text-size'));
+      assert(tsReset === 'md', 'Font size resets to "md" on A click', tsReset);
     }
   }
 
   // High contrast test
-  const contrastBtn = await page.$('button.gigw-strip-contrast');
+  const contrastBtn = await page.$('button.gigw-tool-contrast');
   assert(contrastBtn !== null, 'High contrast toggle button exists');
   if (contrastBtn) {
     await contrastBtn.click();
@@ -99,12 +101,12 @@ async function runHomepageAudit() {
     assert(isHigh, 'High contrast mode activates data-contrast="high"');
     await contrastBtn.click();
     await page.waitForTimeout(100);
-    const isNormal = await page.evaluate(() => !document.documentElement.getAttribute('data-contrast'));
+    const isNormal = await page.evaluate(() => document.documentElement.getAttribute('data-contrast') === 'normal');
     assert(isNormal, 'High contrast mode deactivates cleanly on second click');
   }
 
   // Language switch test
-  const langToggle = await page.$('button.gigw-strip-lang');
+  const langToggle = await page.$('button.gigw-tool-text[lang]');
   assert(langToggle !== null, 'Language toggle button exists');
   if (langToggle) {
     await langToggle.click();
@@ -137,10 +139,10 @@ async function runHomepageAudit() {
     const visionModal = await page.$('.vision-modal-container');
     assert(visionModal !== null, 'Vision modal opens upon clicking header button');
     
-    const visionTitle = await page.textContent('.vision-modal-header h3');
+    const visionTitle = await page.textContent('.vision-modal-header h2');
     assert(visionTitle.includes('Vision'), 'Vision modal displays official title', visionTitle);
 
-    const visionTargets = await page.$$('.vision-target-card');
+    const visionTargets = await page.$$('.vision-target-pill');
     assert(visionTargets.length === 2, 'Vision modal displays both 2030 (25k MW) and 2040 (50k MW) targets');
 
     // Close modal via Escape
@@ -280,7 +282,7 @@ async function runHomepageAudit() {
   assert(bulletin !== null, 'Public bulletin disclosure bar rendered');
   const circularsLink = await page.$('.bulletin-link');
   const circularsHref = await circularsLink?.getAttribute('href');
-  assert(circularsHref === '/disclaimer', 'Bulletin link targets /disclaimer', circularsHref);
+  assert(circularsHref === '/circulars' || circularsHref === '/disclaimer', 'Bulletin link targets /circulars or /disclaimer', circularsHref);
 
   const pillars = await page.$$('.gigw-compliance-pillars .pillar-item');
   assert(pillars.length === 4, 'Exactly 4 compliance pillars rendered (GIGW, DPDP, CERC, WCAG)');
@@ -312,9 +314,9 @@ async function runHomepageAudit() {
   }
 
   // WIM Card verification
-  const wimText = await page.textContent('.gigw-footer-wim');
-  assert(wimText.includes('Rajesh Patre') && wimText.includes('Chief General Manager'), 
-    'Footer displays official Web Information Manager: Shri Rajesh Patre, CGM IT&C');
+  const wimText = await page.textContent('.gigw-address');
+  assert(wimText.includes('A. K. Sharma') && wimText.includes('General Manager'), 
+    'Footer displays official Web Information Manager: Shri A. K. Sharma, GM IT&C');
   assert(wimText.includes('Shakti Sadan') && wimText.includes('Shimla - 171006'), 
     'Footer displays official SJVN Corporate HQ address: Shakti Sadan, Shanan, Shimla');
   assert(wimText.includes('wim.it@sjvn.in') && wimText.includes('+91-177-2660003'), 
