@@ -7,8 +7,7 @@ import GovStrip from '../gigw/GovStrip.jsx';
 import GigwFooter from '../gigw/GigwFooter.jsx';
 import { isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { 
-  Mail, Lock, ArrowRight, ShieldCheck, Zap, Briefcase, 
-  Users, User, ChevronRight, Leaf, BarChart3, Handshake, 
+  Mail, Lock, ArrowRight, ShieldCheck, ChevronRight, Leaf, BarChart3, Handshake, 
   Globe2, CheckCircle2, Eye, EyeOff
 } from 'lucide-react';
 import SjvnBotMascot from '../components/SjvnBotMascot.jsx';
@@ -34,33 +33,6 @@ export function landingFor(user, from) {
   return target;
 }
 
-const DEMO_ACCOUNTS = [
-  // REIA Core Workflow (Priority 1 for Sir's Walkthrough)
-  // Target #2: maker prepares, checker scrutinises, approver (HOD) sanctions.
-  { label: 'REIA Maker', roleDesc: 'Prepares bills & data', email: 'reia@sjvn.in', icon: Zap, cat: 'REIA' },
-  { label: 'REIA Checker', roleDesc: 'Scrutiny · Level 1', email: 'reia.admin@sjvn.in', icon: ShieldCheck, cat: 'REIA' },
-  { label: 'REIA Approver', roleDesc: 'HOD · Level 3', email: 'reia.approver@sjvn.in', icon: ShieldCheck, cat: 'REIA' },
-  { label: 'Finance', roleDesc: 'Settlement & JVs', email: 'finance@sjvn.in', icon: Briefcase, cat: 'REIA' },
-  { label: 'Management', roleDesc: 'L3 Approver', email: 'management@sjvn.in', icon: Users, cat: 'REIA' },
-  { label: 'Seller (Sunrise)', roleDesc: 'RE Generator', email: 'seller@sunrise-solar.in', icon: User, cat: 'REIA' },
-  { label: 'Buyer (PSPCL)', roleDesc: 'State Discom', email: 'buyer@discom.gov.in', icon: User, cat: 'REIA' },
-  { label: 'Buyer Maker (L1)', roleDesc: 'Discom Maker', email: 'buyer.maker@discom.gov.in', icon: User, cat: 'REIA' },
-  { label: 'Buyer Checker (L2)', roleDesc: 'Discom Checker', email: 'buyer.checker@discom.gov.in', icon: User, cat: 'REIA' },
-  { label: 'SJVN Admin', roleDesc: 'Governance · read-only desks', email: 'admin@sjvn.in', icon: ShieldCheck, cat: 'REIA' },
-
-  // Trading Hub
-  { label: 'Trading Ops', roleDesc: 'IEX/PXIL Trader', email: 'trading@sjvn.in', icon: Briefcase, cat: 'TRADING' },
-  { label: 'Trading Client', roleDesc: 'OA Client', email: 'client@abctrading.in', icon: User, cat: 'TRADING' },
-
-  // Hydro Vertical
-  { label: 'Hydro Admin', roleDesc: 'Hydro Vertical', email: 'commercial@sjvn.in', icon: ShieldCheck, cat: 'HYDRO' },
-  { label: 'Hydro Approver', roleDesc: 'Hydro HOD', email: 'hydro.hod@sjvn.in', icon: ShieldCheck, cat: 'HYDRO' },
-
-  // Thermal Vertical
-  { label: 'Thermal Admin', roleDesc: 'Thermal Vertical', email: 'thermal@sjvn.in', icon: ShieldCheck, cat: 'THERMAL' },
-  { label: 'Thermal Desk', roleDesc: 'Thermal Desk', email: 'thermal.desk@sjvn.in', icon: ShieldCheck, cat: 'THERMAL' },
-];
-
 export default function Login() {
   const { login } = useAuth();
   const { isDark } = useTheme();
@@ -69,21 +41,14 @@ export default function Login() {
 
   const searchParams = new URLSearchParams(location.search);
   const initialDesk = searchParams.get('desk')?.toUpperCase();
-  const validDesks = ['REIA', 'TRADING', 'HYDRO', 'THERMAL', 'ALL'];
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loggingInRole, setLoggingInRole] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [inputFocus, setInputFocus] = useState(null); // 'email' | 'password' | null
-  const [demoCategory, setDemoCategory] = useState(validDesks.includes(initialDesk) ? initialDesk : 'REIA');
-
-  const filteredDemoAccounts = demoCategory === 'ALL'
-    ? DEMO_ACCOUNTS
-    : DEMO_ACCOUNTS.filter((a) => a.cat === demoCategory);
 
   const from = location.state?.from || null;
 
@@ -99,27 +64,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleInstantDemoLogin(demoEmail, label) {
-    setEmail(demoEmail);
-    setPassword('password123');
-    setLoggingInRole(label);
-    setError('');
-    setLoading(true);
-    try {
-      const signedIn = await login(demoEmail, 'password123');
-      navigate(landingFor(signedIn, from), { replace: true });
-    } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
-      setLoading(false);
-      setLoggingInRole(null);
-    }
-  }
-
-  function fillDemo(demoEmail) {
-    setEmail(demoEmail);
-    setPassword('password123');
   }
 
   return (
@@ -422,56 +366,6 @@ export default function Login() {
                 {loading ? 'Authenticating...' : <>Sign In <ArrowRight size={16} /></>}
               </button>
             </form>
-
-            {/* Discreet Demo Persona Quick Fill Selector */}
-            <div style={{ marginTop: 22, paddingTop: 16, borderTop: isDark ? '1px solid #1e293b' : '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <label htmlFor="quick-demo-select" style={{ fontSize: 13.5, fontWeight: 600, color: isDark ? '#94a3b8' : '#64748b' }}>
-                  ⚡ Quick Demo Login:
-                </label>
-                <select
-                  id="quick-demo-select"
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleInstantDemoLogin(e.target.value, e.target.options[e.target.selectedIndex].text);
-                    }
-                  }}
-                  defaultValue=""
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: 6,
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    background: isDark ? '#0f172a' : '#f8fafc',
-                    border: isDark ? '1px solid #334155' : '1px solid #cbd5e1',
-                    color: isDark ? '#f1f5f9' : '#0f172a',
-                    cursor: 'pointer',
-                    outline: 'none',
-                    maxWidth: 240
-                  }}
-                >
-                  <option value="" disabled>Select test persona...</option>
-                  <optgroup label="REIA Commercial Core">
-                    <option value="reia@sjvn.in">REIA Maker</option>
-                    <option value="reia.admin@sjvn.in">REIA Checker</option>
-                    <option value="reia.approver@sjvn.in">REIA Approver (HOD)</option>
-                    <option value="finance@sjvn.in">Finance Desk (Settlement)</option>
-                    <option value="seller@sunrise-solar.in">Seller (Sunrise Solar)</option>
-                    <option value="buyer@discom.gov.in">Buyer (State Discom)</option>
-                  </optgroup>
-                  <optgroup label="Power Trading Hub">
-                    <option value="trading@sjvn.in">Trading Ops (Trader)</option>
-                    <option value="client@abctrading.in">Trading Client (Open Access)</option>
-                  </optgroup>
-                  <optgroup label="Hydro & Thermal Desks">
-                    <option value="commercial@sjvn.in">Hydro Commercial Admin</option>
-                    <option value="hydro.hod@sjvn.in">Hydro HOD Approver</option>
-                    <option value="thermal@sjvn.in">Thermal Station Admin</option>
-                    <option value="admin@sjvn.in">Platform Super Admin</option>
-                  </optgroup>
-                </select>
-              </div>
-            </div>
           </div>
         </div>
 
