@@ -52,7 +52,7 @@ const render = async (props = {}) => {
     root.render(<ContractBulkLoad open onClose={() => {}} {...props} />);
   });
 };
-const button = (label) => [...host.querySelectorAll('button')].find((b) => b.textContent.includes(label));
+const button = (label) => [...host.querySelectorAll('button')].find((b) => b.textContent.toLowerCase().includes(label.toLowerCase()));
 const paste = async (text) => {
   const el = host.querySelector('textarea');
   await act(async () => {
@@ -67,25 +67,25 @@ describe('loading contracts from a spreadsheet', () => {
     await render();
     expect(host.textContent).toMatch(/Nothing to load yet/);
     expect(button('Check the sheet').disabled).toBe(true);
-    expect(button('Load').disabled).toBe(true);
+    expect(button('Load Contract').disabled).toBe(true);
   });
 
   it('counts what it read, checks without writing, then loads', async () => {
     await render();
     await paste(SHEET);
-    expect(host.textContent).toMatch(/2 rows read from the sheet/);
+    expect(host.textContent).toMatch(/2 rows ready to validate/);
 
     await click('Check the sheet');
     expect(calls.list).toEqual([{ rows: expect.any(Array), dryRun: true }]);
-    expect(host.textContent).toMatch(/Every row is loadable. Nothing has been written yet/);
-    expect(host.textContent).toMatch(/What would load/);
+    expect(host.textContent).toMatch(/Every row is valid and verified. Nothing has been written yet/);
+    expect(host.textContent).toMatch(/Validation Preview \(2 Rows\)/);
     expect(host.querySelectorAll('.report-table tbody tr')).toHaveLength(2);
     expect(host.textContent).toMatch(/Test Solar Ltd/);
 
     calls.answer = { rows_received: 2, successful: 2, failed: 0, errors: [] };
     await click('Load 2 contracts');
     expect(calls.list[1].dryRun).toBe(false);
-    expect(host.textContent).toMatch(/Loaded 2 of 2 as drafts/);
+    expect(host.textContent).toMatch(/Loaded 2 of 2 contracts as drafts/);
   });
 
   it('refuses to load until the sheet checks out, and shows why by line', async () => {
@@ -97,9 +97,9 @@ describe('loading contracts from a spreadsheet', () => {
     await render();
     await paste(SHEET);
     await click('Check the sheet');
-    expect(host.textContent).toMatch(/Rows that cannot load/);
+    expect(host.textContent).toMatch(/Rows That Failed Validation/);
     expect(host.textContent).toMatch(/seller SELL-1 not found/);
-    expect(button('Load').disabled, 'a sheet with a bad row could be loaded anyway').toBe(true);
+    expect(button('Load Contract').disabled, 'a sheet with a bad row could be loaded anyway').toBe(true);
   });
 
   it('reads the sheet itself before asking the server, and names columns it ignores', async () => {
@@ -116,11 +116,11 @@ describe('loading contracts from a spreadsheet', () => {
     await render();
     await paste(SHEET);
     await click('Check the sheet');
-    expect(host.textContent).toMatch(/Every row is loadable/);
+    expect(host.textContent).toMatch(/Every row is valid/);
     await paste(`${SHEET}\nPPA/C,PPA,SOLAR,SELL-1,25,3.1,2026-04-01,2051-03-31`);
-    expect(host.textContent).not.toMatch(/Every row is loadable/);
-    expect(host.textContent).toMatch(/3 rows read from the sheet/);
-    expect(button('Load').disabled).toBe(true);
+    expect(host.textContent).not.toMatch(/Every row is valid/);
+    expect(host.textContent).toMatch(/3 rows ready to validate/);
+    expect(button('Load Contract').disabled).toBe(true);
   });
 
   it('tells the page to refresh only when something actually loaded', async () => {
@@ -131,6 +131,6 @@ describe('loading contracts from a spreadsheet', () => {
     calls.answer = { rows_received: 2, successful: 0, failed: 2, errors: [{ row: 1, error: 'x' }, { row: 2, error: 'y' }] };
     await click('Load 2 contracts');
     expect(onLoaded).not.toHaveBeenCalled();
-    expect(host.textContent).toMatch(/Loaded 0 of 2 as drafts; 2 refused/);
+    expect(host.textContent).toMatch(/Loaded 0 of 2 contracts as drafts; 2 refused/);
   });
 });

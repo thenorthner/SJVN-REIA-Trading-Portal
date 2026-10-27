@@ -395,7 +395,7 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
       {checked && checked.failed === 0 && checked.would_load > 0 && (
         <div className="alert alert-success" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }} role="status">
           <CheckCircle2 size={16} />
-          <span>Every row is valid and verified. Ready to commit into database.</span>
+          <span>Every row is valid and verified. Nothing has been written yet; Load saves them as drafts.</span>
         </div>
       )}
 
