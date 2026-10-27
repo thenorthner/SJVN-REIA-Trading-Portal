@@ -18,16 +18,17 @@ import { showAlert } from '../../lib/dialogs.js';
 // hydro or thermal station's beneficiaries. Mirrors ENTITY_WRITE on the server,
 // which is what actually decides. A counterparty's own login edits its profile
 // through the API, not on this screen.
-const CAN_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+const ADMINS = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+const CAN_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...ADMINS])];
 // Phase B.2: on the REIA desk the maker onboards, edits and records a clearance's
 // details; the checker approves the company, verifies its bank account and
 // marks a clearance verified, rejected or not applicable. The station desks have
 // no split yet, and the administrators keep onboarding (governance).
 const STATIONS = [...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE];
-const CAN_MAKE = [...new Set([...ROLE_GROUPS.REIA_MAKE, ...STATIONS])];
-const CAN_APPROVE = [...new Set([...ROLE_GROUPS.REIA_CHECK, ...STATIONS])];
+const CAN_MAKE = [...new Set([...ROLE_GROUPS.REIA_MAKE, ...STATIONS, ...ADMINS])];
+const CAN_APPROVE = [...new Set([...ROLE_GROUPS.REIA_CHECK, ...STATIONS, ...ADMINS])];
 const CAN_VERIFY = CAN_APPROVE;
-const CAN_RECORD = [...CAN_MAKE, 'SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+const CAN_RECORD = CAN_MAKE;
 const DECIDING = ['VERIFIED', 'REJECTED', 'NOT_APPLICABLE'];
 const CAN_DIRECT_ADMIT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 // Barring a counterparty is an administrator's decision.
