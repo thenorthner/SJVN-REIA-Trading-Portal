@@ -50,7 +50,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 const render = async (props = {}) => {
   await act(async () => { root.render(<SellerInvoiceUpload open onClose={() => {}} {...props} />); });
 };
-const button = (label) => [...host.querySelectorAll('button')].find((b) => b.textContent.includes(label));
+const button = (label) => [...host.querySelectorAll('button')].find((b) => b.textContent.trim().toLowerCase().startsWith(label.toLowerCase()));
 const paste = async (text) => {
   const el = host.querySelector('textarea');
   await act(async () => {
@@ -64,7 +64,7 @@ describe('raising seller invoices from a sheet', () => {
   it('reads the sheet, checks it without raising, then raises', async () => {
     await render();
     await paste(SHEET);
-    expect(host.textContent).toMatch(/2 bills read from the sheet/);
+    expect(host.textContent).toMatch(/2 bills ready to validate/);
 
     await click('Check the sheet');
     expect(calls.list).toEqual([{ rows: expect.any(Array), dryRun: true }]);
