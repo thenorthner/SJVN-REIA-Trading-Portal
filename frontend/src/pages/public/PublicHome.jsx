@@ -17,6 +17,7 @@ import { useGigw } from '../../gigw/GigwContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { landingFor } from '../Login.jsx';
 import { openVisionModal } from '../../components/VisionModal.jsx';
+import { REIA_BETA_TITLE } from '../../reiaBeta.js';
 
 /**
  * SJVN Integrated Energy Commerce & REIA Public Portal
@@ -49,6 +50,23 @@ const HERO_STATS = [
     icon: FileCheck,
     colorClass: 'metric-icon-orange'
   },
+];
+
+// The REIA beta shows the REIA desk alone: no hydro station, exchange or other
+// desk is named, so these replace the portal-wide figures.
+const BETA_HERO_STATS = [
+  { value: '2,400+ MW', label: 'RE Capacity Tendered & Managed', icon: Sun, colorClass: 'metric-icon-blue' },
+  { value: '100% Digital', label: 'Back-to-Back PPA & PSA Execution', icon: FileCheck, colorClass: 'metric-icon-green' },
+  { value: '3-Level', label: 'Maker · Checker · Approver Sign-off', icon: ShieldCheck, colorClass: 'metric-icon-purple' },
+  { value: 'Beta', label: 'Pre-launch Testing by Invitation', icon: Sparkles, colorClass: 'metric-icon-orange' },
+];
+
+const BETA_NOTES = [
+  'Sign in with the login shared with you by SJVN',
+  'Work through your usual monthly cycle end to end',
+  'Data on the beta is for testing only',
+  'Note anything wrong, unclear or slow',
+  'Send it through the Feedback page',
 ];
 
 const NATIONAL_INITIATIVES = [
@@ -192,7 +210,7 @@ const FLAGSHIP_ASSETS = [
   }
 ];
 
-export default function PublicHome() {
+export default function PublicHome({ beta = false }) {
   const { t, lang } = useGigw();
   const { user } = useAuth() || {};
   const [assetViewMode, setAssetViewMode] = useState('MAP'); // 'MAP' | 'CARDS'
@@ -232,16 +250,25 @@ export default function PublicHome() {
     return () => observer.disconnect();
   }, [assetViewMode]);
 
-  const getDashboardPath = () => (user ? landingFor(user) : '/login');
+  const getDashboardPath = () => (user ? landingFor(user) : (beta ? '/login?desk=REIA' : '/login'));
+  const desks = beta ? OPERATING_DESKS.filter((d) => d.key === 'REIA') : OPERATING_DESKS;
+  const heroStats = beta ? BETA_HERO_STATS : HERO_STATS;
+
+  useEffect(() => {
+    if (!beta) return undefined;
+    const prev = document.title;
+    document.title = REIA_BETA_TITLE;
+    return () => { document.title = prev; };
+  }, [beta]);
 
   return (
-    <PublicShell>
+    <PublicShell beta={beta}>
       <OfflineBanner />
       {/* Panoramic Hydroelectric Dam Hero Section with Crisp Static Background */}
-      <section className="gigw-hero-panoramic" aria-labelledby="panoramic-hero-title">
+      <section className={`gigw-hero-panoramic${beta ? ' gigw-hero-beta' : ''}`} aria-labelledby="panoramic-hero-title">
         {/* Static panoramic dam picture. DBIM v3 s.6.1.1 caps a banner at 500 KB:
             AVIF 197 KB, WebP 454 KB; the 3.7 MB PNG is not served. */}
-        <picture className="gigw-hero-panoramic-picture" aria-hidden="true">
+        {!beta && <picture className="gigw-hero-panoramic-picture" aria-hidden="true">
           <source srcSet="/images/sjvn-hero-panoramic.avif?v=njhps" type="image/avif" />
           <img
             src="/images/sjvn-hero-panoramic.webp?v=njhps"
@@ -252,7 +279,7 @@ export default function PublicHome() {
             fetchpriority="high"
             decoding="async"
           />
-        </picture>
+        </picture>}
         <div className="gigw-hero-panoramic-bg" aria-hidden="true" />
 
         <div className="gigw-hero-panoramic-overlay" aria-hidden="true" />
@@ -262,8 +289,11 @@ export default function PublicHome() {
           <div className="gigw-hero-left">
             <div className="gigw-hero-tagline">
               <span className="gigw-tagline-bar" aria-hidden="true" />
+              {beta && <span className="gigw-beta-pill">BETA</span>}
               <span>
-                {lang === 'hi' 
+                {beta
+                  ? (lang === 'hi' ? 'स्वच्छ ऊर्जा · पारदर्शी बिलिंग · हरित भारत' : 'CLEAN ENERGY · TRANSPARENT BILLING · A GREENER INDIA')
+                  : lang === 'hi' 
                   ? 'स्वच्छ ऊर्जा · पारदर्शी बाज़ार · हरित भारत' 
                   : lang === 'gu'
                   ? 'સ્વચ્છ ઊર્જા · પારદર્શક બજાર · હરિયાળું ભારત'
@@ -274,7 +304,21 @@ export default function PublicHome() {
             </div>
 
             <h1 id="panoramic-hero-title" className="gigw-panoramic-h1">
-              {lang === 'hi' ? (
+              {beta ? (
+                lang === 'hi' ? (
+                  <>
+                    एसजेवीएन<br />
+                    <span className="text-reia-blue">REIA</span> वाणिज्यिक<br />
+                    पोर्टल <span className="gigw-beta-tag">बीटा</span>
+                  </>
+                ) : (
+                  <>
+                    SJVN<br />
+                    <span className="text-reia-blue">REIA</span> Commercial<br />
+                    Portal <span className="gigw-beta-tag">Beta</span>
+                  </>
+                )
+              ) : lang === 'hi' ? (
                 <>
                   एसजेवीएन एकीकृत<br />
                   ऊर्जा वाणिज्यिक एवं<br />
@@ -302,7 +346,11 @@ export default function PublicHome() {
             </h1>
 
             <p className="gigw-panoramic-lead">
-              {lang === 'hi'
+              {beta
+                ? (lang === 'hi'
+                  ? 'नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी (REIA) के रूप में एसजेवीएन उत्पादकों से सौर एवं पवन ऊर्जा खरीदकर वितरण कंपनियों को बेचता है। अनुबंध, ऊर्जा लेखा, बिलिंग, भुगतान, विवाद एवं मिलान: सब एक पोर्टल पर। यह बीटा संस्करण आमंत्रित उपयोगकर्ताओं के परीक्षण हेतु है।'
+                  : 'As the Renewable Energy Implementing Agency, SJVN buys solar and wind power from generators and sells it to distribution companies. Contracts, energy accounts, billing, payments, disputes and reconciliation, all on one portal. This beta is open to invited users for testing before launch.')
+                : lang === 'hi'
                 ? 'भारत के स्वच्छ ऊर्जा परिवर्तन को सशक्त बनाने वाला केंद्रीय उद्यम मंच। अक्षय ऊर्जा कार्यान्वयन (REIA), विद्युत बाज़ार व्यापार एवं जल-ताप वाणिज्यिक निपटान का एकीकृत राष्ट्रीय पोर्टल।'
                 : lang === 'gu'
                 ? 'ભારતના સ્વચ્છ ઊર્જા પરિવર્તનને સશક્ત બનાવતું કેન્દ્રીય પ્લેટફોર્મ. પુનઃપ્રાપ્ય ઊર્જા (REIA), વીજ બજાર ટ્રેડિંગ અને હાઇડ્રો-થર્મલ સેટલમેન્ટનું એકીકૃત પોર્ટલ.'
@@ -316,6 +364,12 @@ export default function PublicHome() {
                 <Lock size={15} />
                 <span>{user ? (lang === 'hi' ? 'कार्यक्षेत्र खोलें →' : lang === 'gu' ? 'કાર્યક્ષેત્ર ખોલો →' : lang === 'mr' ? 'कार्यक्षेत्र उघडा →' : 'Access Portal →') : (lang === 'hi' ? 'पोर्टल में प्रवेश करें →' : lang === 'gu' ? 'પોર્ટલમાં પ્રવેશો →' : lang === 'mr' ? 'पोर्टलवर प्रवेश करा →' : 'Access Portal →')}</span>
               </Link>
+              {beta ? (
+                <Link to="/feedback" className="btn-our-vision">
+                  <Bell size={16} />
+                  <span>{lang === 'hi' ? 'प्रतिक्रिया दें' : 'Share Feedback'}</span>
+                </Link>
+              ) : (
               <button 
                 type="button" 
                 onClick={openVisionModal} 
@@ -326,6 +380,7 @@ export default function PublicHome() {
                 <Target size={16} />
                 <span>{lang === 'hi' ? 'हमारा विज़न (Our Vision)' : lang === 'gu' ? 'અમારું વિઝન (Vision)' : lang === 'mr' ? 'आमचे व्हिजन (Vision)' : 'Our Vision'}</span>
               </button>
+              )}
             </div>
           </div>
         </div>
@@ -333,7 +388,7 @@ export default function PublicHome() {
         {/* Docked Horizontal Metric Strip (Bottom of Hero) */}
         <div className="gigw-hero-metrics-bar">
           <div className="gigw-metrics-strip-card">
-            {HERO_STATS.map((s, idx) => {
+            {heroStats.map((s, idx) => {
               const Icon = s.icon;
               return (
                 <div key={idx} className="metric-strip-item">
@@ -352,24 +407,24 @@ export default function PublicHome() {
       </section>
 
       {/* Live Power Market Ticker (IEX, PXIL, HPX Real-Time Trading Telemetry) */}
-      <LiveMarketTicker />
+      {!beta && <LiveMarketTicker />}
 
       {/* Enterprise Desks Grid (The Core Operational Sign-In Gateways & Fast Persona Testing) */}
       <section id="gateways-section" className="gigw-section gigw-gateways-container" aria-labelledby="gateways-heading">
         <div className="gigw-section-header">
           <span className="gigw-section-eyebrow">
-            {t('pub.gateways.eyebrow')}
+            {beta ? 'BETA ACCESS GATEWAY' : t('pub.gateways.eyebrow')}
           </span>
           <h2 id="gateways-heading" className="gigw-section-title">
-            {t('pub.gateways.title')}
+            {beta ? 'Sign In to the REIA Beta' : t('pub.gateways.title')}
           </h2>
           <p className="gigw-section-sub">
-            {t('pub.gateways.sub')}
+            {beta ? 'Your login carries your role: generator, discom or SJVN desk. Every approval follows maker, checker and approver separation.' : t('pub.gateways.sub')}
           </p>
         </div>
 
-        <div className="gigw-desks-grid">
-          {OPERATING_DESKS.map((d, i) => {
+        <div className={`gigw-desks-grid${beta ? ' gigw-desks-grid-beta' : ''}`}>
+          {desks.map((d, i) => {
             const Icon = d.icon;
             return (
               <div 
@@ -423,15 +478,56 @@ export default function PublicHome() {
               </div>
             );
           })}
+
+          {beta && (
+            <div className="gigw-desk-card reveal-fade-up reveal-stagger-2" style={{ '--card-accent': '#10b981' }}>
+              <div className="gigw-desk-header">
+                <div className="gigw-desk-icon-wrap">
+                  <Sparkles size={26} color="#10b981" />
+                </div>
+                <div>
+                  <span className="gigw-desk-badge">Pre-launch · By Invitation</span>
+                  <h3 className="gigw-desk-title">Beta Testing</h3>
+                  <p className="gigw-desk-sub">Help us get it right before launch</p>
+                </div>
+              </div>
+              <p className="gigw-desk-desc">You are among the first to use the REIA portal. Use it as you would at work, and tell us what does not work, is unclear, or takes too long.</p>
+              <div className="gigw-desk-features">
+                <div className="gigw-desk-features-header">
+                  <div className="gigw-features-title-wrap">
+                    <span className="gigw-features-status-dot" style={{ backgroundColor: '#10b981' }} aria-hidden="true" />
+                    <strong className="gigw-features-title">How to take part:</strong>
+                  </div>
+                  <span className="gigw-features-count-badge" aria-label={`${BETA_NOTES.length} steps`}>{BETA_NOTES.length}</span>
+                </div>
+                <ul className="gigw-features-list">
+                  {BETA_NOTES.map((n) => (
+                    <li key={n} className="gigw-feature-item">
+                      <span className="feature-check-badge" aria-hidden="true">
+                        <Check size={11} strokeWidth={2.8} />
+                      </span>
+                      <span className="feature-text">{n}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="gigw-desk-actions">
+                <Link to="/feedback" className="btn btn-primary gigw-desk-primary-btn">
+                  <span>Share Beta Feedback</span>
+                  <ArrowRight size={16} />
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
       {/* Audited Clean Energy & Carbon Offset ESG Telemetry */}
-      <CleanEnergyCounter />
+      {!beta && <CleanEnergyCounter />}
 
       {/* National Generation Assets & Capacity Portfolio Section with GIS Map */}
       <section className="gigw-section gigw-assets-section" aria-labelledby="assets-heading">
-        <div className="gigw-section-header">
+        {!beta && <div className="gigw-section-header">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
             <div>
               <span className="gigw-section-eyebrow">
@@ -467,17 +563,17 @@ export default function PublicHome() {
               </button>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Interactive GIS India Asset Map */}
-        {assetViewMode === 'MAP' && (
+        {!beta && assetViewMode === 'MAP' && (
           <div className="reveal-fade-up is-revealed">
             <IndiaAssetMap />
           </div>
         )}
 
         {/* 4 Flagship Generation Asset Cards */}
-        <div 
+        {!beta && <div 
           className="gigw-assets-grid"
           style={{ 
             marginTop: assetViewMode === 'MAP' ? '28px' : '8px'
@@ -509,7 +605,7 @@ export default function PublicHome() {
               </div>
             );
           })}
-        </div>
+        </div>}
 
         {/* Public Bulletin & Regulatory Transparency Bar */}
         <div className="gigw-public-bulletin-bar">
@@ -523,11 +619,13 @@ export default function PublicHome() {
                   ? 'તાજી સૂચના'
                   : lang === 'mr'
                   ? 'ताजी सूचना'
-                  : 'LATEST DISCLOSURE'}
+                  : beta ? 'BETA NOTICE' : 'LATEST DISCLOSURE'}
               </span>
             </span>
             <span className="bulletin-text">
-              {bannerCircular
+              {beta
+                ? 'This is a pre-launch beta of the REIA Commercial Portal. Found something wrong or unclear? Tell us on the Feedback page.'
+                : bannerCircular
                 ? (lang === 'hi' && bannerCircular.title_hi
                     ? bannerCircular.title_hi
                     : bannerCircular.title_en)
@@ -536,9 +634,9 @@ export default function PublicHome() {
                     : 'Tenders, corrigenda and statutory disclosures are available on the Public Circulars page.')}
             </span>
           </div>
-          <Link to="/circulars" className="bulletin-link">
+          <Link to={beta ? '/feedback' : '/circulars'} className="bulletin-link">
             <span>
-              {lang === 'hi' 
+              {beta ? 'Share Beta Feedback →' : lang === 'hi' 
                 ? 'सभी सार्वजनिक सूचनाएँ देखें →' 
                 : lang === 'gu'
                 ? 'બધી જાહેર સૂચનાઓ જુઓ →'

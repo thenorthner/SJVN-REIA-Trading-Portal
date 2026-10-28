@@ -5123,3 +5123,23 @@ html[data-contrast="high"] :is(.gigw-pm-quote-badge, .gigw-initiatives-eyebrow, 
 .gigw-radio input, .gigw-check input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--dbim-blue-700); flex-shrink: 0; }
 .gigw-form-actions { display: flex; gap: 10px; }
 .gigw-form-done { padding: 16px 18px; border: 1px solid var(--t-green-line); background: var(--t-green-50); color: var(--on-green); border-radius: 8px; font-size: 16px; }
+
+/* REIA beta home: no dam photograph (it is not REIA), a beta mark on the title. */
+.gigw-hero-beta .gigw-hero-panoramic-bg {
+  background-image:
+    radial-gradient(640px 380px at 86% 12%, rgba(245, 184, 46, 0.30), transparent 70%),
+    radial-gradient(560px 420px at 6% 100%, rgba(16, 185, 129, 0.30), transparent 70%),
+    linear-gradient(135deg, #06275c 0%, #0b3f8f 55%, #0c6a78 100%);
+}
+.gigw-beta-pill {
+  display: inline-flex; align-items: center; padding: 2px 10px; margin-right: 10px; border-radius: 999px;
+  background: #f5b82e; color: #3a2500; font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
+}
+.gigw-beta-tag {
+  display: inline-block; vertical-align: middle; margin-left: 10px; padding: 4px 14px; border-radius: 999px;
+  background: linear-gradient(90deg, #f5b82e, #10b981); color: #062a1f;
+  font-size: 0.42em; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.4;
+}
+.gigw-beta-tag-sm { font-size: 12.5px; padding: 2px 9px; margin-left: 8px; }
+.gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 860px; margin-left: auto; margin-right: auto; }
+@media (max-width: 720px) { .gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: 1fr; } }

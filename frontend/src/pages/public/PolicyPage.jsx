@@ -6,11 +6,12 @@ import { useSiteInfo } from '../../gigw/siteInfo.js';
 import { fmtDate } from '../../gigw/GigwFooter.jsx';
 import { POLICIES, POLICY_LINKS, HELP_LINKS, SCREEN_READERS, CONTACT_ROLES, RELATED_LINKS } from '../../gigw/policyContent.js';
 import { openCookiePreferences } from '../../gigw/CookieConsent.jsx';
+import { REIA_BETA } from '../../reiaBeta.js';
 
 const POLICY_DESCS = {
   '/privacy-policy': { en: 'DPDP Act 2023 compliance, data fiduciary disclosures and data principal rights', hi: 'डीपीडीपी अधिनियम 2023 अनुपालन, डेटा न्यासी प्रकटीकरण एवं अधिकार' },
   '/terms-of-use': { en: 'Authorised usage terms, computer resource restrictions and IT Act 2000 provisions', hi: 'अधिकृत उपयोग की शर्तें एवं आईटी अधिनियम 2000 प्रावधान' },
-  '/disclaimer': { en: 'Operational accuracy, regulatory supremacy of CERC/RPC orders, and power market feeds', hi: 'परिचालन सटीकता, सीईआरसी/आरपीसी आदेशों की सर्वोच्चता' },
+  '/disclaimer': REIA_BETA ? { en: 'Operational accuracy and regulatory supremacy of CERC/RPC orders', hi: 'परिचालन सटीकता एवं सीईआरसी/आरपीसी आदेशों की विनियामक सर्वोच्चता' } : { en: 'Operational accuracy, regulatory supremacy of CERC/RPC orders, and power market feeds', hi: 'परिचालन सटीकता, सीईआरसी/आरपीसी आदेशों की सर्वोच्चता' },
   '/hyperlinking-policy': { en: 'Rules for inbound/outbound hyperlinks to government portals and power exchanges', hi: 'सरकारी पोर्टलों एवं पावर एक्सचेंजों के लिए हाइपरलिंकिंग नियम' },
   '/copyright-policy': { en: 'Intellectual property ownership of tender documents, billing software and data', hi: 'निविदा दस्तावेज़ों, बिलिंग सॉफ़्टवेयर एवं डेटा का बौद्धिक संपदा अधिकार' },
   '/cookie-policy': { en: 'List of essential session storage and optional performance analytics under DPDP Act', hi: 'आवश्यक सत्र संग्रहण एवं वैकल्पिक प्रदर्शन विश्लेषण की सूची' },
@@ -22,7 +23,7 @@ const HELP_DESCS = {
   '/grievance-redressal': { en: 'Statutory grievance redressal, CPGRAMS portal link and RTI Act CPIO contacts', hi: 'वैधानिक शिकायत निवारण, सीपीग्राम्स पोर्टल एवं आरटीआई सीपीआईओ' },
   '/accessibility-statement': { en: 'WCAG 2.1 Level AA compliance, high contrast, text resizing and RPwD Act adherence', hi: 'WCAG 2.1 स्तर AA अनुपालन, उच्च कंट्रास्ट एवं पाठ आकार' },
   '/screen-reader-access': { en: 'Compatible screen readers list (NVDA, JAWS, Narrator, VoiceOver) and key commands', hi: 'संगत स्क्रीन रीडर्स (NVDA, JAWS, Narrator) एवं मुख्य कमांड्स' },
-  '/help': { en: 'Comprehensive user guides for REIA, Trading, Hydro and Thermal commercial workflows', hi: 'आरईआईए, ट्रेडिंग, हाइड्रो एवं थर्मल वाणिज्यिक कार्यप्रवाह हेतु मार्गदर्शिका' },
+  '/help': REIA_BETA ? { en: 'User guide for the REIA commercial workflow', hi: 'REIA वाणिज्यिक कार्यप्रवाह हेतु उपयोगकर्ता मार्गदर्शिका' } : { en: 'Comprehensive user guides for REIA, Trading, Hydro and Thermal commercial workflows', hi: 'आरईआईए, ट्रेडिंग, हाइड्रो एवं थर्मल वाणिज्यिक कार्यप्रवाह हेतु मार्गदर्शिका' },
   '/sitemap': { en: 'Complete architectural directory and visual sitemap of all platform gateways', hi: 'प्लेटफ़ॉर्म के सभी प्रवेश द्वारों की संपूर्ण स्थापत्य निर्देशिका' },
 };
 
@@ -203,7 +204,7 @@ export function Sitemap() {
                 <span className="sitemap-desc">{t('pub.sitemap.coreLogin')}</span>
               </li>
               <li><Link to="/about-us">{t('page.about')}</Link></li>
-              <li><Link to="/circulars">{t('page.circulars')}</Link></li>
+              {!REIA_BETA && <li><Link to="/circulars">{t('page.circulars')}</Link></li>}
             </ul>
           </div>
 
@@ -255,6 +256,7 @@ export function Sitemap() {
                 </Link>
                 <span className="sitemap-desc">{t('home.reia.body')}</span>
               </li>
+              {!REIA_BETA && <>
               <li>
                 <Link to="/trading">
                   {t('home.trading.title')}
@@ -276,6 +278,7 @@ export function Sitemap() {
                 </Link>
                 <span className="sitemap-desc">{t('home.thermal.body')}</span>
               </li>
+              </>}
             </ul>
           </div>
         </div>

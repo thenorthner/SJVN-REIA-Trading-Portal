@@ -12,3 +12,9 @@ export function reiaTerm(text) {
   if (!REIA_BETA || typeof text !== 'string') return text;
   return text.replace(/Trading Margin/g, 'SJVN Margin').replace(/Trading margin/g, 'SJVN margin').replace(/trading margin/g, 'SJVN margin');
 }
+
+// Portal-wide strings that name every desk, as the REIA beta shows them.
+export const BETA_STRINGS = {
+  'portal.name': { en: 'REIA Commercial Portal (Beta)', hi: 'REIA वाणिज्यिक पोर्टल (बीटा)' },
+  'pub.sitemap.lead': { en: 'Structured directory of the SJVN REIA Commercial Portal (Beta), detailing all public pages, statutory policies and the REIA sign-in.', hi: 'एसजेवीएन REIA वाणिज्यिक पोर्टल (बीटा) की संरचित निर्देशिका: सभी सार्वजनिक पृष्ठ, वैधानिक नीतियाँ एवं REIA साइन-इन।' },
+};

@@ -14,6 +14,7 @@ import { openPortalSearch } from '../../components/PortalSearchModal.jsx';
 import AudioSpeechWidget, { AUDIO_SPEECH_TOGGLE_EVENT } from '../../components/AudioSpeechWidget.jsx';
 import { openKeyboardShortcuts } from '../../components/KeyboardShortcutsModal.jsx';
 import BackToTopProgress from '../../components/BackToTopProgress.jsx';
+import { REIA_BETA_TITLE } from '../../reiaBeta.js';
 
 /**
  * PublicShell — frame for the public portal pages, laid out as DBIM v3 s.5.4.3
@@ -21,7 +22,7 @@ import BackToTopProgress from '../../components/BackToTopProgress.jsx';
  * and user controls, logo lockup 3B (logo, name, tagline), a highlighted search
  * bar, a profile / sign-in control, and the global navigation menu below.
  */
-export default function PublicShell({ title, children }) {
+export default function PublicShell({ title, children, beta = false }) {
   const { t, lang, toggleLang, textSize, setTextSize, toggleContrast } = useGigw();
   const { user } = useAuth() || {};
   const [audioOpen, setAudioOpen] = useState(false);
@@ -95,10 +96,14 @@ export default function PublicShell({ title, children }) {
   }, [textSize, setTextSize, toggleContrast, toggleLang]);
 
   useEffect(() => {
+    if (beta) { document.title = REIA_BETA_TITLE; return; }
     document.title = title ? `${title} | ${t('org.name')}` : `${t('org.name')} | ${t('portal.name')}`;
-  }, [title, t]);
+  }, [title, t, beta]);
 
-  const getDashboardPath = () => (user ? landingFor(user) : '/login');
+  const getDashboardPath = () => (user ? landingFor(user) : (beta ? '/login?desk=REIA' : '/login'));
+  // The REIA beta keeps to REIA: the vision statement and portal search speak
+  // for every desk, and the circulars and about pages are portal-wide.
+  const navLinks = beta ? NAV_LINKS.filter((l) => ['/', '/help', '/feedback', '/contact-us'].includes(l.to)) : NAV_LINKS;
   const [q, setQ] = useState('');
   const submitSearch = (e) => { e.preventDefault(); openPortalSearch(q); setQ(''); };
 
@@ -110,13 +115,13 @@ export default function PublicShell({ title, children }) {
           <Link to="/" className="gigw-masthead-brand" aria-label={`${t('org.name')} — ${t('page.home')}`}>
             <img src="/sjvn-logo.png" alt="SJVN Limited logo" width="56" height="56" />
             <span className="gigw-masthead-text">
-              <strong>{t('org.name')}</strong>
+              <strong>{t('org.name')}{beta && <span className="gigw-beta-tag gigw-beta-tag-sm">REIA Beta</span>}</strong>
               <span>{t('org.tagline1')}</span>
               <span>{t('org.tagline2')}</span>
             </span>
           </Link>
 
-          <form className="gigw-header-search" role="search" onSubmit={submitSearch}>
+          {!beta && <form className="gigw-header-search" role="search" onSubmit={submitSearch}>
             <label htmlFor="gigw-header-q" className="sr-only">{t('search.placeholder')}</label>
             <input
               id="gigw-header-q"
@@ -130,10 +135,10 @@ export default function PublicShell({ title, children }) {
               <Search size={18} aria-hidden="true" />
               <span className="sr-only">{t('search.label')}</span>
             </button>
-          </form>
+          </form>}
 
           <div className="gigw-masthead-nav">
-            <button
+            {!beta && <button
               type="button"
               className="gigw-header-vision-btn"
               onClick={() => setVisionOpen(true)}
@@ -141,7 +146,7 @@ export default function PublicShell({ title, children }) {
             >
               <Target size={16} aria-hidden="true" />
               <span>{t('pub.shell.vision')}</span>
-            </button>
+            </button>}
             <ThemeToggle />
             <Link to={getDashboardPath()} className="btn btn-primary gigw-header-signin-btn">
               <UserRound size={16} aria-hidden="true" />
@@ -151,7 +156,7 @@ export default function PublicShell({ title, children }) {
         </div>
         <nav className="gigw-global-nav" aria-label={t('nav.global')}>
           <ul>
-            {NAV_LINKS.map((l) => (
+            {navLinks.map((l) => (
               <li key={l.to}>
                 <NavLink to={l.to} end={l.to === '/'}>{t(l.key)}</NavLink>
               </li>
@@ -164,7 +169,7 @@ export default function PublicShell({ title, children }) {
         {children}
       </main>
       <GigwFooter />
-      <VisionModal open={visionOpen} onClose={() => setVisionOpen(false)} />
+      {!beta && <VisionModal open={visionOpen} onClose={() => setVisionOpen(false)} />}
       <AudioSpeechWidget open={audioOpen} onClose={() => setAudioOpen(false)} />
       <BackToTopProgress />
       <ExternalLinkNotice />

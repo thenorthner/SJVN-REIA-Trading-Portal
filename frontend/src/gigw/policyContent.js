@@ -1,3 +1,4 @@
+import { REIA_BETA } from '../reiaBeta.js';
 /**
  * The statutory pages GIGW 3.0 (and the DPDP Act 2023 for the privacy notice)
  * require a government portal to publish, in English and Hindi.
@@ -65,7 +66,10 @@ export const SOCIAL_LINKS = [
 export const POLICIES = {
   'privacy-policy': {
     key: 'page.privacy',
-    intro: b(
+    intro: REIA_BETA ? b(
+      'This notice explains what personal data the SJVN REIA Commercial Portal (Beta) processes, why, for how long, and the rights you have over it under the Digital Personal Data Protection Act, 2023 (DPDP Act). SJVN Limited is the Data Fiduciary.',
+      'यह सूचना बताती है कि एसजेवीएन REIA वाणिज्यिक पोर्टल (बीटा) कौन-सा व्यक्तिगत डेटा, किस उद्देश्य से एवं कितनी अवधि तक संसाधित करता है, तथा डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम, 2023 (डीपीडीपी अधिनियम) के अंतर्गत आपके क्या अधिकार हैं। एसजेवीएन लिमिटेड डेटा न्यासी (Data Fiduciary) है।'
+    ) : b(
       'This notice explains what personal data the SJVN Integrated Energy Commercial & Trading Platform processes, why, for how long, and the rights you have over it under the Digital Personal Data Protection Act, 2023 (DPDP Act). SJVN Limited is the Data Fiduciary.',
       'यह सूचना बताती है कि एसजेवीएन एकीकृत ऊर्जा वाणिज्यिक एवं व्यापार प्लेटफ़ॉर्म कौन-सा व्यक्तिगत डेटा, किस उद्देश्य से एवं कितनी अवधि तक संसाधित करता है, तथा डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम, 2023 (डीपीडीपी अधिनियम) के अंतर्गत आपके क्या अधिकार हैं। एसजेवीएन लिमिटेड डेटा न्यासी (Data Fiduciary) है।'
     ),
@@ -81,7 +85,10 @@ export const POLICIES = {
       },
       {
         h: b('2. Purpose of processing', '2. संसाधन का उद्देश्य'),
-        p: [b(
+        p: [REIA_BETA ? b(
+          'Data is processed only for: power procurement and sale as a Renewable Energy Implementing Agency; execution and administration of PPAs and PSAs; payment security and settlement; and statutory filings to CERC, CEA, MNRE, the Ministry of Power, tax authorities and auditors. It is not used for marketing and is not sold or shared for any other purpose.',
+          'डेटा का संसाधन केवल इन उद्देश्यों हेतु किया जाता है: नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी के रूप में विद्युत क्रय-विक्रय; पीपीए एवं पीएसए का निष्पादन एवं प्रशासन; भुगतान सुरक्षा एवं निपटान; तथा सीईआरसी, सीईए, एमएनआरई, विद्युत मंत्रालय, कर प्राधिकरणों एवं लेखा परीक्षकों को वैधानिक प्रस्तुतियाँ। इसका उपयोग विपणन हेतु नहीं किया जाता तथा इसे किसी अन्य प्रयोजन हेतु बेचा या साझा नहीं किया जाता।'
+        ) : b(
           'Data is processed only for: power procurement and sale as a Renewable Energy Implementing Agency; power trading on exchanges and bilaterally; billing of SJVN’s hydro and thermal stations; execution and administration of PPAs and PSAs; payment security and settlement; and statutory filings to CERC, CEA, MNRE, the Ministry of Power, tax authorities and auditors. It is not used for marketing and is not sold or shared for any other purpose.',
           'डेटा का संसाधन केवल इन उद्देश्यों हेतु किया जाता है: नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी के रूप में विद्युत क्रय-विक्रय; एक्सचेंज एवं द्विपक्षीय विद्युत व्यापार; एसजेवीएन के जल एवं ताप विद्युत केंद्रों की बिलिंग; पीपीए एवं पीएसए का निष्पादन एवं प्रशासन; भुगतान सुरक्षा एवं निपटान; तथा सीईआरसी, सीईए, एमएनआरई, विद्युत मंत्रालय, कर प्राधिकरणों एवं लेखा परीक्षकों को वैधानिक प्रस्तुतियाँ। इसका उपयोग विपणन हेतु नहीं किया जाता तथा इसे किसी अन्य प्रयोजन हेतु बेचा या साझा नहीं किया जाता।'
         )],
@@ -126,7 +133,10 @@ export const POLICIES = {
 
   'terms-of-use': {
     key: 'page.terms',
-    intro: b(
+    intro: REIA_BETA ? b(
+      'These terms govern access to and use of the SJVN REIA Commercial Portal (Beta). By signing in you accept them.',
+      'ये शर्तें एसजेवीएन REIA वाणिज्यिक पोर्टल (बीटा) तक पहुँच एवं उसके उपयोग को नियंत्रित करती हैं। साइन इन करके आप इन्हें स्वीकार करते हैं।'
+    ) : b(
       'These terms govern access to and use of the SJVN Integrated Energy Commercial & Trading Platform. By signing in you accept them.',
       'ये शर्तें एसजेवीएन एकीकृत ऊर्जा वाणिज्यिक एवं व्यापार प्लेटफ़ॉर्म तक पहुँच एवं उसके उपयोग को नियंत्रित करती हैं। साइन इन करके आप इन्हें स्वीकार करते हैं।'
     ),
@@ -177,7 +187,10 @@ export const POLICIES = {
 
   'disclaimer': {
     key: 'page.disclaimer',
-    intro: b(
+    intro: REIA_BETA ? b(
+      'This portal is maintained by SJVN Limited (A Navratna CPSE, Govt. of India) for its business as a Renewable Energy Implementing Agency: contracts, energy accounting, billing and settlement. The materials and figures published herein are governed by statutory guidelines and regulatory frameworks.',
+      'यह पोर्टल एसजेवीएन लिमिटेड (भारत सरकार के अधीन नवरत्न उद्यम) द्वारा नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी के कार्य हेतु प्रबंधित किया जाता है: अनुबंध, ऊर्जा लेखा, बिलिंग एवं निपटान। यहाँ प्रकाशित सामग्री एवं आँकड़े वैधानिक दिशानिर्देशों एवं विनियामक तंत्र के अधीन हैं।'
+    ) : b(
       'This portal is maintained by SJVN Limited (A Navratna CPSE, Govt. of India) to facilitate official energy commerce, commercial settlements, REIA procurement, and power trading. The materials and figures published herein are governed by statutory guidelines and regulatory frameworks.',
       'यह पोर्टल एसजेवीएन लिमिटेड (भारत सरकार के अधीन नवरत्न उद्यम) द्वारा आधिकारिक ऊर्जा वाणिज्य, वाणिज्यिक निपटान, आरईआईए खरीद एवं विद्युत व्यापार के संचालन हेतु प्रबंधित किया जाता है। यहाँ प्रकाशित सामग्री एवं आँकड़े वैधानिक दिशानिर्देशों एवं विनियामक तंत्र के अधीन हैं।'
     ),
@@ -191,6 +204,7 @@ export const POLICIES = {
           ),
         ],
       },
+      ...(REIA_BETA ? [] : [
       {
         h: b('2. Power Market & Scheduling Feeds', '2. विद्युत बाज़ार एवं शेड्यूलिंग फ़ीड्स'),
         p: [
@@ -200,6 +214,7 @@ export const POLICIES = {
           ),
         ],
       },
+      ]),
       {
         h: b('3. Availability & Technical Outages', '3. उपलब्धता एवं तकनीकी व्यवधान'),
         p: [
@@ -425,7 +440,10 @@ export const POLICIES = {
 
   'about-us': {
     key: 'page.about',
-    intro: b(
+    intro: REIA_BETA ? b(
+      'SJVN Limited is a Navratna Central Public Sector Enterprise under the Ministry of Power, Government of India, and a joint venture of the Government of India and the Government of Himachal Pradesh. This portal is SJVN’s REIA Commercial Portal, now in beta.',
+      'एसजेवीएन लिमिटेड विद्युत मंत्रालय, भारत सरकार के अधीन एक नवरत्न केंद्रीय सार्वजनिक क्षेत्र उपक्रम है तथा भारत सरकार एवं हिमाचल प्रदेश सरकार का संयुक्त उपक्रम है। यह पोर्टल एसजेवीएन का REIA वाणिज्यिक पोर्टल है, जो अभी बीटा में है।'
+    ) : b(
       'SJVN Limited is a Navratna Central Public Sector Enterprise under the Ministry of Power, Government of India, and a joint venture of the Government of India and the Government of Himachal Pradesh. This portal is SJVN’s Integrated Energy Commercial & Trading Platform.',
       'एसजेवीएन लिमिटेड विद्युत मंत्रालय, भारत सरकार के अधीन एक नवरत्न केंद्रीय सार्वजनिक क्षेत्र उपक्रम है तथा भारत सरकार एवं हिमाचल प्रदेश सरकार का संयुक्त उपक्रम है। यह पोर्टल एसजेवीएन का एकीकृत ऊर्जा वाणिज्यिक एवं व्यापार प्लेटफ़ॉर्म है।'
     ),
@@ -445,13 +463,13 @@ export const POLICIES = {
           b('Renewable Energy Implementing Agency (REIA): power purchase and sale agreements, energy accounts, bills, payment security and reconciliation with developers and discoms.', 'नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी (आरईआईए): विकासकर्ताओं एवं डिस्कॉम के साथ विद्युत क्रय एवं विक्रय अनुबंध, ऊर्जा लेखा, बिल, भुगतान सुरक्षा एवं मिलान।'),
           b('Power trading: exchange and bilateral transactions, settlement and billing for trading clients.', 'विद्युत व्यापार: एक्सचेंज एवं द्विपक्षीय लेन-देन, व्यापार ग्राहकों हेतु निपटान एवं बिलिंग।'),
           b('Hydro and thermal stations: billing of beneficiaries for SJVN’s generating stations.', 'जल एवं ताप विद्युत केंद्र: एसजेवीएन के उत्पादन केंद्रों हेतु लाभार्थियों की बिलिंग।'),
-        ],
+        ].slice(0, REIA_BETA ? 1 : undefined),
       },
       {
         h: b('Who uses it', 'इसका उपयोग कौन करता है'),
         p: [b(
-          'SJVN officers, renewable energy developers, distribution companies and trading clients. Every account is issued by SJVN; there is no public registration.',
-          'एसजेवीएन अधिकारी, नवीकरणीय ऊर्जा विकासकर्ता, वितरण कंपनियाँ एवं व्यापार ग्राहक। प्रत्येक खाता एसजेवीएन द्वारा जारी किया जाता है; कोई सार्वजनिक पंजीकरण नहीं है।'
+          `SJVN officers, renewable energy developers${REIA_BETA ? ' and distribution companies' : ', distribution companies and trading clients'}. Every account is issued by SJVN; there is no public registration.`,
+          `एसजेवीएन अधिकारी, नवीकरणीय ऊर्जा विकासकर्ता, ${REIA_BETA ? 'एवं वितरण कंपनियाँ' : 'वितरण कंपनियाँ एवं व्यापार ग्राहक'}। प्रत्येक खाता एसजेवीएन द्वारा जारी किया जाता है; कोई सार्वजनिक पंजीकरण नहीं है।`
         )],
       },
       {
@@ -489,7 +507,11 @@ export const POLICIES = {
 
   help: {
     key: 'page.help',
-    intro: b(
+    // The REIA beta build names the REIA desk alone.
+    intro: REIA_BETA ? b(
+      'Welcome to the Help & User Guidance Centre for the SJVN REIA Commercial Portal (Beta). This desk provides operational instructions for internal officers, renewable energy developers and state discoms.',
+      'एसजेवीएन REIA वाणिज्यिक पोर्टल (बीटा) के सहायता एवं उपयोगकर्ता मार्गदर्शन केंद्र में आपका स्वागत है। यह डेस्क आंतरिक अधिकारियों, नवीकरणीय ऊर्जा विकासकर्ताओं एवं राज्य डिस्कॉम हेतु परिचालन संबंधी निर्देश प्रदान करती है।'
+    ) : b(
       'Welcome to the Help & User Guidance Centre for the SJVN Integrated Energy Commercial & Trading Platform. This desk provides operational instructions for internal officers, renewable energy developers, state discoms, and power trading counterparties.',
       'एसजेवीएन एकीकृत ऊर्जा वाणिज्यिक एवं व्यापार प्लेटफ़ॉर्म के सहायता एवं उपयोगकर्ता मार्गदर्शन केंद्र में आपका स्वागत है। यह डेस्क आंतरिक अधिकारियों, नवीकरणीय ऊर्जा विकासकर्ताओं, राज्य डिस्कॉम एवं विद्युत व्यापार प्रतिपक्षों हेतु परिचालन संबंधी निर्देश प्रदान करती है।'
     ),
@@ -498,8 +520,8 @@ export const POLICIES = {
         h: b('1. Access Control & Sign-in Protocol', '1. पहुँच नियंत्रण एवं साइन-इन प्रक्रिया'),
         p: [
           b(
-            'The platform is a secure, role-restricted government system. Internal SJVN officers access through enterprise credentials, while external developers (sellers), discoms (buyers), and trading clients receive digitally verified credentials from the platform administrator.',
-            'यह प्लेटफ़ॉर्म एक सुरक्षित, भूमिका-प्रतिबंधित सरकारी प्रणाली है। आंतरिक एसजेवीएन अधिकारी उद्यम क्रेडेंशियल के माध्यम से पहुँचते हैं, जबकि बाहरी विकासकर्ता (विक्रेता), डिस्कॉम (क्रेता) एवं व्यापार ग्राहक प्लेटफ़ॉर्म प्रशासक से डिजिटल रूप से सत्यापित क्रेडेंशियल प्राप्त करते हैं।'
+            `The platform is a secure, role-restricted government system. Internal SJVN officers access through enterprise credentials, while external developers (sellers)${REIA_BETA ? ' and discoms (buyers)' : ', discoms (buyers), and trading clients'} receive digitally verified credentials from the platform administrator.`,
+            `यह प्लेटफ़ॉर्म एक सुरक्षित, भूमिका-प्रतिबंधित सरकारी प्रणाली है। आंतरिक एसजेवीएन अधिकारी उद्यम क्रेडेंशियल के माध्यम से पहुँचते हैं, जबकि बाहरी विकासकर्ता (विक्रेता), ${REIA_BETA ? 'एवं डिस्कॉम (क्रेता)' : 'डिस्कॉम (क्रेता) एवं व्यापार ग्राहक'} प्लेटफ़ॉर्म प्रशासक से डिजिटल रूप से सत्यापित क्रेडेंशियल प्राप्त करते हैं।`
           ),
           b(
             'Upon first sign-in, users must update their temporary password. In compliance with CERT-In directives, accounts enforce strong passphrase standards, automatic session lockouts after 15 minutes of inactivity, and temporary lockout upon multiple failed authentication attempts.',
@@ -508,7 +530,7 @@ export const POLICIES = {
         ],
       },
       {
-        h: b('2. The Four Operational Enterprise Desks', '2. चार परिचालन उद्यम डेस्क'),
+        h: REIA_BETA ? b('2. The REIA Desk', '2. REIA डेस्क') : b('2. The Four Operational Enterprise Desks', '2. चार परिचालन उद्यम डेस्क'),
         list: [
           b(
             'REIA Desk (Renewable Energy Implementing Agency): End-to-end administration of Solar, Wind, and Hybrid PPAs/PSAs; monthly REA/SEA energy uploads; automated billing generation; Letter of Credit / Bank Guarantee payment-security monitoring; dispute resolution; and reconciliation.',
@@ -526,7 +548,7 @@ export const POLICIES = {
             'Thermal Billing Desk: Commercial settlement and billing for Buxar Thermal Power Plant (1320 MW) under CERC Tariff Regulations, including monthly Fixed Capacity Charges, Energy Charge Rates (ECR) derived from landed fuel costs, GCV adjustments, and station month-close audits.',
             'ताप विद्युत बिलिंग डेस्क: सीईआरसी टैरिफ विनियमों के अंतर्गत बक्सर ताप विद्युत परियोजना (1320 मेगावाट) का वाणिज्यिक निपटान एवं बिलिंग, जिसमें मासिक निश्चित क्षमता प्रभार, ईंधन लागत से प्राप्त ऊर्जा प्रभार दर (ECR), जीसीवी समायोजन एवं केंद्र माह-समापन ऑडिट शामिल हैं।'
           ),
-        ],
+        ].slice(0, REIA_BETA ? 1 : undefined),
       },
       {
         h: b('3. Document Generation, Digital Signatures & Formats', '3. दस्तावेज़ निर्माण, डिजिटल हस्ताक्षर एवं प्रारूप'),

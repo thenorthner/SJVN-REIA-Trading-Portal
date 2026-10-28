@@ -373,7 +373,8 @@ export default function App() {
       <Route path="/about" element={<Navigate to="/about-us" replace />} />
       <Route path="/feedback" element={<PublicFeedback />} />
       <Route path="/sitemap" element={<Sitemap />} />
-      <Route path="/circulars" element={<PublicCirculars />} />
+      {/* The circulars cover every desk; the REIA beta does not show them. */}
+      <Route path="/circulars" element={REIA_BETA ? <Navigate to="/" replace /> : <PublicCirculars />} />
       <Route path="/public-circulars" element={<Navigate to="/circulars" replace />} />
       <Route path="/disclosures" element={<Navigate to="/circulars" replace />} />
       <Route path="/home" element={REIA_BETA ? <ReiaBetaHome /> : <PublicHome />} />

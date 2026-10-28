@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { STRINGS } from './strings.js';
 import { domTranslator, tUI } from './translator.js';
+import { REIA_BETA, BETA_STRINGS } from '../reiaBeta.js';
 
 /**
  * Viewer preferences GIGW 3.0 asks a government portal to offer on every page:
@@ -64,7 +65,7 @@ export function GigwProvider({ children }) {
 }
 
 export function translate(lang, key, vars) {
-  const entry = STRINGS[key];
+  const entry = (REIA_BETA && BETA_STRINGS[key]) || STRINGS[key];
   let s = entry ? (entry[lang] ?? entry.hi ?? entry.en) : key;
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
