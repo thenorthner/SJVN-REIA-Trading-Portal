@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { fmtNumber, fmtCurrency } from './ui.jsx';
+import { reiaTerm } from '../reiaBeta.js';
 
 /**
  * MacroEnergyGrid3D
@@ -173,7 +174,7 @@ export default function MacroEnergyGrid3D({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
-                Macro Energy & Trading Margin Grid
+                Macro Energy & {reiaTerm('Trading Margin')} Grid
               </h3>
               <span style={{
                 fontSize: 14,
@@ -249,7 +250,7 @@ export default function MacroEnergyGrid3D({
             color: '#38bdf8',
             fontWeight: 600,
           }}>
-            Trading Margin: <strong>+₹0.07 / kWh</strong>
+            {reiaTerm('Trading Margin')}: <strong>+₹0.07 / kWh</strong>
           </div>
         </div>
       </div>
@@ -433,7 +434,7 @@ export default function MacroEnergyGrid3D({
               alignItems: 'center',
               fontSize: 14.5,
             }}>
-              <span style={{ color: '#94a3b8' }}>Trading Margin Yield:</span>
+              <span style={{ color: '#94a3b8' }}>{reiaTerm('Trading Margin')} Yield:</span>
               <strong style={{ color: '#10b981', fontSize: 14.5 }}>
                 ₹{(monthlyMarginYield / 100000).toFixed(2)} Lakh / mo
               </strong>

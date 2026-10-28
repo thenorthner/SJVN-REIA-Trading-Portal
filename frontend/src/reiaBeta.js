@@ -5,3 +5,10 @@
 export const REIA_BETA = import.meta.env.VITE_REIA_BETA === '1';
 export const REIA_BETA_HOME = '/reia-beta';
 export const REIA_BETA_TITLE = 'SJVN Limited | REIA Commercial Portal';
+
+// In the beta the REIA margin is called the SJVN margin, so no screen says
+// "trading". The CERC regulation's own title is left as it is.
+export function reiaTerm(text) {
+  if (!REIA_BETA || typeof text !== 'string') return text;
+  return text.replace(/Trading Margin/g, 'SJVN Margin').replace(/Trading margin/g, 'SJVN margin').replace(/trading margin/g, 'SJVN margin');
+}

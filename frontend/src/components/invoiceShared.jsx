@@ -1,5 +1,6 @@
 import React from 'react';
 import { Badge, Modal, fmtCurrency, fmtNumber } from './ui.jsx';
+import { reiaTerm } from '../reiaBeta.js';
 
 /** Status options for invoice list filters (role pages may subset). */
 export const INVOICE_STATUS_OPTIONS = [
@@ -152,7 +153,7 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
         </div>
         {(trading > 0 || invoice.direction === 'SJVN_TO_BUYER') && (
           <div className="detail-item">
-            <span className="detail-label">Trading Margin</span>
+            <span className="detail-label">{reiaTerm('Trading Margin')}</span>
             <span className="detail-value">{fmtCurrency(trading)}</span>
           </div>
         )}

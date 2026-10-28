@@ -1,3 +1,4 @@
+import { reiaTerm } from './reiaBeta.js';
 export const REASON_CODES = [
   { value: 'ENERGY_DATA_MISMATCH', label: 'Energy data mismatch (metered vs billed)' },
   { value: 'TARIFF_RATE_ERROR', label: 'Tariff/rate calculation error' },
@@ -14,7 +15,7 @@ export const REASON_CODES = [
 export const CHARGE_LINES = [
   { value: 'energy_charges', label: 'Energy charges' },
   { value: 'transmission_charges', label: 'Transmission / wheeling' },
-  { value: 'trading_margin', label: 'Trading margin' },
+  { value: 'trading_margin', label: reiaTerm('Trading margin') },
   { value: 'rebate', label: 'Rebate' },
   { value: 'lps', label: 'LPS' },
   { value: 'penalty', label: 'Penalty (CUF/performance)' },

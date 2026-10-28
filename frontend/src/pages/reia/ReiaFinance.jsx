@@ -5,6 +5,7 @@ import { ROLE_GROUPS } from '../../roles.js';
 import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency,
 } from '../../components/ui.jsx';
+import { reiaTerm } from '../../reiaBeta.js';
 
 // REIA's month-end handover to corporate Finance — the same three steps as the
 // hydro one (gather and check, book against Finance's voucher, reverse when
@@ -206,7 +207,7 @@ export default function ReiaFinance() {
             <div className="stat-grid">
               <StatCard label="Documents waiting" value={totals.docs_count} hint="issued or accepted, not yet booked" />
               <StatCard label="Energy" value={fmtCurrency(totals.energy_amount)} hint="energy, capacity and the like" />
-              <StatCard label="Trading margin" value={fmtCurrency(totals.margin_amount)} hint="SJVN's own income" />
+              <StatCard label={reiaTerm('Trading margin')} value={fmtCurrency(totals.margin_amount)} hint="SJVN's own income" />
               <StatCard label="Pass-through" value={fmtCurrency(totals.pass_through_amount)} hint="NRLDC + transmission" />
               <StatCard label="To book" value={fmtCurrency(totals.total_amount)} tone="primary" />
             </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Table, fmtNumber } from './ui.jsx';
 import { showAlert } from '../lib/dialogs.js';
+import { reiaTerm } from '../reiaBeta.js';
 
 export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
   const isCert = ['REC', 'ESCERT'].includes(marketSegment);
@@ -10,12 +11,12 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
     { key: 'energyType', label: 'Energy Type', render: r => <span style={{ fontWeight: 'bold', color: marketSegment === 'GTAM' || marketSegment === 'REC' ? '#27ae60' : 'var(--slate-700)' }}>{r.energyType || marketSegment}</span> },
     { key: 'totalObligation', label: isCert ? 'Cert Qty' : 'Volume (MWh)', render: r => <strong>{fmtNumber(r.totalObligation || r.energyMUs)}</strong> },
     { key: 'totalAmount', label: 'Gross Revenue (₹)', render: r => <span>{fmtNumber(r.totalAmount || r.grossValue)}</span> },
-    { key: 'margin', label: 'Trading Margin', render: r => <span>{fmtNumber(r.margin)}</span> },
+    { key: 'margin', label: reiaTerm('Trading Margin'), render: r => <span>{fmtNumber(r.margin)}</span> },
     { key: 'igst', label: 'IGST', render: r => <span>{fmtNumber(r.igst)}</span> },
     { key: 'cgst', label: 'CGST', render: r => <span>{fmtNumber(r.cgst)}</span> },
     { key: 'sgst', label: 'SGST', render: r => <span>{fmtNumber(r.sgst)}</span> },
     { key: 'grandTotal', label: 'Grand Total (₹)', render: r => (
-      <div title={`Gross Value: ₹ ${fmtNumber(r.totalAmount || r.grossValue)}\nTrading Margin: ₹ ${fmtNumber(r.margin)}\nGST (18%): ₹ ${fmtNumber((r.igst || 0) + (r.cgst || 0) + (r.sgst || 0))}\n-------------------\nTotal Invoice: ₹ ${fmtNumber(r.grandTotal)}`} style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', cursor: 'help', fontWeight: 'bold' }}>
+      <div title={`Gross Value: ₹ ${fmtNumber(r.totalAmount || r.grossValue)}\n${reiaTerm('Trading Margin')}: ₹ ${fmtNumber(r.margin)}\nGST (18%): ₹ ${fmtNumber((r.igst || 0) + (r.cgst || 0) + (r.sgst || 0))}\n-------------------\nTotal Invoice: ₹ ${fmtNumber(r.grandTotal)}`} style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', cursor: 'help', fontWeight: 'bold' }}>
         {fmtNumber(r.grandTotal)}
       </div>
     )},

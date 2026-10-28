@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { Badge, fmtCurrency, fmtNumber } from './ui.jsx';
+import { reiaTerm } from '../reiaBeta.js';
 
 /**
  * Ultra 3D Visual Pipeline & Period Settlement Trail
@@ -588,7 +589,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             }}>
               {!sellerView && (
               <div>
-                <div style={{ fontSize: 15, color: '#94a3b8' }}>Trading Margin</div>
+                <div style={{ fontSize: 15, color: '#94a3b8' }}>{reiaTerm('Trading Margin')}</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>
                   {sellerView ? '—' : `+₹${tradingMargin.toFixed(3)}`} <span style={{ fontSize: 15, fontWeight: 400, color: 'var(--slate-500)' }}>/ kWh</span>
                 </div>
@@ -841,7 +842,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
                 <div style={{ color: 'var(--slate-500)', fontSize: 14, marginTop: 4 }}>Designated under Ministry of Power Guidelines</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 14.5 }}>Trading Margin Spread</div>
+                <div style={{ color: '#94a3b8', fontSize: 14.5 }}>{reiaTerm('Trading Margin')} Spread</div>
                 <div style={{ fontWeight: 600, color: '#10b981', marginTop: 2 }}>{sellerView ? NOT_SHOWN : `₹${tradingMargin.toFixed(3)} / unit (${(tradingMargin * 100).toFixed(2)}p)`}</div>
                 <div style={{ color: 'var(--slate-500)', fontSize: 14, marginTop: 4 }}>Period Spread Yield: {sellerView ? '—' : fmtCurrency(totalSpread)}</div>
               </div>

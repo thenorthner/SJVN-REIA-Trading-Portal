@@ -6,6 +6,7 @@ import { SettlementTrailPanel } from './SettlementTrail.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 import { paymentTermsText, rebateText, lpsText, paymentSecurityText } from '../lib/contractRules.js';
 import { askConfirm } from '../lib/dialogs.js';
+import { reiaTerm } from '../reiaBeta.js';
 
 // The working file of one contract, shared by the seller, the buyer and the
 // REIA desk: its documents, project milestones, performance guarantee, the
@@ -653,7 +654,7 @@ function TrailTab({ contract, ws }) {
     ? 'Both ends of the back-to-back chain, with the bills on each leg.'
     : seller
       ? 'Where your power goes and how much, with the bills on your side. The DISCOM\'s tariff, bills and payments, and SJVN\'s margin, are between SJVN and the DISCOM and are not shown here.'
-      : 'Whose power you receive, the PPA tariff and SJVN\'s trading margin that make up your tariff, and your own bills with their late-payment surcharge and rebate. The developer\'s bills and payments are not shown.';
+      : reiaTerm('Whose power you receive, the PPA tariff and SJVN\'s trading margin that make up your tariff, and your own bills with their late-payment surcharge and rebate. The developer\'s bills and payments are not shown.');
   return (
     <div>
       <Note>{note}</Note>

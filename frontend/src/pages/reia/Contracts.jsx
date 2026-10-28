@@ -9,6 +9,7 @@ import { PowerRoutingTree3D, routingPosition, shareMwOf } from '../../components
 import { ROLE_GROUPS } from '../../roles.js';
 import { paymentTermsText, rebateText, lpsText, SECURITY_TYPES, paymentSecurityText } from '../../lib/contractRules.js';
 import { showAlert } from '../../lib/dialogs.js';
+import { reiaTerm } from '../../reiaBeta.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 // Phase B.2: the maker creates, maps and amends a contract and carries a draft
@@ -130,7 +131,7 @@ function termErrors(f, add) {
   if (cap != null && cap > 10000) add('Total Capacity (MW)', `${cap} MW is not credible for one contract — check the figure.`);
   const tariff = n(f.tariff_per_unit);
   if (tariff != null && tariff > 20) add('Base Tariff', `₹${tariff}/unit is not credible — check the figure.`);
-  if (n(f.trading_margin_per_mwh) != null && n(f.trading_margin_per_mwh) < 0) add('Trading Margin', 'Trading margin cannot be negative.');
+  if (n(f.trading_margin_per_mwh) != null && n(f.trading_margin_per_mwh) < 0) add(reiaTerm('Trading Margin'), reiaTerm('Trading margin cannot be negative.'));
   if (n(f.pbg_amount) != null && n(f.pbg_amount) < 0) add('PBG / Security Amount (₹)', 'The amount cannot be negative.');
   if (n(f.lps_grace_days) != null && n(f.lps_grace_days) < 0) add('Late-Payment Surcharge', 'The grace period cannot be negative.');
   if (n(f.rebate_pct) != null && n(f.rebate_days) > 0 && (f.rebate_basis || 'BILL_DATE') === 'BILL_DATE'
@@ -916,7 +917,7 @@ export default function Contracts() {
               </Field>
               <Field label="Base Tariff (₹/unit)"><input required type="number" step="0.01" value={form.tariff_per_unit} onChange={(e) => setForm({ ...form, tariff_per_unit: e.target.value })} /></Field>
               {form.contract_type === 'PSA' && (
-                <Field label="Trading Margin (₹/MWh) — optional">
+                <Field label={reiaTerm('Trading Margin (₹/MWh) — optional')}>
                   <input
                     type="number"
                     step="0.01"
@@ -1131,7 +1132,7 @@ export default function Contracts() {
                     </>
                   )}
                   {selected.contract_type === 'PSA' && (
-                    <tr><td>Trading Margin</td><td>{selected.trading_margin_per_mwh != null
+                    <tr><td>{reiaTerm('Trading Margin')}</td><td>{selected.trading_margin_per_mwh != null
                       ? `₹${selected.trading_margin_per_mwh}/MWh (contract-specific)`
                       : 'Global default (₹70/MWh)'}</td></tr>
                   )}
@@ -1517,7 +1518,7 @@ export default function Contracts() {
                   <input type="number" step="0.01" value={amendForm.tariff_per_unit ?? ''} onChange={(e) => setAmendForm({ ...amendForm, tariff_per_unit: e.target.value })} />
                 </Field>
                 {amendForm.contract_type === 'PSA' && (
-                  <Field label="Trading Margin (₹/MWh)">
+                  <Field label={reiaTerm('Trading Margin (₹/MWh)')}>
                     <input
                       type="number"
                       step="0.01"

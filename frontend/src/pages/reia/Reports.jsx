@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, Table, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { reiaTerm } from '../../reiaBeta.js';
 
 function inrCompact(v) {
   const n = Number(v || 0);
@@ -88,7 +89,7 @@ export default function Reports() {
       setError('No data available to export.');
       return;
     }
-    const headers = ['Month', 'Sales Billed', 'Purchases', 'Gross Margin', 'Trading Margin', 'Rebate Saved', 'LPS Receivable', 'Net Profit', 'Collected', 'Outstanding Receivable', 'Energy (MWh)'];
+    const headers = ['Month', 'Sales Billed', 'Purchases', 'Gross Margin', reiaTerm('Trading Margin'), 'Rebate Saved', 'LPS Receivable', 'Net Profit', 'Collected', 'Outstanding Receivable', 'Energy (MWh)'];
     const rows = (data.months || []).map(r => [
       r.billing_period, r.sales_billed, r.purchase_billed, r.gross_margin, r.trading_margin, r.rebate_saved, r.lps_receivable, r.net_profit, r.collected, r.outstanding_receivable, r.energy_mwh
     ]);
@@ -124,7 +125,7 @@ export default function Reports() {
     { key: 'gross_margin', header: 'Gross Margin', render: (r) => (
       <span style={{ color: r.gross_margin >= 0 ? 'var(--on-green)' : 'var(--red-deep)', fontWeight: 600 }}>{fmtCurrency(r.gross_margin)}</span>
     )},
-    { key: 'trading_margin', header: 'Trading Margin', render: (r) => fmtCurrency(r.trading_margin) },
+    { key: 'trading_margin', header: reiaTerm('Trading Margin'), render: (r) => fmtCurrency(r.trading_margin) },
     { key: 'rebate_saved', header: 'Rebate Saved', render: (r) => fmtCurrency(r.rebate_saved) },
     { key: 'lps_receivable', header: 'LPS Recv.', render: (r) => fmtCurrency(r.lps_receivable) },
     { key: 'net_profit', header: 'Net Profit', render: (r) => (
@@ -248,7 +249,7 @@ export default function Reports() {
             <StatCard label="Total Sales Billed" value={inrCompact(t.sales_billed)} sub={`${t.sales_count || 0} buyer invoices`} />
             <StatCard label="Total Purchases" value={inrCompact(t.purchase_billed)} sub={`${t.purchase_count || 0} developer invoices`} />
             <StatCard label="Gross Margin" value={inrCompact(t.gross_margin)} sub="Sales − Purchases" tone={t.gross_margin >= 0 ? 'good' : 'bad'} />
-            <StatCard label="Trading Margin" value={inrCompact(t.trading_margin)} sub="SJVN margin on PSAs" tone="good" />
+            <StatCard label={reiaTerm('Trading Margin')} value={inrCompact(t.trading_margin)} sub="SJVN margin on PSAs" tone="good" />
             <StatCard label="Rebate Saved" value={inrCompact(t.rebate_saved)} sub="Early-payment rebates" tone="good" />
             <StatCard label="Net Profit" value={inrCompact(t.net_profit)} sub="Gross + rebate + LPS recv − LPS paid" tone={t.net_profit >= 0 ? 'good' : 'bad'} />
             <StatCard label="Collected" value={inrCompact(t.collected)} sub="Received from buyers" />
