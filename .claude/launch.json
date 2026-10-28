@@ -76,6 +76,15 @@
         "cd frontend && VITE_API_TARGET=http://localhost:4003 npx vite --port 5176 --strictPort"
       ],
       "port": 5176
+    },
+    {
+      "name": "frontend-reia-beta",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_REIA_BETA=1 npx vite --port 5180 --strictPort"
+      ],
+      "port": 5180
     }
   ]
 }

@@ -10,6 +10,13 @@ import { GigwProvider } from './gigw/GigwContext.jsx';
 import './styles.css';
 import './gigw/gigw.css';
 import { installChartA11y } from './gigw/chartA11y.js';
+import { REIA_BETA, REIA_BETA_TITLE } from './reiaBeta.js';
+
+// The REIA beta build names the REIA desk alone, in the tab title too.
+if (REIA_BETA) {
+  document.title = REIA_BETA_TITLE;
+  document.querySelector('meta[name="description"]')?.setAttribute('content', 'SJVN Limited (Ministry of Power, Government of India) — REIA Commercial Portal for renewable power bought from generators and sold to discoms.');
+}
 import { registerServiceWorker } from './pwa.js';
 
 installChartA11y();

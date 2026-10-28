@@ -11,12 +11,14 @@ import ThemeToggle from './ThemeToggle.jsx';
 import { Lock, Search } from 'lucide-react';
 import { openPortalSearch } from './PortalSearchModal.jsx';
 import GovStrip, { SkipLink } from '../gigw/GovStrip.jsx';
+import { useGigw } from '../gigw/GigwContext.jsx';
 import GigwFooter from '../gigw/GigwFooter.jsx';
 import IdleTimeout from '../gigw/IdleTimeout.jsx';
 import LastLoginNotice from '../gigw/LastLoginNotice.jsx';
 import ProjectScopeNote from './ProjectScopeNote.jsx';
 import ActingSwitch, { ActingBanner } from './ActingSwitch.jsx';
 import ReadOnlyNotice from './ReadOnlyNotice.jsx';
+import { REIA_BETA } from '../reiaBeta.js';
 import { getNotificationAction, formatTimeAgo } from '../lib/notificationRouting.js';
 
 /**
@@ -336,6 +338,7 @@ const linkIsActive = (l, pathname) => {
  * Collapsed unless it contains the page you are on.
  */
 const NavSubGroup = ({ group, user }) => {
+  const { tUI } = useGigw();
   const location = useLocation();
   const links = group.items.filter((l) => !l.roles || l.roles.includes(user?.role));
   const [isOpen, setIsOpen] = useState(links.some((l) => linkIsActive(l, location.pathname)));
@@ -350,7 +353,7 @@ const NavSubGroup = ({ group, user }) => {
         className="nav-subgroup-title"
         title={pending ? `${pending} of ${links.length} not built yet` : undefined}
       >
-        <span>{group.group}</span>
+        <span>{tUI(group.group)}</span>
         <span className="nav-caret">{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
@@ -362,7 +365,7 @@ const NavSubGroup = ({ group, user }) => {
               end={l.end}
               className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
             >
-              <span style={{ opacity: l.pending ? 0.55 : 1 }}>{l.label}</span>
+              <span style={{ opacity: l.pending ? 0.55 : 1 }}>{tUI(l.label)}</span>
               {/* A screen that is only planned says so in the menu, so nobody
                   opens it expecting data and files a bug when there is none. */}
               {l.pending && (
@@ -377,6 +380,7 @@ const NavSubGroup = ({ group, user }) => {
 };
 
 const NavGroup = ({ section, user }) => {
+  const { tUI } = useGigw();
   const links = (section.links || []).filter((l) => !l.roles || l.roles.includes(user?.role));
   const subGroups = section.groups || [];
   const location = useLocation();
@@ -393,7 +397,7 @@ const NavGroup = ({ section, user }) => {
         onClick={() => setIsOpen(!isOpen)}
         title={isOpen ? 'Collapse section' : 'Expand section'}
       >
-        <span>{section.section}</span>
+        <span>{tUI(section.section)}</span>
         <span className="nav-caret">{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
@@ -414,8 +418,8 @@ const NavGroup = ({ section, user }) => {
                   }
                 }}
               >
-                <span>{l.label}</span>
-                {l.badge && <span className="nav-badge">{l.badge}</span>}
+                <span>{tUI(l.label)}</span>
+                {l.badge && <span className="nav-badge">{tUI(l.badge)}</span>}
                 {isKycLocked && <Lock size={13} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
               </NavLink>
             );
@@ -449,7 +453,7 @@ function getPageContext(pathname, branded, entity, portalKind) {
     '/reia/energy-data': { desk: 'REIA Energy Desk', page: 'Accounting & Validation' },
     '/reia/invoices': { desk: 'REIA Invoicing', page: 'Billing & Surcharge' },
     '/reia/billing-readiness': { desk: 'REIA Invoicing', page: 'Month-Close Board' },
-    '/reia/release-planner': { desk: 'REIA Settlement', page: 'Developer Payout Planner' },
+    '/reia/release-planner': { desk: 'REIA Settlement', page: 'Developer Release Planner' },
     '/reia/note-approvals': { desk: 'REIA Commercial', page: 'Notes for Approval' },
     '/reia/verification': { desk: 'REIA Audit Desk', page: 'Invoice Verification' },
     '/reia/payment-monitoring': { desk: 'REIA Cash Flow', page: 'Payment Monitoring' },
@@ -480,11 +484,13 @@ function getPageContext(pathname, branded, entity, portalKind) {
   if (pathname.startsWith('/thermal')) {
     return { desk: 'Thermal Power Desk', page: 'ECR & Busbar' };
   }
+  if (REIA_BETA) return { desk: 'REIA Commercial Portal', page: 'SJVN Limited' };
   return { desk: 'RE Commercial & Trading', page: 'Enterprise Platform' };
 }
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { tUI } = useGigw();
   const navigate = useNavigate();
   const location = useLocation();
   const [notifications, setNotifications] = useState([]);
@@ -626,8 +632,8 @@ export default function Layout() {
           <div className="brand brand-sjvn">
             <img className="brand-logo brand-logo-sjvn" src="/sjvn-logo.png" alt="SJVN" />
             <div className="brand-text">
-              <strong>RE Commercial &amp; Trading</strong>
-              <span>Platform</span>
+              <strong>{REIA_BETA ? 'REIA Commercial' : tUI('RE Commercial & Trading')}</strong>
+              <span>{REIA_BETA ? 'Portal' : tUI('Platform')}</span>
             </div>
           </div>
         )}
@@ -687,8 +693,8 @@ export default function Layout() {
                 minWidth: 0,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis'
-              }} title={pageCtx.desk}>
-                {pageCtx.desk}
+              }} title={tUI(pageCtx.desk)}>
+                {tUI(pageCtx.desk)}
               </span>
               <span style={{ color: 'var(--slate-400)', fontSize: 12.5, userSelect: 'none', flexShrink: 0 }}>/</span>
               <span style={{ 
@@ -704,7 +710,7 @@ export default function Layout() {
                 flexShrink: 0,
                 maxWidth: 220
               }}>
-                {pageCtx.page}
+                {tUI(pageCtx.page)}
               </span>
             </div>
           </div>
@@ -719,7 +725,7 @@ export default function Layout() {
               aria-label="Search portal or type a command"
             >
               <Search size={14} className="topbar-search-icon" />
-              <span className="topbar-search-text">Search desks, stations or commands...</span>
+              <span className="topbar-search-text">{tUI('Search desks, stations or commands...')}</span>
               <kbd className="topbar-search-kbd">⌘K</kbd>
             </button>
           </div>
@@ -741,7 +747,7 @@ export default function Layout() {
               }}
               title="View Public Portal Home, Policies &amp; RTI Information"
             >
-              <span>Portal Home ↗</span>
+              <span>{tUI('Portal Home ↗')}</span>
             </NavLink>
             <ActingSwitch />
             <ThemeToggle />
@@ -902,43 +908,43 @@ export default function Layout() {
               >
                 <div className="user-avatar">{user?.name?.[0] ?? '?'}</div>
                 <div className="user-meta">
-                  <strong>Welcome, {user?.name}</strong>
+                  <strong>{tUI('Welcome')}, {user?.name}</strong>
                   <span style={{ color: 'var(--on-blue)' }}>
-                    {user?.linked_entity_id ? `Asset: ${user.linked_entity_id}` : user?.role?.replaceAll('_', ' ')}
+                    {user?.linked_entity_id ? `${tUI('Asset')}: ${user.linked_entity_id}` : tUI(user?.role?.replaceAll('_', ' '))}
                   </span>
                 </div>
               </button>
               {showProfile && (
                 <div className="notif-dropdown" role="menu" aria-label="Account" style={{ right: 0, width: 220, padding: 0 }}>
                   <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/user-profile'); setShowProfile(false); }}>
-                    My Account
+                    {tUI('My Account')}
                   </button>
                   {!user?.linked_entity_id && (
                     <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/delegations'); setShowProfile(false); }}>
-                      Additional charge &amp; break-glass
+                      {tUI('Additional charge & break-glass')}
                     </button>
                   )}
                   <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/user-profile#privacy'); setShowProfile(false); }}>
-                    Privacy &amp; data rights
+                    {tUI('Privacy & data rights')}
                   </button>
                   {['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR'].includes(user?.role) && (
                     <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/privacy-requests'); setShowProfile(false); }}>
-                      Data requests &amp; declarations
+                      {tUI('Data requests & declarations')}
                     </button>
                   )}
                   {portfolioPath && (
                     <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate(portfolioPath); setShowProfile(false); }}>
-                      Manage Portfolio
+                      {tUI('Manage Portfolio')}
                     </button>
                   )}
                   <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/home'); setShowProfile(false); }}>
-                    Public Portal &amp; Policies
+                    {tUI('Public Portal & Policies')}
                   </button>
                   <button type="button" role="menuitem" className="notif-item" onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
-                    Change Password
+                    {tUI('Change Password')}
                   </button>
                   <button type="button" role="menuitem" className="notif-item" style={{ borderTop: '1px solid var(--border)', color: 'var(--red)' }} onClick={handleLogout}>
-                    Log out
+                    {tUI('Log out')}
                   </button>
                 </div>
               )}
