@@ -104,3 +104,11 @@ frontend/e2e/.audit-report/
 
 # QA copy of the database used by the backend-test launch config
 backend/qa/
+
+# Stray local reference images and screenshots
+banner.png
+no list.png
+frontend/src/shots/
+frontend/public/images/test-login-*.png
+frontend/public/images/*-reference.*
+

@@ -250,16 +250,18 @@ export default function UrjaEmptyState({
               {/* Happy Smiling Curved Eyes ("^   ^") with Sweet Smile */}
               <g filter="url(#urjaEmptyCyanGlow)">
                 {activeVariant === 'thumbs-up' ? (
-                  // Cheerful playful wink / smile
+                  // Cheerful, adorable smiling eyes
                   <>
                     {/* Left Eye: Big cute anime sparkle eye */}
-                    <circle cx="-11" cy="0" r="5" fill="#38e1ff" />
-                    <circle cx="-12.5" cy="-1.5" r="1.8" fill="#ffffff" />
-                    <circle cx="-9" cy="1.8" r="0.9" fill="#ffffff" />
-                    {/* Right Eye: Happy wink arc */}
-                    <path d="M 5 1 C 9 -4, 15 -4, 19 1" stroke="#38e1ff" strokeWidth="3.4" strokeLinecap="round" fill="none" />
-                    {/* Open cheerful mouth */}
-                    <path d="M -3 6 Q 0 10 3 6 Z" fill="#38e1ff" />
+                    <circle cx="-12" cy="0" r="5.2" fill="#38e1ff" />
+                    <circle cx="-13.5" cy="-1.8" r="1.8" fill="#ffffff" />
+                    <circle cx="-10" cy="1.8" r="0.9" fill="#ffffff" />
+                    {/* Right Eye: Big cute anime sparkle eye */}
+                    <circle cx="12" cy="0" r="5.2" fill="#38e1ff" />
+                    <circle cx="10.5" cy="-1.8" r="1.8" fill="#ffffff" />
+                    <circle cx="14" cy="1.8" r="0.9" fill="#ffffff" />
+                    {/* Sweet cheerful smile */}
+                    <path d="M -3 5 Q 0 9 3 5" stroke="#38e1ff" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                   </>
                 ) : (
                   // Peaceful relaxing smiling eyes ("^   ^")
@@ -294,7 +296,7 @@ export default function UrjaEmptyState({
 
           {/* ===================== POSE ARMS ===================== */}
           {activeVariant === 'thumbs-up' ? (
-            /* THUMBS-UP POSE */
+            /* THUMBS-UP POSE 👍 */
             <g id="thumbs-up-arms">
               {/* Left Arm: Resting gently on hip */}
               <path
@@ -313,35 +315,40 @@ export default function UrjaEmptyState({
               />
               <circle cx="56" cy="142" r="5.5" fill="url(#urjaEmptyGloveGrad)" stroke="#1e40af" strokeWidth="1.5" />
 
-              {/* Right Arm: Raising Thumbs-Up 👍 */}
-              <g>
+              {/* Right Arm: Distinct & Cute Thumbs-Up 👍 */}
+              <g id="thumbs-up-hand">
                 <path
-                  d="M 106 126 Q 120 124 128 116"
+                  d="M 106 126 Q 120 124 126 116"
                   stroke="#2563eb"
                   strokeWidth="10"
                   strokeLinecap="round"
                   fill="none"
                 />
                 <path
-                  d="M 106 126 Q 120 124 128 116"
+                  d="M 106 126 Q 120 124 126 116"
                   stroke="#ffffff"
                   strokeWidth="7"
                   strokeLinecap="round"
                   fill="none"
                 />
-                {/* Glove Hand Fist */}
-                <circle cx="129" cy="115" r="7" fill="url(#urjaEmptyGloveGrad)" stroke="#1e40af" strokeWidth="1.5" />
-                {/* Thumb pointing up 👍 */}
+                {/* Folded fist / knuckles (clearly shows closed fingers) */}
+                <rect x="122" y="113" width="15" height="15" rx="6" fill="url(#urjaEmptyGloveGrad)" stroke="#1e40af" strokeWidth="1.5" />
+                {/* Finger grooves on the fist */}
+                <path d="M 126 118 L 134 118" stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round" />
+                <path d="M 126 122 L 134 122" stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round" />
+                {/* Thumb pointing distinctly UP and RIGHT at an angle (Unmistakable Thumbs-Up 👍) */}
                 <path
-                  d="M 129 114 L 129 104 C 129 101, 134 101, 134 104 L 134 114 Z"
+                  d="M 124 115 C 122 107, 126 99, 132 97 C 137 95, 140 100, 137 107 L 134 115 Z"
                   fill="url(#urjaEmptyGloveGrad)"
                   stroke="#1e40af"
                   strokeWidth="1.5"
                   strokeLinejoin="round"
                 />
-                {/* Energy Sparkle near thumb */}
+                {/* Thumb knuckle shine */}
+                <path d="M 128 102 C 131 100, 134 102, 135 104" stroke="#bae6fd" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                {/* Cheerful energy sparkle near thumb */}
                 <path
-                  d="M 137 100 L 139 96 L 141 100 L 145 102 L 141 104 L 139 108 L 137 104 L 133 102 Z"
+                  d="M 143 93 L 145 88 L 147 93 L 152 95 L 147 97 L 145 102 L 143 97 L 138 95 Z"
                   fill="#facc15"
                 />
               </g>

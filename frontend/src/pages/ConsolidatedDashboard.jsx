@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import api from '../api/client.js';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useGigw } from '../gigw/GigwContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 
 const REPORT_ICONS = {
@@ -82,6 +83,7 @@ const REPORT_GROUPS = [
 
 export default function ConsolidatedDashboard() {
   const { user } = useAuth();
+  const { tUI } = useGigw();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -140,22 +142,22 @@ export default function ConsolidatedDashboard() {
     <div className="dashboard-container">
       <div className="no-print">
         <PageHeader
-          title="Consolidated Executive Dashboard"
-          subtitle="Enterprise-wide portfolio view, risk rollup, and MIS"
+          title={tUI("Consolidated Executive Dashboard")}
+          subtitle={tUI("Enterprise-wide portfolio view, risk rollup, and MIS")}
           actions={
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-outline" disabled={busyReport === '/reports/mis/pdf'}
                 onClick={() => pullReport({ path: '/reports/mis/pdf', file: 'SJVN_Internal_MIS.pdf', title: 'Internal MIS' })}>
-                {busyReport === '/reports/mis/pdf' ? 'Preparing…' : 'Internal MIS (PDF)'}
+                {busyReport === '/reports/mis/pdf' ? tUI('Preparing…') : tUI('Internal MIS (PDF)')}
               </button>
-              <button className="btn" onClick={handlePrint}>Print View</button>
+              <button className="btn" onClick={handlePrint}>{tUI('Print View')}</button>
             </div>
           }
         />
       </div>
 
       <div className="print-only">
-        <h1>Executive Dashboard - SJVN RE Commercial & Trading</h1>
+        <h1>{tUI('Executive Dashboard - SJVN RE Commercial & Trading')}</h1>
         <p>Report generated on: {new Date().toLocaleString()}</p>
         <hr style={{ margin: '20px 0' }} />
       </div>
@@ -168,52 +170,52 @@ export default function ConsolidatedDashboard() {
               <Sparkles size={18} strokeWidth={2.2} />
             </div>
             <div>
-              <h2 className="elite-hero-title">Executive Summary & Strategic Brief</h2>
-              <div className="elite-hero-subtitle">Real-time cross-module portfolio synthesis & risk rollup</div>
+              <h2 className="elite-hero-title">{tUI('Executive Summary & Strategic Brief')}</h2>
+              <div className="elite-hero-subtitle">{tUI('Real-time cross-module portfolio synthesis & risk rollup')}</div>
             </div>
           </div>
           {data.totalUnresolvedExposure > 500000 ? (
             <div className="elite-hero-badge warning">
-              <AlertCircle size={13} strokeWidth={2.5} /> Attention Required: Risk Exposure
+              <AlertCircle size={13} strokeWidth={2.5} /> {tUI('Attention Required: Risk Exposure')}
             </div>
           ) : (
             <div className="elite-hero-badge success">
-              <CheckCircle size={13} strokeWidth={2.5} /> Portfolio Operations Nominal
+              <CheckCircle size={13} strokeWidth={2.5} /> {tUI('Portfolio Operations Nominal')}
             </div>
           )}
         </div>
 
         <p className="elite-hero-text">
-          {data.executiveSummary}
+          {tUI(data.executiveSummary)}
         </p>
 
         <div className="elite-hero-metrics">
           <div className="elite-hero-metric-card">
-            <div className="elite-hero-metric-label">Contracted RE Capacity</div>
+            <div className="elite-hero-metric-label">{tUI('Contracted RE Capacity')}</div>
             <div className="elite-hero-metric-val">
               {fmtNumber(data.reiaContractedCapacity)} <span style={{ fontSize: 14.5, fontWeight: 500, color: '#94a3b8' }}>MW</span>
             </div>
             <div className="elite-hero-metric-sub">
-              {capacityProgress.toFixed(1)}% of 20 GW Target ({fmtNumber(data.targetCapacity)} MW)
+              {capacityProgress.toFixed(1)}% {tUI('of 20 GW Target')} ({fmtNumber(data.targetCapacity)} MW)
             </div>
           </div>
 
           <div className="elite-hero-metric-card">
-            <div className="elite-hero-metric-label">Billing Momentum</div>
+            <div className="elite-hero-metric-label">{tUI('Billing Momentum')}</div>
             <div className="elite-hero-metric-val" style={{ color: data.revenueTrend >= 0 ? '#4ade80' : '#f87171' }}>
               <TrendingUp size={16} strokeWidth={2.5} style={{ transform: data.revenueTrend < 0 ? 'rotate(180deg)' : 'none' }} />
               {data.revenueTrend >= 0 ? '+' : ''}{data.revenueTrend.toFixed(1)}%
             </div>
-            <div className="elite-hero-metric-sub">Month-on-Month Revenue Velocity</div>
+            <div className="elite-hero-metric-sub">{tUI('Month-on-Month Revenue Velocity')}</div>
           </div>
 
           <div className="elite-hero-metric-card" style={{ borderColor: data.totalUnresolvedExposure > 500000 ? 'rgba(239, 68, 68, 0.25)' : undefined }}>
-            <div className="elite-hero-metric-label">Cross-Module Exposure</div>
+            <div className="elite-hero-metric-label">{tUI('Cross-Module Exposure')}</div>
             <div className="elite-hero-metric-val" style={{ color: data.totalUnresolvedExposure > 500000 ? '#fca5a5' : '#f8fafc' }}>
               ₹{(data.totalUnresolvedExposure / 1e7).toFixed(2)} <span style={{ fontSize: 14.5, fontWeight: 500, color: '#94a3b8' }}>Cr</span>
             </div>
             <div className="elite-hero-metric-sub">
-              {data.totalUnresolvedExposure > 500000 ? 'Disputed & overdue exposure pending resolution' : 'Contained within operational threshold'}
+              {data.totalUnresolvedExposure > 500000 ? tUI('Disputed & overdue exposure pending resolution') : tUI('Contained within operational threshold')}
             </div>
           </div>
         </div>
@@ -221,16 +223,16 @@ export default function ConsolidatedDashboard() {
 
       {/* Cross-Module Risk & Target Panel */}
       <div className="grid-2 animate-fade-in-up stagger-2" style={{ marginBottom: 24 }}>
-        <Card title="Enterprise Risk Rollup">
+        <Card title={tUI("Enterprise Risk Rollup")}>
           <div className="detail-grid">
             <div className="detail-item">
-              <span className="detail-label">Total Unresolved Exposure</span>
+              <span className="detail-label">{tUI('Total Unresolved Exposure')}</span>
               <span className="detail-value" style={{ color: data.totalUnresolvedExposure > 500000 ? 'var(--on-red)' : 'var(--on-green)' }}>
                 {fmtCurrency(data.totalUnresolvedExposure)}
               </span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">Payment Security Coverage</span>
+              <span className="detail-label">{tUI('Payment Security Coverage')}</span>
               <span className="detail-value">
                 <Badge type={data.coverageRatio >= 100 ? 'success' : (data.coverageRatio > 50 ? 'warning' : 'danger')}>
                   {data.coverageRatio.toFixed(1)}%
@@ -238,27 +240,27 @@ export default function ConsolidatedDashboard() {
               </span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">Data Validation Completeness</span>
+              <span className="detail-label">{tUI('Data Validation Completeness')}</span>
               <span className="detail-value">{data.dataCompleteness}%</span>
             </div>
           </div>
         </Card>
 
-        <Card title="Capacity Growth Target (20 GW Vision)">
+        <Card title={tUI("Capacity Growth Target (20 GW Vision)")}>
           <div style={{ padding: '20px 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <strong>Current: {fmtNumber(data.reiaContractedCapacity)} MW</strong>
-              <strong>Target: {fmtNumber(data.targetCapacity)} MW</strong>
+              <strong>{tUI('Current:')} {fmtNumber(data.reiaContractedCapacity)} MW</strong>
+              <strong>{tUI('Target:')} {fmtNumber(data.targetCapacity)} MW</strong>
             </div>
             <div style={{ width: '100%', backgroundColor: 'var(--slate-200)', borderRadius: 8, height: 24, overflow: 'hidden' }}>
               <div style={{ width: `${capacityProgress}%`, backgroundColor: 'var(--primary)', height: '100%', transition: 'width 0.5s ease' }} />
             </div>
-            <p style={{ textAlign: 'right', marginTop: 8, fontSize: 14.5, color: 'var(--text-muted)' }}>{capacityProgress.toFixed(1)}% achieved</p>
+            <p style={{ textAlign: 'right', marginTop: 8, fontSize: 14.5, color: 'var(--text-muted)' }}>{capacityProgress.toFixed(1)}% {tUI('achieved')}</p>
           </div>
         </Card>
       </div>
 
-      <h3 className="animate-fade-in-up stagger-3" style={{ margin: '30px 0 15px 0', color: 'var(--on-blue)', borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>Portfolio Overview</h3>
+      <h3 className="animate-fade-in-up stagger-3" style={{ margin: '30px 0 15px 0', color: 'var(--on-blue)', borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>{tUI('Portfolio Overview')}</h3>
       <div className="kpi-grid animate-fade-in-up stagger-3">
         <StatCard label="Total Portfolio Billed Value" value={fmtCurrency(data.totalPortfolioValue)} tone="blue" hint={<div>MoM Trend: {getTrendIcon(data.revenueTrend)}</div>} onClick={() => navigate('/reia')} />
         <StatCard label="Overall Trading Profitability" value={fmtCurrency(data.overallProfitability)} tone="green" hint="SJVN trading margin across all trades" onClick={() => navigate('/trading')} />

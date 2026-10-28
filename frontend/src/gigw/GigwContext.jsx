@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { STRINGS } from './strings.js';
+import { domTranslator, tUI } from './translator.js';
 
 /**
  * Viewer preferences GIGW 3.0 asks a government portal to offer on every page:
@@ -37,6 +38,7 @@ export function GigwProvider({ children }) {
   useEffect(() => {
     write(KEYS.lang, lang);
     document.documentElement.setAttribute('lang', lang);
+    domTranslator.setLang(lang);
   }, [lang]);
   useEffect(() => {
     write(KEYS.size, textSize);
@@ -48,13 +50,15 @@ export function GigwProvider({ children }) {
   }, [contrast]);
 
   const t = useCallback((key, vars) => translate(lang, key, vars), [lang]);
+  const translateUI = useCallback((text) => tUI(text, lang), [lang]);
 
   const value = useMemo(() => ({
     lang, setLang, toggleLang: () => setLang((l) => (l === 'en' ? 'hi' : 'en')),
     textSize, setTextSize,
     contrast, setContrast, toggleContrast: () => setContrast((c) => (c === 'high' ? 'normal' : 'high')),
     t,
-  }), [lang, textSize, contrast, t]);
+    tUI: translateUI,
+  }), [lang, textSize, contrast, t, translateUI]);
 
   return <GigwContext.Provider value={value}>{children}</GigwContext.Provider>;
 }
@@ -75,5 +79,6 @@ export function useGigw() {
     textSize: 'md', setTextSize: () => {},
     contrast: 'normal', setContrast: () => {}, toggleContrast: () => {},
     t: (key, vars) => translate('en', key, vars),
+    tUI: (text) => text,
   };
 }
