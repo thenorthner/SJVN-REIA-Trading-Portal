@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import SjvnBotMascot from '../components/SjvnBotMascot.jsx';
 import { showAlert } from '../lib/dialogs.js';
+import { REIA_BETA, REIA_BETA_HOME, REIA_BETA_TITLE } from '../reiaBeta.js';
 
 export function landingFor(user, from) {
   const path = from?.pathname || '';
@@ -40,7 +41,15 @@ export default function Login() {
   const location = useLocation();
 
   const searchParams = new URLSearchParams(location.search);
-  const initialDesk = searchParams.get('desk')?.toUpperCase();
+  const reiaOnly = REIA_BETA || searchParams.get('desk')?.toUpperCase() === 'REIA';
+  const initialDesk = reiaOnly ? 'REIA' : searchParams.get('desk')?.toUpperCase();
+
+  useEffect(() => {
+    if (!reiaOnly) return undefined;
+    const prev = document.title;
+    document.title = REIA_BETA_TITLE;
+    return () => { document.title = prev; };
+  }, [reiaOnly]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -100,7 +109,10 @@ export default function Login() {
           height: '100%',
           maxHeight: '100vh',
           boxSizing: 'border-box',
-          background: `
+          // The REIA-only sign-in drops the dam photograph: it is not REIA.
+          background: reiaOnly
+            ? 'radial-gradient(circle at 85% 20%, rgba(250, 204, 21, 0.28) 0%, rgba(250, 204, 21, 0) 40%), linear-gradient(120deg, #041f4b 0%, #0b3a7a 60%, #0e6b5c 100%)'
+            : `
             linear-gradient(
               135deg,
               rgba(4, 31, 75, 0.78) 0%,
@@ -139,15 +151,17 @@ export default function Login() {
               backdropFilter: 'blur(8px)',
             }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
-              ENTERPRISE COMMERCIAL CONSOLE
+              {reiaOnly ? 'REIA COMMERCIAL PORTAL' : 'ENTERPRISE COMMERCIAL CONSOLE'}
             </div>
 
             <h1 style={{ fontSize: 'clamp(28px, 2.8vw, 38px)', fontWeight: 800, lineHeight: 1.2, marginBottom: 14, color: '#ffffff' }}>
-              Integrated Energy Commercial &amp; Trading Platform
+              {reiaOnly ? 'Renewable Energy Implementing Agency Portal' : <>Integrated Energy Commercial &amp; Trading Platform</>}
             </h1>
 
             <p style={{ fontSize: 16, color: '#e2e8f0', lineHeight: 1.5, margin: 0 }}>
-              Unified sovereign gateway for Renewable Energy procurement (REIA), Power Market trading on synchronized exchanges (IEX, PXIL, HPX), and Hydro-Thermal generation billing.
+              {reiaOnly
+                ? 'SJVN\'s single window for renewable power bought from generators and sold to discoms: contracts, energy accounts, bills, payments, disputes and reconciliation.'
+                : 'Unified sovereign gateway for Renewable Energy procurement (REIA), Power Market trading on synchronized exchanges (IEX, PXIL, HPX), and Hydro-Thermal generation billing.'}
             </p>
           </div>
 
@@ -197,7 +211,7 @@ export default function Login() {
             alignItems: 'center',
             zIndex: 10
           }}>
-            <Link to="/" style={{ fontSize: 14.5, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Link to={reiaOnly && !REIA_BETA ? REIA_BETA_HOME : '/'} style={{ fontSize: 14.5, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               ← Return to Portal Home
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

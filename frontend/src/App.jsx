@@ -14,6 +14,7 @@ import { Sparkles } from 'lucide-react';
 
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const PublicHome = lazy(() => import('./pages/public/PublicHome.jsx'));
+const ReiaBetaHome = lazy(() => import('./pages/public/ReiaBetaHome.jsx'));
 const PolicyPage = lazy(() => import('./pages/public/PolicyPage.jsx'));
 const Sitemap = lazy(() => import('./pages/public/PolicyPage.jsx').then((m) => ({ default: m.Sitemap })));
 const PrivacyRequests = lazy(() => import('./pages/settings/PrivacyRequests.jsx'));
@@ -184,6 +185,7 @@ const IexBidBookReport = lazy(() => import('./pages/trading/IexBidBookReport.jsx
 const ExchangeApplications = lazy(() => import('./pages/trading/ExchangeApplications.jsx'));
 const UpdateCharges = lazy(() => import('./pages/trading/UpdateCharges.jsx'));
 const PendingScreen = lazy(() => import('./pages/trading/PendingScreen.jsx'));
+import { REIA_BETA, REIA_BETA_HOME } from './reiaBeta.js';
 import GuidedPage from './components/GuidedPage.jsx';
 const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
 const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
@@ -286,7 +288,7 @@ function RootShell() {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) return <RouteFallback />;
-  if (!user && location.pathname === '/') return <PublicHome />;
+  if (!user && location.pathname === '/') return REIA_BETA ? <ReiaBetaHome /> : <PublicHome />;
   return (
     <ProtectedRoute>
       <Layout />
@@ -374,8 +376,9 @@ export default function App() {
       <Route path="/circulars" element={<PublicCirculars />} />
       <Route path="/public-circulars" element={<Navigate to="/circulars" replace />} />
       <Route path="/disclosures" element={<Navigate to="/circulars" replace />} />
-      <Route path="/home" element={<PublicHome />} />
-      <Route path="/portal" element={<PublicHome />} />
+      <Route path="/home" element={REIA_BETA ? <ReiaBetaHome /> : <PublicHome />} />
+      <Route path="/portal" element={REIA_BETA ? <ReiaBetaHome /> : <PublicHome />} />
+      <Route path={REIA_BETA_HOME} element={<ReiaBetaHome />} />
       <Route path="/404" element={<NotFound standalone />} />
 
       <Route path="/" element={<RootShell />}>
