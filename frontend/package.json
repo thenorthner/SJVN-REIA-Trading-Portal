@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "VITE_REIA_BETA=0 vite",
     "build": "vite build",
+    "build:full": "VITE_REIA_BETA=0 vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

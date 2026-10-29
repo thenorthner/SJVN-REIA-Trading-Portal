@@ -14,7 +14,7 @@ Server: Windows VM 192.168.0.2 · Apache:80 → Node:4000 · IIS:443 placeholder
 1. [ ] Stop Node service
 2. [ ] **Backup** `backend/src/db/platform.db` (+ `uploads/`) to a dated folder
 3. [ ] Pull/copy code (branch `feat/trading-settlement-billing`), `npm ci` in backend
-4. [ ] Build frontend with the REIA beta flag: `VITE_REIA_BETA=1 npx vite build`, and place `dist/` where Apache serves it ("/" then opens the REIA-only home; sign-in shows REIA only)
+4. [ ] Build frontend: `npm run build` in `frontend/` (the REIA beta is the default via `frontend/.env.production`; "/" opens the REIA-only home, sign-in shows REIA only). Node serves `frontend/dist`. Never `npm run build:full` on the beta server: that is the full portal
 5. [ ] Confirm `.env` present (JWT secret, NOAR key/secret — never regenerate NOAR key)
 6. [ ] Start Node (DB migrations run on boot); check log for errors
 7. [ ] Apache proxy still forwards :80 → :4000
