@@ -5125,12 +5125,6 @@ html[data-contrast="high"] :is(.gigw-pm-quote-badge, .gigw-initiatives-eyebrow, 
 .gigw-form-done { padding: 16px 18px; border: 1px solid var(--t-green-line); background: var(--t-green-50); color: var(--on-green); border-radius: 8px; font-size: 16px; }
 
 /* REIA beta home: no dam photograph (it is not REIA), a beta mark on the title. */
-.gigw-hero-beta .gigw-hero-panoramic-bg {
-  background-image:
-    radial-gradient(640px 380px at 86% 12%, rgba(245, 184, 46, 0.30), transparent 70%),
-    radial-gradient(560px 420px at 6% 100%, rgba(16, 185, 129, 0.30), transparent 70%),
-    linear-gradient(135deg, #06275c 0%, #0b3f8f 55%, #0c6a78 100%);
-}
 .gigw-beta-pill {
   display: inline-flex; align-items: center; padding: 2px 10px; margin-right: 10px; border-radius: 999px;
   background: #f5b82e; color: #3a2500; font-size: 13px; font-weight: 800; letter-spacing: 0.08em;

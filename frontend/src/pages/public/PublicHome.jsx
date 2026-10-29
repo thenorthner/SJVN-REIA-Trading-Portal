@@ -268,18 +268,19 @@ export default function PublicHome({ beta = false }) {
       <section className={`gigw-hero-panoramic${beta ? ' gigw-hero-beta' : ''}`} aria-labelledby="panoramic-hero-title">
         {/* Static panoramic dam picture. DBIM v3 s.6.1.1 caps a banner at 500 KB:
             AVIF 197 KB, WebP 454 KB; the 3.7 MB PNG is not served. */}
-        {!beta && <picture className="gigw-hero-panoramic-picture" aria-hidden="true">
+        <picture className="gigw-hero-panoramic-picture" aria-hidden="true">
           <source srcSet="/images/sjvn-hero-panoramic.avif?v=njhps" type="image/avif" />
+          {/* The beta names no other desk, so its decorative copy carries no alt. */}
           <img
             src="/images/sjvn-hero-panoramic.webp?v=njhps"
-            alt="Panoramic aerial view of SJVN Nathpa Jhakri Dam Spillway and Hydro Power Station"
+            alt={beta ? '' : 'Panoramic aerial view of SJVN Nathpa Jhakri Dam Spillway and Hydro Power Station'}
             className="gigw-hero-panoramic-img"
             width="1920"
             height="1080"
             fetchpriority="high"
             decoding="async"
           />
-        </picture>}
+        </picture>
         <div className="gigw-hero-panoramic-bg" aria-hidden="true" />
 
         <div className="gigw-hero-panoramic-overlay" aria-hidden="true" />
