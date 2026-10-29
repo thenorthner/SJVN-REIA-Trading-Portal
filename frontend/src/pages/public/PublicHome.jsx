@@ -500,10 +500,10 @@ export default function PublicHome({ beta = false }) {
           })}
 
           {beta && (
-            <div className="gigw-desk-card reveal-fade-up reveal-stagger-2" style={{ '--card-accent': '#10b981' }}>
+            <div className="gigw-desk-card reveal-fade-up reveal-stagger-2" style={{ '--card-accent': 'var(--beta-accent)' }}>
               <div className="gigw-desk-header">
-                <div className="gigw-desk-icon-wrap">
-                  <Sparkles size={26} color="#10b981" />
+                <div className="gigw-desk-icon-wrap" style={{ color: 'var(--beta-accent)' }}>
+                  <Sparkles size={26} color="currentColor" />
                 </div>
                 <div>
                   <span className="gigw-desk-badge">Pre-launch · By Invitation</span>
@@ -515,7 +515,7 @@ export default function PublicHome({ beta = false }) {
               <div className="gigw-desk-features">
                 <div className="gigw-desk-features-header">
                   <div className="gigw-features-title-wrap">
-                    <span className="gigw-features-status-dot" style={{ backgroundColor: '#10b981' }} aria-hidden="true" />
+                    <span className="gigw-features-status-dot" style={{ backgroundColor: 'var(--beta-accent)' }} aria-hidden="true" />
                     <strong className="gigw-features-title">How to take part:</strong>
                   </div>
                   <span className="gigw-features-count-badge" aria-label={`${BETA_NOTES.length} steps`}>{BETA_NOTES.length}</span>

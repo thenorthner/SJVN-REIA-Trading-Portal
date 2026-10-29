@@ -5125,15 +5125,47 @@ html[data-contrast="high"] :is(.gigw-pm-quote-badge, .gigw-initiatives-eyebrow, 
 .gigw-form-done { padding: 16px 18px; border: 1px solid var(--t-green-line); background: var(--t-green-50); color: var(--on-green); border-radius: 8px; font-size: 16px; }
 
 /* REIA beta home: no dam photograph (it is not REIA), a beta mark on the title. */
-.gigw-beta-pill {
-  display: inline-flex; align-items: center; padding: 2px 10px; margin-right: 10px; border-radius: 999px;
-  background: #f5b82e; color: #3a2500; font-size: 13px; font-weight: 800; letter-spacing: 0.08em;
-}
+/* REIA beta marks. One sky-blue accent that sits with the DBIM blue: glass on
+   the hero photo, a tinted chip on the masthead. */
+:root { --beta-accent: #0369a1; --beta-glow: #7dd3fc; }
+:root[data-theme="dark"] { --beta-accent: #7dd3fc; }
+.gigw-beta-pill,
 .gigw-beta-tag {
-  display: inline-block; vertical-align: middle; margin-left: 10px; padding: 4px 14px; border-radius: 999px;
-  background: linear-gradient(90deg, #f5b82e, #10b981); color: #062a1f;
-  font-size: 0.42em; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.4;
+  display: inline-flex; align-items: center; gap: 0.45em; vertical-align: middle;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.30), rgba(99, 102, 241, 0.30));
+  border: 1px solid rgba(125, 211, 252, 0.65);
+  box-shadow: 0 4px 14px rgba(8, 47, 73, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1.3;
 }
-.gigw-beta-tag-sm { font-size: 12.5px; padding: 2px 9px; margin-left: 8px; }
+.gigw-beta-pill::before,
+.gigw-beta-tag::before {
+  content: ''; width: 0.5em; height: 0.5em; border-radius: 50%; flex-shrink: 0;
+  background: var(--beta-glow);
+  box-shadow: 0 0 0 0.18em rgba(125, 211, 252, 0.25), 0 0 8px var(--beta-glow);
+  animation: gigw-beta-pulse 2.4s ease-in-out infinite;
+}
+.gigw-beta-pill { padding: 3px 12px 3px 10px; margin-right: 10px; font-size: 12.5px; }
+.gigw-beta-tag { margin-left: 12px; padding: 0.32em 0.9em 0.32em 0.75em; font-size: 0.34em; }
+/* On the masthead the chip sits on the page surface, so it takes the theme. */
+.gigw-beta-tag.gigw-beta-tag-sm {
+  margin-left: 10px; padding: 3px 10px 3px 8px; font-size: 12px; letter-spacing: 0.1em;
+  color: var(--beta-accent);
+  background: color-mix(in srgb, var(--beta-accent) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--beta-accent) 40%, transparent);
+  box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.gigw-beta-tag.gigw-beta-tag-sm::before { background: var(--beta-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--beta-accent) 18%, transparent); }
+@keyframes gigw-beta-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .gigw-beta-pill::before, .gigw-beta-tag::before { animation: none; } }
+:root[data-contrast="high"] .gigw-beta-pill,
+:root[data-contrast="high"] .gigw-beta-tag {
+  background: #000; color: #ffff00; border-color: #fff; box-shadow: none; backdrop-filter: none;
+}
+:root[data-contrast="high"] .gigw-beta-pill::before,
+:root[data-contrast="high"] .gigw-beta-tag::before { background: #ffff00; box-shadow: none; animation: none; }
 .gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 860px; margin-left: auto; margin-right: auto; }
 @media (max-width: 720px) { .gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: 1fr; } }
