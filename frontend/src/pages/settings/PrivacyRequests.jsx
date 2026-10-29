@@ -12,26 +12,31 @@ import { useAuth } from '../../context/AuthContext.jsx';
  * Information Manager (admins) also answers feedback from the public Feedback
  * page here (GIGW 3.0 quality guideline 11).
  */
-const FEEDBACK_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+const FEEDBACK_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER'];
+// The REIA checker comes here for the feedback alone, not the DPO's queues.
+const DPO_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR'];
 const FB_CATEGORY = { content: 'Content', accessibility: 'Accessibility', technical: 'Technical', translation: 'Translation', suggestion: 'Suggestion' };
 const STATUSES = ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];
 const TYPE_LABEL = Object.fromEntries(REQUEST_TYPES.map((t) => [t.value, t.label.split(' —')[0].split(' /')[0]]));
 
 export default function PrivacyRequests() {
-  const [tab, setTab] = useState('requests');
+  const { user } = useAuth();
+  const canDpo = DPO_ROLES.includes(user?.role);
+  const canFeedback = FEEDBACK_ROLES.includes(user?.role);
+  const [tab, setTab] = useState(canDpo ? 'requests' : 'feedback');
   const [rows, setRows] = useState([]);
   const [decls, setDecls] = useState([]);
   const [status, setStatus] = useState('');
   const [editing, setEditing] = useState(null);
   const [popup, setPopup] = useState(null);
-  const { user } = useAuth();
-  const canFeedback = FEEDBACK_ROLES.includes(user?.role);
   const [feedback, setFeedback] = useState([]);
   const [fbEditing, setFbEditing] = useState(null);
 
   const load = () => {
-    api.privacy.allRequests(status ? { status } : undefined).then(setRows).catch(() => setRows([]));
-    api.privacy.declarations({ limit: 500 }).then(setDecls).catch(() => setDecls([]));
+    if (canDpo) {
+      api.privacy.allRequests(status ? { status } : undefined).then(setRows).catch(() => setRows([]));
+      api.privacy.declarations({ limit: 500 }).then(setDecls).catch(() => setDecls([]));
+    }
     if (canFeedback) api.privacy.feedback().then(setFeedback).catch(() => setFeedback([]));
   };
 
@@ -66,12 +71,18 @@ export default function PrivacyRequests() {
 
   return (
     <div>
-      <PageHeader title="Data requests & declarations" subtitle={`DPDP Act 2023 data-principal requests, the statutory declaration register${canFeedback ? ', and public feedback' : ''}`} />
-      <Tabs>
-        <Tab active={tab === 'requests'} onClick={() => setTab('requests')}>Data-principal requests</Tab>
-        <Tab active={tab === 'declarations'} onClick={() => setTab('declarations')}>Declaration register</Tab>
-        {canFeedback && <Tab active={tab === 'feedback'} onClick={() => setTab('feedback')}>Public feedback</Tab>}
-      </Tabs>
+      {canDpo ? (
+        <>
+          <PageHeader title="Data requests & declarations" subtitle={`DPDP Act 2023 data-principal requests, the statutory declaration register${canFeedback ? ', and public feedback' : ''}`} />
+          <Tabs>
+            <Tab active={tab === 'requests'} onClick={() => setTab('requests')}>Data-principal requests</Tab>
+            <Tab active={tab === 'declarations'} onClick={() => setTab('declarations')}>Declaration register</Tab>
+            {canFeedback && <Tab active={tab === 'feedback'} onClick={() => setTab('feedback')}>Public feedback</Tab>}
+          </Tabs>
+        </>
+      ) : (
+        <PageHeader title="Public feedback" subtitle="What visitors sent from the portal's Feedback page — reply to them and close each one" />
+      )}
 
       {tab === 'feedback' && canFeedback && (
         <Card title="Feedback from the public Feedback page">
@@ -92,7 +103,7 @@ export default function PrivacyRequests() {
         </Card>
       )}
 
-      {tab === 'requests' && (
+      {tab === 'requests' && canDpo && (
         <Card
           title="Requests"
           actions={(
@@ -122,7 +133,7 @@ export default function PrivacyRequests() {
         </Card>
       )}
 
-      {tab === 'declarations' && (
+      {tab === 'declarations' && canDpo && (
         <Card title="Statutory declarations (latest 500)">
           <Table
             caption="Statutory declaration register"

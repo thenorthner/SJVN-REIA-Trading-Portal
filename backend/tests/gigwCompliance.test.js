@@ -101,6 +101,20 @@ describe('public feedback (GIGW 3.0 quality 11)', () => {
     expect(done.status).toBe(200);
     expect(done.body).toMatchObject({ status: 'REPLIED', replied_by: admin.id });
   });
+
+  it('lets the REIA checker answer it too, without opening the DPO queues', async () => {
+    const { body } = await request(app).post('/api/public/feedback').send(good);
+    const { signToken } = await import('../src/middleware/auth.js');
+    const checker = makeUser('REIA_CHECKER');
+    const token = signToken(checker);
+    const list = await request(app).get('/api/privacy/admin/feedback').set(auth(token));
+    expect(list.status).toBe(200);
+    expect(list.body.some((r) => r.id === body.id)).toBe(true);
+    const closed = await request(app).patch(`/api/privacy/admin/feedback/${body.id}`).set(auth(token)).send({ status: 'CLOSED' });
+    expect(closed.body).toMatchObject({ status: 'CLOSED', replied_by: checker.id });
+    expect((await request(app).get('/api/privacy/admin/requests').set(auth(token))).status).toBe(403);
+    expect((await request(app).get('/api/privacy/admin/declarations').set(auth(token))).status).toBe(403);
+  });
 });
 
 describe('statutory declaration', () => {

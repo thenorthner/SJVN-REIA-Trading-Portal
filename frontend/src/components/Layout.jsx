@@ -934,6 +934,11 @@ export default function Layout() {
                       {tUI('Data requests & declarations')}
                     </button>
                   )}
+                  {user?.role === 'REIA_CHECKER' && (
+                    <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/privacy-requests'); setShowProfile(false); }}>
+                      {tUI('Public feedback')}
+                    </button>
+                  )}
                   {portfolioPath && (
                     <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate(portfolioPath); setShowProfile(false); }}>
                       {tUI('Manage Portfolio')}

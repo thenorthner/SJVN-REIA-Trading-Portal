@@ -686,7 +686,7 @@ export default function App() {
         <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NocUpdation /></ProtectedRoute>} />
         <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-status" /></ProtectedRoute>} />
 
-        <Route path="settings/privacy-requests" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR']}><PrivacyRequests /></ProtectedRoute>} />
+        <Route path="settings/privacy-requests" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR', 'REIA_CHECKER']}><PrivacyRequests /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

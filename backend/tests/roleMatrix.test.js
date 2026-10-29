@@ -19,8 +19,6 @@ const PLATFORM_ADMINS = new Set(['SJVN_ADMIN', 'IT_SUPER_ADMIN']);
 // Governance kept with the platform administrators on purpose, with why.
 const ADMIN_GOVERNANCE = {
   'PATCH /api/privacy/admin/requests/:id': 'Data Protection Officer queue (DPDP Act) — governance, not a transaction',
-  'GET /api/privacy/admin/feedback': 'Web Information Manager queue for public feedback (GIGW 3.0) — governance, not a transaction',
-  'PATCH /api/privacy/admin/feedback/:id': 'Web Information Manager replies to public feedback (GIGW 3.0) — governance, not a transaction',
   'POST /api/entities/:id/own-station': 'Marks an entity as an SJVN-owned station — master data',
 };
 // Whole areas that are governance (Target #2 Phase B): masters are the

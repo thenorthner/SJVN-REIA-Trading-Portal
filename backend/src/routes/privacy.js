@@ -146,7 +146,9 @@ router.get('/admin/declarations', requireRole(...DPO_ROLES), (req, res) => {
 });
 
 // The Web Information Manager's queue for feedback from the public Feedback page.
-const FEEDBACK_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+// The REIA checker (once "REIA Admin") answers it too: in the REIA beta the
+// feedback is about the REIA desk's own screens.
+const FEEDBACK_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER'];
 router.get('/admin/feedback', requireRole(...FEEDBACK_ROLES), (req, res) => {
   const status = String(req.query.status || '');
   const rows = ['NEW', 'REPLIED', 'CLOSED'].includes(status)
