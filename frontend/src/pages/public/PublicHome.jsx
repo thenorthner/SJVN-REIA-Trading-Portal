@@ -361,24 +361,6 @@ export default function PublicHome({ beta = false }) {
               )}
             </h1>
 
-            <p className="gigw-panoramic-lead">
-              {beta
-                ? (lang === 'hi'
-                  ? 'नवीकरणीय ऊर्जा कार्यान्वयन एजेंसी (REIA) के रूप में एसजेवीएन उत्पादकों से सौर एवं पवन ऊर्जा खरीदकर वितरण कंपनियों को बेचता है। अनुबंध, ऊर्जा लेखा, बिलिंग, भुगतान, विवाद एवं मिलान: सब एक पोर्टल पर। यह बीटा संस्करण आमंत्रित उपयोगकर्ताओं के परीक्षण हेतु है।'
-                  : lang === 'gu'
-                  ? 'પુનઃપ્રાપ્ય ઊર્જા અમલીકરણ એજન્સી (REIA) તરીકે એસજેવીએન ઉત્પાદકો પાસેથી સૌર અને પવન ઊર્જા ખરીદીને વિતરણ કંપનીઓને વેચે છે. કરાર, ઊર્જા હિસાબ, બિલિંગ, ચુકવણી, વિવાદ અને મેળવણી: બધું એક પોર્ટલ પર. આ બીટા આમંત્રિત વપરાશકર્તાઓના પરીક્ષણ માટે છે.'
-                  : lang === 'mr'
-                  ? 'नवीकरणीय ऊर्जा अंमलबजावणी संस्था (REIA) म्हणून एसजेव्हीएन उत्पादकांकडून सौर व पवन ऊर्जा खरेदी करून वितरण कंपन्यांना विकते. करार, ऊर्जा लेखा, बिलिंग, देयके, विवाद व जुळवणी: सर्व एकाच पोर्टलवर. ही बीटा आवृत्ती आमंत्रित वापरकर्त्यांच्या चाचणीसाठी आहे.'
-                  : 'As the Renewable Energy Implementing Agency, SJVN buys solar and wind power from generators and sells it to distribution companies. Contracts, energy accounts, billing, payments, disputes and reconciliation, all on one portal. This beta is open to invited users for testing before launch.')
-                : lang === 'hi'
-                ? 'भारत के स्वच्छ ऊर्जा परिवर्तन को सशक्त बनाने वाला केंद्रीय उद्यम मंच। अक्षय ऊर्जा कार्यान्वयन (REIA), विद्युत बाज़ार व्यापार एवं जल-ताप वाणिज्यिक निपटान का एकीकृत राष्ट्रीय पोर्टल।'
-                : lang === 'gu'
-                ? 'ભારતના સ્વચ્છ ઊર્જા પરિવર્તનને સશક્ત બનાવતું કેન્દ્રીય પ્લેટફોર્મ. પુનઃપ્રાપ્ય ઊર્જા (REIA), વીજ બજાર ટ્રેડિંગ અને હાઇડ્રો-થર્મલ સેટલમેન્ટનું એકીકૃત પોર્ટલ.'
-                : lang === 'mr'
-                ? 'भारताच्या स्वच्छ ऊर्जा परिवर्तनाला बळ देणारे मध्यवर्ती व्यासपीठ. नवीकरणीय ऊर्जा (REIA), वीज बाजार व्यापार आणि जल-औष्णिक व्यावसायिक सेटलमेंटचे एकात्मिक पोर्टल.'
-                : 'A central enterprise platform empowering India\'s clean energy transition. Unified portal for Renewable Energy Implementation (REIA), Power Market Trading, and Hydro-Thermal Commercial Settlements.'}
-            </p>
-
             <div className="gigw-hero-btn-row">
               <Link to={user ? getDashboardPath() : '/login'} className="btn-access-portal">
                 <Lock size={15} />
