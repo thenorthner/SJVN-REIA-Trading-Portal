@@ -5,6 +5,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber, StatementViewer } from '../../components/ui.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { REIA_BETA } from '../../reiaBeta.js';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
@@ -435,7 +436,7 @@ export default function Reconciliation() {
         <select value={filters.scope} onChange={(e) => setFilters({ ...filters, scope: e.target.value })}>
           <option value="">All scopes</option>
           <option value="REIA_CONTRACT">REIA Contract</option>
-          <option value="TRADING_CLIENT">Trading</option>
+          {!REIA_BETA && <option value="TRADING_CLIENT">Trading</option>}
         </select>
         <select value={filters.aging} onChange={(e) => setFilters({ ...filters, aging: e.target.value })}>
           <option value="">All aging</option>
@@ -459,7 +460,7 @@ export default function Reconciliation() {
           <Field label="Scope">
             <select value={runForm.scope} onChange={(e) => setRunForm({ ...runForm, scope: e.target.value })}>
               <option value="REIA_CONTRACT">REIA Contract (PPA/PSA)</option>
-              <option value="TRADING_CLIENT">Trading Client</option>
+              {!REIA_BETA && <option value="TRADING_CLIENT">Trading Client</option>}
             </select>
           </Field>
           {runForm.scope === 'REIA_CONTRACT' ? (

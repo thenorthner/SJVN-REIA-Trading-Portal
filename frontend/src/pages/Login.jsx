@@ -8,14 +8,18 @@ import GigwFooter from '../gigw/GigwFooter.jsx';
 import { isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { 
   Mail, Lock, ArrowRight, ShieldCheck, ChevronRight, Leaf, BarChart3, Handshake, 
-  Globe2, CheckCircle2, Eye, EyeOff
+  Globe2, CheckCircle2, Eye, EyeOff, Zap
 } from 'lucide-react';
 import SjvnBotMascot from '../components/SjvnBotMascot.jsx';
 import { showAlert } from '../lib/dialogs.js';
-import { REIA_BETA, REIA_BETA_HOME, REIA_BETA_TITLE } from '../reiaBeta.js';
+import {
+  REIA_BETA, REIA_BETA_HOME, REIA_BETA_TITLE, inReiaBeta, betaLanding, BETA_DEMO_ACCOUNTS, BETA_DEMO_PASSWORD,
+} from '../reiaBeta.js';
 
 export function landingFor(user, from) {
   const path = from?.pathname || '';
+  // The beta opens REIA screens only: anywhere else starts on the REIA landing.
+  if (REIA_BETA && !inReiaBeta(path || '/')) return betaLanding(user?.role);
   if (!path || path === '/' || path.startsWith('/login')) {
     const role = user?.role || '';
     if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return '/hydro-thermal';
@@ -60,6 +64,22 @@ export default function Login() {
   const [inputFocus, setInputFocus] = useState(null); // 'email' | 'password' | null
 
   const from = location.state?.from || null;
+
+  // Beta only: sign straight in as one of the test accounts.
+  async function demoSignIn(demoEmail) {
+    if (!demoEmail || loading) return;
+    setEmail(demoEmail);
+    setPassword(BETA_DEMO_PASSWORD);
+    setError('');
+    setLoading(true);
+    try {
+      const signedIn = await login(demoEmail, BETA_DEMO_PASSWORD);
+      navigate(landingFor(signedIn, from), { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -380,6 +400,48 @@ export default function Login() {
                 {loading ? 'Authenticating...' : <>Sign In <ArrowRight size={16} /></>}
               </button>
             </form>
+
+            {REIA_BETA && (
+              <div style={{ marginTop: 22, paddingTop: 18, borderTop: isDark ? '1px solid #1e2430' : '1px solid var(--slate-200)' }}>
+                <label htmlFor="quick-demo-select" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5, fontWeight: 700, color: isDark ? '#cbd5e1' : 'var(--slate-700)', marginBottom: 6 }}>
+                  <Zap size={16} aria-hidden="true" style={{ color: isDark ? '#7dd3fc' : '#0369a1' }} />
+                  Quick Demo Login
+                </label>
+                <select
+                  id="quick-demo-select"
+                  value=""
+                  disabled={loading}
+                  onChange={(e) => demoSignIn(e.target.value)}
+                  aria-describedby="quick-demo-help"
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    minHeight: 46,
+                    lineHeight: 1.4,
+                    padding: '11px 12px',
+                    borderRadius: 8,
+                    fontSize: 15,
+                    fontWeight: 500,
+                    background: isDark ? '#07080b' : 'var(--surface)',
+                    border: isDark ? '1px solid #1e2430' : '1px solid var(--slate-300)',
+                    color: isDark ? '#f8fafc' : 'var(--slate-900)',
+                    cursor: loading ? 'wait' : 'pointer',
+                  }}
+                >
+                  <option value="" disabled>Choose a test account to sign in…</option>
+                  {BETA_DEMO_ACCOUNTS.map((g) => (
+                    <optgroup key={g.group} label={g.group}>
+                      {g.accounts.map((a) => (
+                        <option key={a.email} value={a.email}>{a.label} · {a.note}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <p id="quick-demo-help" style={{ margin: '6px 0 0', fontSize: 13.5, color: isDark ? '#94a3b8' : 'var(--slate-500)' }}>
+                  Signs in at once as the chosen role. Beta test accounts only.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

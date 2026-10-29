@@ -9,7 +9,7 @@ import { PowerRoutingTree3D, routingPosition, shareMwOf } from '../../components
 import { ROLE_GROUPS } from '../../roles.js';
 import { paymentTermsText, rebateText, lpsText, SECURITY_TYPES, paymentSecurityText } from '../../lib/contractRules.js';
 import { showAlert } from '../../lib/dialogs.js';
-import { reiaTerm } from '../../reiaBeta.js';
+import { reiaTerm, REIA_BETA } from '../../reiaBeta.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 // Phase B.2: the maker creates, maps and amends a contract and carries a draft
@@ -176,7 +176,8 @@ export default function Contracts() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const DEFAULT_PROJECT_TYPES = ['Solar', 'Wind', 'Hybrid', 'FDRE', 'PeakPower', 'Storage', 'Hydro', 'Pumped Storage'];
+  // The beta leaves out Hydro, the station desk's own project type.
+  const DEFAULT_PROJECT_TYPES = ['Solar', 'Wind', 'Hybrid', 'FDRE', 'PeakPower', 'Storage', 'Hydro', 'Pumped Storage'].filter((t) => !REIA_BETA || t !== 'Hydro');
   const [projectTypes, setProjectTypes] = useState(DEFAULT_PROJECT_TYPES);
   const [showAddProjectType, setShowAddProjectType] = useState(false);
   const [newProjectTypeLabel, setNewProjectTypeLabel] = useState('');

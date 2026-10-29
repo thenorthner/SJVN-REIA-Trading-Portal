@@ -10,6 +10,7 @@ import ChangePasswordModal from './ChangePasswordModal.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import { Lock, Search } from 'lucide-react';
 import { openPortalSearch } from './PortalSearchModal.jsx';
+import { betaNav } from '../reiaBeta.js';
 import GovStrip, { SkipLink } from '../gigw/GovStrip.jsx';
 import { useGigw } from '../gigw/GigwContext.jsx';
 import GigwFooter from '../gigw/GigwFooter.jsx';
@@ -579,13 +580,14 @@ export default function Layout() {
   // Select sidebar based on user role. Matching on the role *group* (not the
   // exact 'SELLER'/'BUYER' string) keeps SELLER_L1/L2/L3 and BUYER_L1/L2/L3
   // sub-users inside their company portal instead of the internal SJVN nav.
-  const navSections = isSellerRole(user?.role)
+  // The REIA beta trims it to the REIA screens (betaNav is a no-op otherwise).
+  const navSections = betaNav(isSellerRole(user?.role)
     ? NAV_SELLER
     : isBuyerRole(user?.role)
       ? NAV_BUYER
       : isTradingClientRole(user?.role)
         ? NAV_TRADING_CLIENT
-        : NAV_INTERNAL;
+        : NAV_INTERNAL);
 
   // White-label the shell for counterparties: show their own logo + name in
   // place of the SJVN brand. Internal SJVN staff keep the platform branding.

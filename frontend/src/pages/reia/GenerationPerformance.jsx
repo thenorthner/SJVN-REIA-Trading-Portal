@@ -5,6 +5,7 @@ import CufTrackerCard from '../../components/CufTrackerCard.jsx';
 import DeveloperScorecardCard from '../../components/DeveloperScorecardCard.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { REIA_BETA } from '../../reiaBeta.js';
 import { PageHeader, Card, Badge, StatCard, Field, AlertPopup, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
 
 // What each project generated against what its contract expects.
@@ -302,7 +303,7 @@ export default function GenerationPerformance() {
             <p className="report-count">
               The monthly shortfall is an indicator; nothing is deducted for a month on its own.
               CUF is the energy accounted against what the commissioned capacity could produce in that month,
-              for solar, wind and hybrid PPAs (hydro stations are measured on plant availability, not CUF).
+              for solar, wind and hybrid PPAs{REIA_BETA ? '.' : ' (hydro stations are measured on plant availability, not CUF).'}
               One reading a month, the one billing uses: locked first, then final, then the latest.
               Months up to {data.judged_up_to}; the month in progress is judged once it is over.
             </p>

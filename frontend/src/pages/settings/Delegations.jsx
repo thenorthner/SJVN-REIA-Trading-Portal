@@ -4,6 +4,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { fmtDateTime } from '../../datetime.js';
 import { switchTo } from '../../components/ActingSwitch.jsx';
+import { inBetaRoles } from '../../reiaBeta.js';
 
 /**
  * Additional charge and break-glass (Target #2, Phase D) — so four-eyes and
@@ -111,7 +112,7 @@ export default function Delegations() {
               <Field label="Role needed" required htmlFor="bg-role">
                 <select id="bg-role" className="select" value={ask.role} onChange={(e) => setAsk({ ...ask, role: e.target.value })}>
                   <option value="">Select…</option>
-                  {DESK_ROLES.filter((r) => r !== myRole).map((r) => <option key={r} value={r}>{label(r)}</option>)}
+                  {DESK_ROLES.filter((r) => r !== myRole && inBetaRoles(r)).map((r) => <option key={r} value={r}>{label(r)}</option>)}
                 </select>
               </Field>
               <Field label="For" htmlFor="bg-hours">

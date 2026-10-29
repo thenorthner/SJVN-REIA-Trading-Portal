@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { openVisionModal } from './VisionModal.jsx';
 import { openKeyboardShortcuts } from './KeyboardShortcutsModal.jsx';
 import { canRoleOpenPath } from '../roles.js';
+import { REIA_BETA, inBetaSearch } from '../reiaBeta.js';
 
 export const SEARCH_OPEN_EVENT = 'sjvn:open-search';
 
@@ -991,14 +992,14 @@ export default function PortalSearchModal({ open: controlledOpen, onClose: contr
             hi: isDark ? 'लाइट थीम सक्रिय करें (डे मोड)' : 'नाइट थीम सक्रिय करें (डार्क मोड)'
           },
           desc: {
-            en: isDark ? 'Switch from dark OLED room display to clean daylight office theme.' : 'Switch from daylight display to pitch-black trading desk theme.',
-            hi: isDark ? 'डार्क मोड से स्वच्छ डे-लाइट थीम में बदलें।' : 'डे-लाइट थीम से पिच-ब्लैक ट्रेडिंग डेस्क मोड में बदलें।'
+            en: isDark ? 'Switch from dark OLED room display to clean daylight office theme.' : 'Switch from daylight display to the pitch-black night theme.',
+            hi: isDark ? 'डार्क मोड से स्वच्छ डे-लाइट थीम में बदलें।' : 'डे-लाइट थीम से पिच-ब्लैक नाइट मोड में बदलें।'
           },
           icon: isDark ? Sun : Moon,
         };
       }
       return item;
-    });
+    }).filter(inBetaSearch);
   }, [isDark, user]);
 
   // Filtered & Ranked Results
@@ -1234,7 +1235,7 @@ export default function PortalSearchModal({ open: controlledOpen, onClose: contr
 
         {/* Category Filter Pills */}
         <div className="portal-search-categories-bar" role="tablist" aria-label="Search Categories">
-          {SEARCH_CATEGORIES.map((cat) => {
+          {SEARCH_CATEGORIES.filter((cat) => !REIA_BETA || cat.id === 'all' || dynamicSearchIndex.some((i) => i.category === cat.id)).map((cat) => {
             const isActive = activeCategory === cat.id;
             const labelText = cat.label[lang] || cat.label.en;
             return (

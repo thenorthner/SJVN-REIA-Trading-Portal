@@ -6,6 +6,7 @@ import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
 import CircularsManager from '../admin/CircularsManager.jsx';
 import { showAlert, askConfirm } from '../../lib/dialogs.js';
+import { REIA_BETA } from '../../reiaBeta.js';
 
 const TABS = [
   { id: 'generation_assets', label: '⚡ SJVN Power Plants & Assets' },
@@ -25,6 +26,9 @@ const TABS = [
   { id: 'lookups', label: 'Lookups' },
   { id: 'losses', label: 'Transmission Losses' },
 ];
+// The REIA beta lists neither SJVN's own stations, the trading parameters nor
+// the public circulars, which name the other desks.
+const SHOWN_TABS = REIA_BETA ? TABS.filter((t) => !['generation_assets', 'trading', 'circulars'].includes(t.id)) : TABS;
 
 const STATE_COORDS_PRESET = {
   'Himachal Pradesh': { code: 'HP', x: 223.4, y: 151.0, grid: 'Northern Regional Grid (NRPC)' },
@@ -96,7 +100,8 @@ export default function MastersHub() {
   const [searchParams, setSearchParams] = useSearchParams();
   const canWrite = ROLE_GROUPS.MASTERS_WRITE.includes(user?.role);
   const urlTab = searchParams.get('tab');
-  const [tab, setTab] = useState(urlTab || 'generation_assets');
+  const urlTabShown = urlTab && SHOWN_TABS.some((t) => t.id === urlTab) ? urlTab : null;
+  const [tab, setTab] = useState(urlTabShown || SHOWN_TABS[0].id);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
 
@@ -218,7 +223,7 @@ export default function MastersHub() {
   }, [tab, simBillDate, simTermsDays, simState]);
 
   useEffect(() => {
-    if (urlTab && urlTab !== tab) setTab(urlTab);
+    if (urlTabShown && urlTabShown !== tab) setTab(urlTabShown);
   }, [urlTab]);
 
   const handleTabClick = (tabId) => {
@@ -637,7 +642,7 @@ export default function MastersHub() {
       )}
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-        {TABS.filter((t) => t.id !== 'circulars' || ROLE_GROUPS.CIRCULARS_WRITE.includes(user?.role)).map((t) => (
+        {SHOWN_TABS.filter((t) => t.id !== 'circulars' || ROLE_GROUPS.CIRCULARS_WRITE.includes(user?.role)).map((t) => (
           <button
             key={t.id}
             type="button"

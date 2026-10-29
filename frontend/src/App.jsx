@@ -185,7 +185,7 @@ const IexBidBookReport = lazy(() => import('./pages/trading/IexBidBookReport.jsx
 const ExchangeApplications = lazy(() => import('./pages/trading/ExchangeApplications.jsx'));
 const UpdateCharges = lazy(() => import('./pages/trading/UpdateCharges.jsx'));
 const PendingScreen = lazy(() => import('./pages/trading/PendingScreen.jsx'));
-import { REIA_BETA, REIA_BETA_HOME } from './reiaBeta.js';
+import { REIA_BETA, REIA_BETA_HOME, inReiaBeta, betaLanding } from './reiaBeta.js';
 import GuidedPage from './components/GuidedPage.jsx';
 const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
 const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
@@ -289,6 +289,9 @@ function RootShell() {
   const location = useLocation();
   if (loading) return <RouteFallback />;
   if (!user && location.pathname === '/') return REIA_BETA ? <ReiaBetaHome /> : <PublicHome />;
+  // The beta opens only REIA screens; any other address, a typed or saved one
+  // included, goes to the tester's own REIA landing. Permissions are untouched.
+  if (REIA_BETA && user && !inReiaBeta(location.pathname)) return <Navigate to={betaLanding(user.role)} replace />;
   return (
     <ProtectedRoute>
       <Layout />
