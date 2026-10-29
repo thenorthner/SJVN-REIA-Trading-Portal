@@ -1,0 +1,237 @@
+/* Public Feedback page. Colours come from the theme tokens so light, dark and
+   high contrast all follow (memory: dark-theme tokens, readable type scale). */
+
+.fbx-hero {
+  position: relative;
+  overflow: hidden;
+  color: var(--gigw-hero-fg, #fff);
+  background:
+    radial-gradient(520px 300px at 92% 0%, rgba(255, 255, 255, 0.10), transparent 70%),
+    radial-gradient(420px 260px at 0% 100%, rgba(255, 191, 71, 0.16), transparent 70%),
+    linear-gradient(120deg, var(--gigw-hero-a) 0%, var(--gigw-hero-b) 100%);
+}
+.fbx-hero-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px clamp(16px, 4vw, 48px) 40px;
+}
+.fbx-breadcrumb ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; padding: 0; font-size: 15px; }
+.fbx-breadcrumb li { color: rgba(255, 255, 255, 0.82); }
+.fbx-breadcrumb li + li::before { content: '›'; margin-right: 6px; opacity: 0.7; }
+.fbx-breadcrumb a { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.fbx-eyebrow {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--gigw-focus, #ffbf47);
+}
+.fbx-hero h1 {
+  margin: 0 0 10px;
+  font-size: clamp(28px, 3.6vw, 40px);
+  line-height: 1.18;
+  font-weight: 800;
+  color: #fff;
+}
+.fbx-hero-lead { margin: 0; max-width: 720px; font-size: 17px; line-height: 1.6; color: rgba(255, 255, 255, 0.9); }
+.fbx-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0 0; padding: 0; }
+.fbx-chips li {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 14.5px; font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.fbx-body {
+  max-width: 1180px;
+  margin: -18px auto 0;
+  padding: 0 clamp(16px, 4vw, 48px) 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+  position: relative;
+}
+.fbx-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 30, 70, 0.08), 0 1px 3px rgba(15, 30, 70, 0.06);
+}
+.fbx-form { padding: 28px clamp(18px, 3vw, 36px) 30px; display: grid; gap: 8px; }
+.fbx-required {
+  margin: 0 0 6px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.fbx-section { padding: 20px 0 22px; display: grid; gap: 18px; min-width: 0; }
+.fbx-section + .fbx-section { border-top: 1px solid var(--border); }
+.fbx-section-title {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0;
+  font-size: 19px; font-weight: 700; color: var(--text);
+}
+.fbx-section-title svg { color: var(--primary); }
+.fbx-step {
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 14px; font-weight: 800;
+  color: #fff; background: var(--primary);
+}
+
+.fbx-form .gigw-field input[type="text"],
+.fbx-form .gigw-field input[type="email"],
+.fbx-form .gigw-field textarea,
+.fbx-select {
+  font: inherit; font-size: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.fbx-select {
+  appearance: none;
+  height: auto; min-height: 50px; line-height: 1.4;
+  padding-right: 42px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 20px) 52%, calc(100% - 14px) 52%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.fbx-form .gigw-field input:hover, .fbx-form .gigw-field textarea:hover, .fbx-select:hover { border-color: var(--text-muted); }
+.fbx-form .gigw-field input:focus-visible, .fbx-form .gigw-field textarea:focus-visible, .fbx-select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.fbx-form .gigw-field [aria-invalid="true"] { border-color: var(--red); }
+.fbx-form .gigw-field textarea { min-height: 170px; resize: vertical; line-height: 1.55; }
+.fbx-form .gigw-field textarea::placeholder { color: var(--text-muted); opacity: 0.8; }
+
+.fbx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 4px; }
+.fbx-tile {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 40px 14px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.fbx-tile:hover { border-color: var(--primary); transform: translateY(-1px); }
+.fbx-tile input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.fbx-tile:has(input:focus-visible) { outline: 3px solid var(--gigw-focus, #ffbf47); outline-offset: 2px; }
+.fbx-tile-icon {
+  flex-shrink: 0;
+  display: inline-grid; place-items: center;
+  width: 38px; height: 38px; border-radius: 10px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.fbx-tile-text { display: grid; gap: 3px; min-width: 0; }
+.fbx-tile-text strong { font-size: 15.5px; color: var(--text); }
+.fbx-tile-text small { font-size: 14px; line-height: 1.4; color: var(--text-muted); }
+.fbx-tile-tick {
+  position: absolute; top: 12px; right: 12px;
+  display: inline-grid; place-items: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 1.5px solid var(--border);
+  color: transparent;
+}
+.fbx-tile.is-on {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.fbx-tile.is-on .fbx-tile-icon { color: #fff; background: var(--primary); }
+.fbx-tile.is-on .fbx-tile-tick { border-color: var(--primary); background: var(--primary); color: #fff; }
+
+.fbx-short { color: var(--amber-strong, var(--text)); font-weight: 600; }
+.fbx-count { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.fbx-consent {
+  padding: 14px 16px !important;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fbx-consent.is-on { border-color: var(--green, #15803d); background: color-mix(in srgb, var(--green, #15803d) 8%, var(--surface)); }
+
+.fbx-actions { display: flex; justify-content: flex-end; padding-top: 6px; }
+.fbx-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 12px 24px; font-size: 16px; border-radius: 10px; text-decoration: none; }
+.fbx-submit { min-width: 220px; box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 30%, transparent); }
+
+.fbx-aside { display: grid; gap: 16px; position: sticky; top: 16px; }
+.fbx-side { padding: 20px 22px; }
+.fbx-side h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 17px; font-weight: 700; color: var(--text); }
+.fbx-side h2 svg { color: var(--primary); }
+.fbx-side p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--text-muted); }
+.fbx-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.fbx-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; font-size: 15px; line-height: 1.5; color: var(--text); }
+.fbx-steps li span {
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 13px; font-weight: 800;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.fbx-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15.5px; color: var(--primary); text-decoration: none; }
+.fbx-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.fbx-done { padding: 40px clamp(18px, 4vw, 48px); text-align: center; display: grid; justify-items: center; gap: 10px; }
+.fbx-done-icon {
+  display: inline-grid; place-items: center;
+  width: 72px; height: 72px; border-radius: 50%;
+  color: var(--green, #15803d);
+  background: color-mix(in srgb, var(--green, #15803d) 12%, transparent);
+}
+.fbx-done h2 { margin: 6px 0 4px; font-size: 24px; color: var(--text); }
+.fbx-ref-label { margin: 8px 0 0; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.fbx-ref {
+  display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+  padding: 10px 12px 10px 20px;
+  border: 1.5px dashed var(--primary);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+.fbx-ref code { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; color: var(--text); background: none; }
+.fbx-copy {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; font-size: 14.5px; font-weight: 600;
+  background: var(--surface); color: var(--text);
+  cursor: pointer;
+}
+.fbx-copy:hover { border-color: var(--primary); color: var(--primary); }
+.fbx-done-next { max-width: 520px; margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: var(--text-muted); }
+.fbx-done-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 14px; }
+
+@media (max-width: 960px) {
+  .fbx-body { grid-template-columns: 1fr; }
+  .fbx-aside { position: static; }
+}
+@media (max-width: 560px) {
+  .fbx-hero-inner { padding-bottom: 34px; }
+  .fbx-tiles { grid-template-columns: 1fr; }
+  .fbx-actions { justify-content: stretch; }
+  .fbx-submit { width: 100%; min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fbx-tile { transition: none; }
+  .fbx-tile:hover { transform: none; }
+}
