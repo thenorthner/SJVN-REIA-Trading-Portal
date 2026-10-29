@@ -87,6 +87,15 @@
       "port": 5180
     },
     {
+      "name": "frontend-full",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_REIA_BETA=0 npx vite --port 5181 --strictPort"
+      ],
+      "port": 5181
+    },
+    {
       "name": "backend-reia-beta",
       "runtimeExecutable": "sh",
       "runtimeArgs": [
