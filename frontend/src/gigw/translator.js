@@ -1265,8 +1265,10 @@ class DomTranslator {
             shouldSweep = true;
             break;
           } else if (m.type === 'characterData') {
+            // Our own writes leave nodeValue equal to __transText; anything else
+            // is React putting new text in the node, which needs translating.
             const target = m.target;
-            if (target && target.__origText === undefined && target.nodeValue) {
+            if (target && target.nodeValue && target.nodeValue !== target.__transText) {
               shouldSweep = true;
               break;
             }
@@ -1317,11 +1319,16 @@ class DomTranslator {
     const val = textNode.nodeValue;
     if (!val || !val.trim()) return;
 
-    if (textNode.__origText === undefined) {
+    // If the node no longer holds what we last wrote, React has re-rendered it
+    // (for example a t() string in the newly chosen language), so its current
+    // text is the new original. Keeping the old original would write the
+    // previous language back over React's update until a reload.
+    if (textNode.__origText === undefined || val !== textNode.__transText) {
       textNode.__origText = val;
     }
 
     const translated = translateString(textNode.__origText, lang);
+    textNode.__transText = translated;
     if (translated !== val) {
       this.isTranslating = true;
       textNode.nodeValue = translated;
@@ -1332,10 +1339,14 @@ class DomTranslator {
   restoreNode(textNode) {
     if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
     if (textNode.__origText !== undefined) {
-      this.isTranslating = true;
-      textNode.nodeValue = textNode.__origText;
+      // A node React has since rewritten already holds its English text.
+      if (textNode.nodeValue === textNode.__transText) {
+        this.isTranslating = true;
+        textNode.nodeValue = textNode.__origText;
+        this.isTranslating = false;
+      }
       delete textNode.__origText;
-      this.isTranslating = false;
+      delete textNode.__transText;
     }
   }
 
