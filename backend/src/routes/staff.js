@@ -22,6 +22,7 @@ import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { passwordComplaint, lockoutState, clearLoginAttempts } from './auth.js';
 import { generatePassword } from './team.js';
+import { betaRows } from '../services/reiaBeta.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -342,7 +343,7 @@ router.get('/export.csv', (req, res) => {
     const t = staff(req);
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [['Name', 'Email', 'Phone', 'Designation', 'Role', 'Desk', 'Status', 'Added on', 'Added by', 'Last sign-in', 'Sign-ins (30 days)', 'Switched off on', 'Reason'].map(cell).join(',')];
-    for (const m of t.members) {
+    for (const m of betaRows(t.members)) {
       lines.push([m.name, m.email, m.phone, m.designation, m.role_label, m.desk, m.is_active ? 'Active' : 'Switched off', m.created_at, m.created_by_name || '',
         m.last_login_at || 'Never', m.logins_30d, m.deactivated_at || '', m.deactivation_reason || ''].map(cell).join(','));
     }

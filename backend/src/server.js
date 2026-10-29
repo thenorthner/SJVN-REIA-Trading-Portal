@@ -135,6 +135,7 @@ import projectScopeRoutes from './routes/projectScope.js';
 import delegationsRoutes from './routes/delegations.js';
 import circularsRoutes from './routes/circulars.js';
 import { projectScopeGuard, alertUncoveredProjects } from './services/projectScope.js';
+import { reiaBetaFilter } from './services/reiaBeta.js';
 
 // Read-level access to the trading desk screens. There is no TRADING_READ group
 // — TRADING_ALL is the read tier; TRADING_WRITE is the narrower acting tier.
@@ -200,6 +201,8 @@ app.use('/api', statutoryDeclarations(userFromToken));
 // Project-wise authorisation (Target #2 Phase C): a REIA officer on SELECTED
 // projects is refused other projects' records and sees only theirs in lists.
 app.use('/api', projectScopeGuard(userFromToken));
+// REIA beta (REIA_BETA=1): list answers lose the other desks' rows. A no-op otherwise.
+app.use('/api', reiaBetaFilter());
 // `dev` writes ANSI colour codes, which journalctl stores verbatim and every
 // later grep has to step over. Deployed logs get the standard Apache line
 // instead, which log tooling already knows how to read.
