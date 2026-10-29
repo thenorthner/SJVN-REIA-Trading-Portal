@@ -14,7 +14,7 @@ import { openPortalSearch } from '../../components/PortalSearchModal.jsx';
 import AudioSpeechWidget, { AUDIO_SPEECH_TOGGLE_EVENT } from '../../components/AudioSpeechWidget.jsx';
 import { openKeyboardShortcuts } from '../../components/KeyboardShortcutsModal.jsx';
 import BackToTopProgress from '../../components/BackToTopProgress.jsx';
-import { REIA_BETA_TITLE } from '../../reiaBeta.js';
+import { REIA_BETA, REIA_BETA_TITLE } from '../../reiaBeta.js';
 
 /**
  * PublicShell — frame for the public portal pages, laid out as DBIM v3 s.5.4.3
@@ -22,7 +22,8 @@ import { REIA_BETA_TITLE } from '../../reiaBeta.js';
  * and user controls, logo lockup 3B (logo, name, tagline), a highlighted search
  * bar, a profile / sign-in control, and the global navigation menu below.
  */
-export default function PublicShell({ title, children, beta = false }) {
+// Every public page of the beta build gets the REIA-only shell, not just the home.
+export default function PublicShell({ title, children, beta = REIA_BETA }) {
   const { t, lang, toggleLang, textSize, setTextSize, toggleContrast } = useGigw();
   const { user } = useAuth() || {};
   const [audioOpen, setAudioOpen] = useState(false);
@@ -96,7 +97,7 @@ export default function PublicShell({ title, children, beta = false }) {
   }, [textSize, setTextSize, toggleContrast, toggleLang]);
 
   useEffect(() => {
-    if (beta) { document.title = REIA_BETA_TITLE; return; }
+    if (beta && !title) { document.title = REIA_BETA_TITLE; return; }
     document.title = title ? `${title} | ${t('org.name')}` : `${t('org.name')} | ${t('portal.name')}`;
   }, [title, t, beta]);
 
