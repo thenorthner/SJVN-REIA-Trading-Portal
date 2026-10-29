@@ -82,9 +82,18 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "-c",
-        "cd frontend && VITE_REIA_BETA=1 npx vite --port 5180 --strictPort"
+        "cd frontend && VITE_REIA_BETA=1 VITE_API_TARGET=http://localhost:4010 npx vite --port 5180 --strictPort"
       ],
       "port": 5180
+    },
+    {
+      "name": "backend-reia-beta",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && REIA_BETA=1 node --input-type=module -e \"const {app}=await import('./src/server.js'); app.listen(4010, () => console.log('REIA beta API on 4010'));\""
+      ],
+      "port": 4010
     }
   ]
 }
