@@ -1,0 +1,1682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>REIA Playbook</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Interactive guide to the REIA desk: every mission, role, hand-off, status and rule.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Overpass+Mono:wght@500;700&family=Overpass:wght@600;800;900&display=swap">
+<style>
+/* Layout: a wayfinding app. A line map of the REIA cycle up top; each station opens a
+   mission drawn as a sequence of role lanes; the rest (players, powers, lifecycles,
+   log-in relay, money, side quests, quiz) are tabs on the same signage bar. */
+:root{
+  --bg:#F2F5FA; --surface:#FFFFFF; --surface-2:#E8EDF6; --ink:#121D35; --muted:#52607C; --line:#D2D9E8;
+  --brand:#162F6A; --map-loop:#162F6A; --map-setup:#97A5C4;
+  --head-bg:#162F6A; --head-ink:#FFFFFF; --head-muted:#C5D0E8; --signal:#FFC845; --on-signal:#1B1300;
+  --good:#0F7F4E; --bad:#BF3328; --wait:#946000; --focus:#1F6FEB; --on-role:#FFFFFF; --scrim:rgb(9 14 28 / .5);
+  --c-maker:#1F62D6; --c-checker:#946A00; --c-hod:#7A3CC6; --c-fin:#0D8357; --c-mgmt:#B2335E; --c-admin:#4A5872;
+  --c-seller:#C64A14; --c-buyer:#0A7F97; --c-sys:#69738C;
+  --font-display:"Overpass","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-body:"Atkinson Hyperlegible","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-mono:"Overpass Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --shadow:0 1px 2px rgb(18 29 53 / .06),0 6px 20px rgb(18 29 53 / .07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1120; --surface:#131B2E; --surface-2:#1B2541; --ink:#E5EBF7; --muted:#9DA9C4; --line:#29344F;
+    --brand:#8FB0FF; --map-loop:#8FB0FF; --map-setup:#56648A;
+    --head-bg:#0E1630; --head-ink:#EEF2FB; --head-muted:#9AA7C6; --signal:#FFC845; --on-signal:#1B1300;
+    --good:#43CD8F; --bad:#FF8073; --wait:#F2BC4C; --focus:#86B4FF; --on-role:#0B1120; --scrim:rgb(0 0 0 / .62);
+    --c-maker:#6AA2FF; --c-checker:#F1C24A; --c-hod:#B892F7; --c-fin:#45D196; --c-mgmt:#F383A6; --c-admin:#A8B4CE;
+    --c-seller:#FF8C55; --c-buyer:#45CBE4; --c-sys:#A9B2C6;
+    --shadow:0 1px 2px rgb(0 0 0 / .45),0 8px 24px rgb(0 0 0 / .35);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1120; --surface:#131B2E; --surface-2:#1B2541; --ink:#E5EBF7; --muted:#9DA9C4; --line:#29344F;
+  --brand:#8FB0FF; --map-loop:#8FB0FF; --map-setup:#56648A;
+  --head-bg:#0E1630; --head-ink:#EEF2FB; --head-muted:#9AA7C6; --signal:#FFC845; --on-signal:#1B1300;
+  --good:#43CD8F; --bad:#FF8073; --wait:#F2BC4C; --focus:#86B4FF; --on-role:#0B1120; --scrim:rgb(0 0 0 / .62);
+  --c-maker:#6AA2FF; --c-checker:#F1C24A; --c-hod:#B892F7; --c-fin:#45D196; --c-mgmt:#F383A6; --c-admin:#A8B4CE;
+  --c-seller:#FF8C55; --c-buyer:#45CBE4; --c-sys:#A9B2C6;
+  --shadow:0 1px 2px rgb(0 0 0 / .45),0 8px 24px rgb(0 0 0 / .35);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--font-body);-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.vh{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+h1,h2,h3,h4{font-family:var(--font-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(28px,4vw,40px);font-weight:900;letter-spacing:-.01em}
+h2{font-size:24px;font-weight:800}
+h3{font-size:18px;font-weight:800}
+p{margin:0}
+.eyebrow{font:700 12.5px/1.2 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.lede{font-size:17px;color:var(--muted);max-width:70ch;margin-top:12px}
+.ic{width:16px;height:16px;flex:none;vertical-align:-3px}
+.lnk{border:0;background:none;padding:0;color:var(--brand);font:800 15px var(--font-display);cursor:pointer}
+.lnk:hover{text-decoration:underline}
+
+/* top signage bar */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--head-bg);z-index:31}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:var(--head-bg);color:var(--head-ink);box-shadow:0 1px 0 rgb(0 0 0 / .2)}
+.top-in{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px 0;display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.brand{display:flex;align-items:center;gap:11px;color:inherit;margin-right:auto;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.brand svg{width:36px;height:36px;flex:none}
+.brand b{display:block;font:900 20px/1 var(--font-display);letter-spacing:.01em}
+.brand small{display:block;font-size:13px;color:var(--head-muted);margin-top:4px}
+.xp{display:flex;align-items:center;gap:10px;font:700 13px/1 var(--font-mono);color:var(--head-muted);background:none;border:0;padding:4px 0;cursor:pointer}
+.xp b{color:var(--head-ink);font-family:var(--font-display);font-weight:800;font-size:14px}
+.xp-bar{width:110px;height:8px;border-radius:99px;background:rgb(255 255 255 / .16);overflow:hidden}
+.xp-bar i{display:block;height:100%;background:var(--signal);width:0;transition:width .5s}
+.theme-btn{border:1px solid rgb(255 255 255 / .28);background:transparent;color:var(--head-ink);border-radius:9px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer}
+.theme-btn .ic{width:18px;height:18px}
+.tabs{flex:0 0 calc(100% + 20px);display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;margin:2px -10px 0}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;color:var(--head-muted);font:800 15px/1 var(--font-display);padding:12px 10px;border-bottom:3px solid transparent;white-space:nowrap;cursor:pointer}
+.tab:hover{color:var(--head-ink)}
+.tab[aria-current="page"]{color:var(--head-ink);border-bottom-color:var(--signal)}
+
+main{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:30px 150px;outline:none}
+.blk{margin-top:44px}
+.blk-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px 16px;flex-wrap:wrap;margin-bottom:14px}
+.blk-h p{color:var(--muted);font-size:15px}
+
+/* role badges, status pills, button chips */
+.rb{--c:var(--c-sys);display:inline-grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;background:var(--c);color:var(--on-role);font:900 12px/1 var(--font-display);letter-spacing:.02em;box-shadow:0 0 0 2px var(--surface);padding-top:.12em}
+.rb .ic{width:60%;height:60%;margin-top:-.12em}
+.rb.xs{width:20px;height:20px;font-size:9px}
+.rb.sm{width:24px;height:24px;font-size:10.5px}
+.rb.md{width:36px;height:36px;font-size:14px}
+.rb.lg{width:44px;height:44px;font-size:16px}
+.rb.xl{width:64px;height:64px;font-size:22px}
+.st{display:inline-flex;align-items:center;font:700 12.5px/1.15 var(--font-mono);letter-spacing:.02em;padding:5px 8px 4px;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);overflow-wrap:anywhere}
+.st.good{border-color:var(--good);color:var(--good)}
+.st.bad{border-color:var(--bad);color:var(--bad)}
+.st.wait{border-color:var(--wait);color:var(--wait)}
+.st.start{border-style:dashed;color:var(--muted)}
+.st.big{font-size:14px;padding:8px 11px 7px}
+.ui{display:inline-block;max-width:100%;font:700 14px/1.3 var(--font-display);padding:3px 8px 2px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);box-shadow:0 2px 0 var(--line);color:var(--ink);overflow-wrap:break-word;text-align:left}
+.arw{color:var(--muted);font-weight:800}
+.tag{font:700 11.5px/1 var(--font-mono);text-transform:uppercase;letter-spacing:.05em;padding:4px 6px 3px;border-radius:5px;background:var(--surface-2);color:var(--muted)}
+.btn{border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 16px 10px;font:800 15px/1 var(--font-display);cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:var(--ink)}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--bg)}
+.btn.ok{border-color:var(--good);color:var(--good)}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 13px 7px;font:800 14px/1 var(--font-display);cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"],.chip[aria-current="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.done::after{content:"✓";color:var(--good);font-weight:900}
+.chip[aria-current="true"].done::after{color:var(--signal)}
+
+/* map view */
+.intro{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px 48px;align-items:end;margin-bottom:24px}
+.stats{display:grid;grid-template-columns:repeat(4,auto);gap:6px 28px}
+.stat b{display:block;font:900 36px/1 var(--font-display);font-variant-numeric:tabular-nums}
+.stat span{font:700 12px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.me{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-top:22px;padding:12px 14px 12px 18px;border-radius:14px;background:var(--surface);border:1px solid var(--line);max-width:720px}
+.me small{display:block;font:700 11.5px var(--font-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.me b{font:800 17px var(--font-display)}
+.me-bar{flex:1 1 120px;height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.me-bar i{display:block;height:100%;background:var(--brand)}
+.me-n{font-size:14.5px;color:var(--muted)}
+.me-n b{font-size:15px;color:var(--ink)}
+.mapbox{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 18px 10px;box-shadow:var(--shadow)}
+.map-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 20px;align-items:center;margin-bottom:4px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:14.5px;color:var(--muted)}
+.lgd{display:inline-flex;align-items:center;gap:8px}
+.lgd i{display:inline-block;width:30px;height:8px;border-radius:4px;background:var(--map-loop)}
+.lgd i.s{background:var(--map-setup)}
+.lgd i.d{width:16px;height:16px;border-radius:50%;background:var(--good)}
+.map-svg svg{display:block;width:100%;height:auto}
+.ln-setup{fill:none;stroke:var(--map-setup);stroke-width:10;stroke-linejoin:round}
+.ln-loop{fill:none;stroke:var(--map-loop);stroke-width:12;stroke-linejoin:round}
+.ln-term{stroke:var(--map-setup);stroke-width:8;stroke-linecap:round}
+.chev{fill:none;stroke:var(--surface);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.stn{cursor:pointer;outline:none}
+.stn-c{fill:var(--surface);stroke:var(--ink);stroke-width:5}
+.stn-x{fill:var(--surface);stroke:var(--map-loop);stroke-width:4}
+.stn-n{font:900 18px var(--font-display);fill:var(--ink)}
+.stn-name{font:800 17px var(--font-display);fill:var(--ink)}
+.stn-meta{font:700 12px var(--font-mono);fill:var(--muted)}
+.stn:hover .stn-c,.stn:focus-visible .stn-c{stroke:var(--focus);stroke-width:7}
+.stn:hover .stn-name,.stn:focus-visible .stn-name{fill:var(--focus)}
+.stn.done .stn-c{fill:var(--good);stroke:var(--good)}
+.stn.done .stn-n{fill:var(--surface)}
+.m-note{font:700 12px var(--font-mono);letter-spacing:.14em;fill:var(--muted)}
+.m-water{font:800 15px var(--font-mono);letter-spacing:.42em;fill:var(--muted)}
+.bdg circle{fill:var(--c)}
+.bdg text{font:900 10px var(--font-display);fill:var(--on-role)}
+.ll{display:none}
+.ll-h{font:700 12.5px var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:16px 0 4px}
+.ll-i{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px 12px;align-items:center;padding:10px 0;text-decoration:none;color:inherit}
+.ll-i::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:6px;background:var(--map-loop)}
+.ll-i.setup::before{background:var(--map-setup)}
+.ll-n{position:relative;width:44px;height:44px;border-radius:50%;border:5px solid var(--ink);background:var(--surface);display:grid;place-items:center;font:900 17px var(--font-display);padding-top:.1em}
+.ll-i.done .ll-n{background:var(--good);border-color:var(--good);color:var(--surface)}
+.ll-t b{display:block;font:800 17px/1.2 var(--font-display)}
+.ll-t small{font:700 12.5px var(--font-mono);color:var(--muted)}
+.ll-b{grid-column:2;display:flex;gap:4px;flex-wrap:wrap}
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr));gap:12px}
+.rcard{--c:var(--c-sys);display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-align:left;cursor:pointer}
+.rcard:hover{border-color:var(--c)}
+.rcard b{font:800 16px/1.2 var(--font-display);display:block}
+.rcard small{color:var(--muted);font-size:14px;display:block}
+.rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(225px,100%),1fr));gap:12px}
+.rule{padding:15px 16px;border-radius:12px;background:var(--surface-2);display:grid;gap:8px;align-content:start}
+.rule .rw{display:flex;gap:4px;align-items:center;min-height:28px;color:var(--muted)}
+.rule .rw .ic{width:22px;height:22px}
+.rule b{font:800 16.5px/1.25 var(--font-display)}
+.rule p{font-size:15px;color:var(--muted)}
+
+/* mission view */
+.mnav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:22px}
+.mnav .sp{flex:1}
+.mhead{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,380px);gap:20px 44px;align-items:start}
+.mmeta{display:grid;gap:12px;margin:0;padding:16px 18px;border-radius:14px;background:var(--surface-2)}
+.mmeta dt{font:700 12px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mmeta dd{margin:3px 0 0;font-weight:700;font-size:15.5px}
+.mstats{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;margin-top:18px}
+.mstat{font:700 13px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.mstat b{font:900 22px/1 var(--font-display);color:var(--ink);margin-right:4px;letter-spacing:0}
+.mplayers{display:flex;gap:4px;align-items:center}
+.mact{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.lanes-wrap{margin-top:24px;overflow-x:auto;border-radius:18px;background:var(--surface);border:1px solid var(--line)}
+.lane-key{display:none;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:0;padding:14px 16px 0;font-size:14.5px;color:var(--muted)}
+.lane-key > span{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:700}
+.lanes{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:16px 4px 20px;position:relative}
+.lhead{grid-column:var(--col);grid-row:1;display:flex;flex-direction:column;align-items:center;gap:7px;padding:2px 6px 16px;position:relative;z-index:1}
+.lhead b{font:800 15px/1.1 var(--font-display);text-align:center}
+.lhead small{font:700 11.5px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:center}
+.rail{grid-column:var(--col);grid-row:2 / var(--end);justify-self:center;width:4px;border-radius:4px;background:var(--c);opacity:.34}
+.cell{grid-column:var(--col);grid-row:var(--row);padding:5px 8px;position:relative;z-index:1;min-width:0;container-type:inline-size}
+.hand{grid-column:var(--a) / var(--b);grid-row:var(--row);position:relative;height:44px;z-index:2}
+.hand .ln{position:absolute;top:50%;left:calc(50% / var(--k));right:calc(50% / var(--k));border-top:2px dashed var(--muted)}
+.hand .ln::after{content:"";position:absolute;top:-6px;border:5px solid transparent}
+.hand.fwd .ln::after{right:-4px;border-left:9px solid var(--muted)}
+.hand.back .ln::after{left:-4px;border-right:9px solid var(--muted)}
+.hand .pill{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1.5px solid var(--ink);border-radius:999px;padding:4px 11px 3px 5px;font:800 13.5px/1.2 var(--font-display);white-space:nowrap}
+.hand .pill.auto{border-style:dashed;padding-left:10px}
+/* Stack mode, when side-by-side lanes would be too narrow: one column, each card
+   staggered to its lane's place, so a hand-off still reads as a move across. */
+.lanes-wrap.stack .lane-key{display:flex}
+.lanes-wrap.stack .lanes{--W:min(100%, 440px);grid-template-columns:minmax(0,1fr);padding:12px 8px 18px}
+.lanes-wrap.stack .lhead{display:none}
+.lanes-wrap.stack .rail{grid-column:1;justify-self:start;margin-left:calc((100% - var(--W)) * var(--i) / var(--nn) + var(--W) / 2 - 2px)}
+.lanes-wrap.stack .cell{grid-column:1;padding-left:calc((100% - var(--W)) * var(--i) / var(--nn) + 6px);padding-right:calc((100% - var(--W)) * (var(--nn) - var(--i)) / var(--nn) + 6px)}
+.lanes-wrap.stack .hand{--pl:calc((100% - var(--W)) * var(--l0) / var(--nn) + var(--W) / 2);--pr:calc((100% - var(--W)) * (var(--nn) - var(--h0)) / var(--nn) + var(--W) / 2);grid-column:1;height:auto;min-height:44px;display:flex;align-items:center;justify-content:center;padding:6px var(--pr) 6px var(--pl)}
+.lanes-wrap.stack .hand .ln{left:var(--pl);right:var(--pr)}
+.lanes-wrap.stack .hand .pill{position:relative;left:auto;top:auto;transform:none;flex:none}
+.lanes-wrap.stack .sc-who{display:inline}
+.step{--c:var(--c-sys);display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:10px 11px;cursor:pointer;box-shadow:var(--shadow);transition:transform .15s,border-color .15s,opacity .2s,box-shadow .15s}
+.step:hover{border-color:var(--c);transform:translateY(-1px)}
+.step.opt{border-style:dashed}
+.sc-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.sc-no{font:700 12.5px var(--font-mono);color:var(--muted)}
+.sc-t{font:800 16px/1.25 var(--font-display)}
+.sc-press{display:flex;flex-wrap:wrap;align-items:center;gap:6px 0}
+.sep{color:var(--muted);font-weight:800;margin:0 4px}
+.sc-res{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:14px;color:var(--muted)}
+.sc-block{display:flex;gap:6px;align-items:flex-start;font-size:14px;line-height:1.35;color:var(--bad)}
+.sc-block .ic{margin-top:1px}
+.sc-who{display:none;font:800 14px var(--font-display);color:var(--c)}
+.sc-lock{display:inline-grid;color:var(--bad)}
+.sc-go{margin-left:auto;font:800 20px/1 var(--font-display);color:var(--muted)}
+@container (max-width:259px){ .sc-block{display:none} }
+@container (min-width:260px){ .sc-lock{display:none} }
+.step.cur{border-color:var(--c);box-shadow:0 0 0 3px var(--c),var(--shadow);transform:scale(1.025)}
+body.playing .step:not(.cur){opacity:.4}
+.mfoot{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:14px;margin-top:22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.panel h3{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.panel h3 .ic{color:var(--bad)}
+.blist,.alist{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.blist li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;font-size:15px}
+.alist li{position:relative;padding-left:18px;font-size:15px}
+.alist li::before{content:"";position:absolute;left:2px;top:.6em;width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.xgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:14px}
+.xgrid ul{margin:0;padding-left:20px;display:grid;gap:5px;font-size:15px}
+.ladder{display:grid;gap:10px}
+.lad{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:center}
+.lad b{font:800 15px var(--font-display)}
+.lad-steps{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.lad-steps .lv{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 3px 4px;border-radius:999px;background:var(--surface-2);font:700 13.5px var(--font-mono)}
+.clock{position:relative;margin:8px 0 4px}
+.clock-bar{display:flex;height:12px;border-radius:6px;overflow:hidden}
+.clock-bar i{display:block;height:100%}
+.clock-marks{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:14px}
+.clock-marks div{flex:1}
+.clock-marks b{display:block;font:800 15px var(--font-display)}
+.tier{width:100%;border-collapse:collapse;font-size:14.5px}
+.tier th,.tier td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:center;vertical-align:top}
+.tier th{font:800 13px var(--font-display)}
+.tier th:first-child,.tier td:first-child{text-align:left}
+.tier .ic{color:var(--good)}
+.tier .no{color:var(--muted)}
+
+/* drawer + play mode */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.dlayer{position:fixed;inset:0;z-index:41;overflow:hidden;pointer-events:none}
+.drawer{position:absolute;top:0;right:0;bottom:0;pointer-events:auto;width:min(520px,100%);background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);overflow-y:auto;padding:calc(18px + env(safe-area-inset-top,0px)) max(22px,env(safe-area-inset-right,0px)) calc(28px + env(safe-area-inset-bottom,0px)) 22px;transform:translateX(104%);transition:transform .25s ease,visibility .25s;visibility:hidden}
+.drawer.open{transform:none;visibility:visible}
+.d-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.d-top small{display:block;font:700 12px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.d-top b{font:800 17px var(--font-display)}
+.dclose{margin-left:auto;border:1px solid var(--line);background:var(--surface);border-radius:9px;width:38px;height:38px;cursor:pointer;font:800 18px/1 var(--font-display)}
+.drawer h2{font-size:27px;margin:8px 0 16px}
+.dsec{border-top:1px solid var(--line);padding:14px 0}
+.dsec h4{font:700 12.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 9px}
+.dsec ul{margin:0;padding-left:20px;display:grid;gap:7px;font-size:15.5px}
+.dsec p{font-size:15.5px}
+.dsec .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.quote{padding:9px 12px;background:var(--surface-2);border-radius:8px;font-style:italic;font-size:15px;border:1px dashed var(--bad)}
+.quote+.quote{margin-top:8px}
+.dlog{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:15px}
+.dnav{display:flex;justify-content:space-between;gap:10px;padding-top:16px;border-top:1px solid var(--line)}
+.hud{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:35;width:min(840px,calc(100% - 24px));background:var(--head-bg);color:var(--head-ink);border-radius:16px;padding:10px 12px 12px;box-shadow:0 12px 34px rgb(0 0 0 / .32);display:grid;gap:9px}
+.hud-dots{display:flex;gap:4px}
+.hud-dots span{flex:1;height:5px;border-radius:3px;background:rgb(255 255 255 / .18)}
+.hud-dots span.past{background:rgb(255 255 255 / .55)}
+.hud-dots span.on{background:var(--signal)}
+.hud-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hud-txt{flex:1;min-width:190px}
+.hud-txt small{display:block;color:var(--head-muted);font:700 12.5px var(--font-mono)}
+.hud-txt b{font:800 16.5px/1.25 var(--font-display)}
+.hud-btns{display:flex;gap:6px;flex-wrap:wrap}
+.hb{border:1px solid rgb(255 255 255 / .3);background:transparent;color:var(--head-ink);border-radius:9px;padding:10px 13px 9px;font:800 14.5px/1 var(--font-display);cursor:pointer}
+.hb.primary{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.hb:disabled{opacity:.4;cursor:default}
+.switch{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:var(--scrim);padding:20px}
+.sw-box{background:var(--surface);border-radius:20px;padding:26px 28px 24px;max-width:540px;width:100%;text-align:center;box-shadow:var(--shadow);animation:pop .28s ease}
+.sw-box h3{font-size:24px}
+.sw-row{display:flex;align-items:center;justify-content:center;gap:16px;margin:18px 0 12px}
+.sw-who{display:grid;justify-items:center;gap:6px;font:800 15px var(--font-display)}
+.sw-from{opacity:.45}
+.sw-arrow{font:900 30px var(--font-display);color:var(--muted)}
+.sw-hint{color:var(--muted);font-size:15px}
+.sw-btns{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:18px}
+@keyframes pop{from{transform:scale(.94);opacity:0}to{transform:none;opacity:1}}
+
+/* players */
+.side-h{margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:14px}
+.pc{--c:var(--c-sys);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:13px;align-content:start;scroll-margin-top:140px}
+.pc.flash{box-shadow:0 0 0 3px var(--c)}
+.pc header{display:flex;gap:14px;align-items:center}
+.pc-cls{font:700 12.5px var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--c)}
+.pc h3{font-size:21px;margin-top:3px}
+.pc-lvl{margin-top:3px;color:var(--muted);font-size:14.5px}
+.pc-line{font-size:15.5px}
+.pc-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;text-align:center;background:var(--surface-2);border-radius:10px;padding:10px 6px}
+.pc-stats b{display:block;font:900 22px/1 var(--font-display);font-variant-numeric:tabular-nums}
+.pc-stats span{font:700 11px var(--font-mono);color:var(--muted);text-transform:uppercase}
+.pc-ms{display:flex;flex-wrap:wrap;gap:6px}
+.pc-ms .chip{padding:5px 11px 4px 5px;font-size:13.5px}
+.chip-n{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:2px 5px 0;border-radius:11px;background:var(--surface-2);font:800 12px/1 var(--font-display)}
+.pc details{border-top:1px solid var(--line);padding-top:10px}
+.pc summary{cursor:pointer;font:800 15px var(--font-display)}
+.pc ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:7px}
+.pc li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;font-size:15px;align-items:start}
+.pc li .ic{margin-top:3px}
+.pc-can .ic{color:var(--good)}
+.pc-cant .ic{color:var(--bad)}
+.mod{font:700 11px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-left:6px;white-space:nowrap}
+.pc-login{display:flex;gap:8px;align-items:center;font-size:14.5px;color:var(--muted);background:var(--surface-2);padding:9px 11px;border-radius:10px}
+
+/* powers */
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:20px 0 12px}
+.search{flex:1 1 220px;max-width:360px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 12px;font:16px var(--font-body)}
+.pw-legend{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;font-size:14.5px;color:var(--muted);margin-bottom:12px}
+.pw-legend > span{display:inline-flex;align-items:center;gap:7px}
+.tbl-wrap{position:relative;overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+table.pw{border-collapse:separate;border-spacing:0;width:100%;min-width:800px}
+.pw th,.pw td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:center}
+.pw thead th{background:var(--surface);font:800 13px/1.1 var(--font-display);vertical-align:bottom;padding-top:12px}
+.pw thead button{border:0;background:none;cursor:pointer;display:grid;justify-items:center;gap:5px;padding:2px 4px;border-radius:8px;width:100%}
+.pw thead button[aria-pressed="true"]{background:var(--surface-2)}
+.pw th[scope="row"]{text-align:left;font:400 15px/1.35 var(--font-body);position:sticky;left:0;background:var(--surface);z-index:1;min-width:260px;padding-left:14px}
+.pw th[scope="row"] small{display:block;color:var(--muted);font-size:13.5px;margin-top:2px}
+.pw tr.grp th{background:var(--surface-2);font:700 12.5px var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:left;padding:8px 14px;position:static}
+.pw td.hl{background:var(--surface-2)}
+.pw td.hl:has(.cd){background:color-mix(in srgb,var(--c) 14%,var(--surface))}
+.cd{--c:var(--c-sys);display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--c);color:var(--on-role)}
+.cd.hollow{background:transparent;border:2px solid var(--c);color:var(--c)}
+.cs{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);opacity:.5}
+.cx{color:var(--bad);display:inline-grid;place-items:center}
+.cn{color:var(--line)}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+
+/* lifecycles */
+.lc-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}
+.lc-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:14px}
+.lc-card h3{margin-bottom:14px}
+.trk{display:flex;flex-wrap:wrap;align-items:center;gap:16px 0}
+.edge{display:inline-flex;flex-direction:column;align-items:center;gap:5px;padding:0 6px;width:150px;text-align:center}
+.edge .who{display:flex;gap:3px;justify-content:center}
+.edge .lbl{font-size:13.5px;line-height:1.25;color:var(--muted)}
+.edge .arr{width:100%;height:10px;position:relative}
+.edge .arr::before{content:"";position:absolute;left:0;right:8px;top:4px;border-top:2px solid var(--muted)}
+.edge .arr::after{content:"";position:absolute;right:0;top:0;border:5px solid transparent;border-left:9px solid var(--muted)}
+.branches{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:9px}
+.branches li{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:var(--surface-2)}
+.br-act{display:inline-flex;align-items:center;gap:6px;font-size:15px}
+.br-note{font-size:14px;color:var(--muted)}
+.lc-notes{margin:14px 0 0;padding-left:20px;color:var(--muted);font-size:15px;display:grid;gap:5px}
+
+/* relay */
+.relay-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,420px);gap:20px 40px;align-items:start;margin:22px 0}
+.bars-mini{display:grid;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.bm{display:grid;grid-template-columns:150px minmax(0,1fr) 22px;gap:10px;align-items:center;font-size:14.5px}
+.bm i{display:block;height:12px;border-radius:6px;background:var(--brand)}
+.bm b{font:800 14px var(--font-mono);text-align:right}
+.relay{list-style:none;margin:0;padding:0}
+.rl{--c:var(--c-sys);display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 14px;position:relative;padding-bottom:4px}
+.rl::before{content:"";position:absolute;left:20px;top:50px;bottom:0;width:4px;background:var(--c);opacity:.35;border-radius:2px}
+.rl-h{display:grid;gap:2px;padding-top:2px}
+.rl-h small{font:700 12.5px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.rl-h b{font:800 18px var(--font-display)}
+.rl-h span{font-size:14.5px;color:var(--muted)}
+.rl-acts{grid-column:2;list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.rl-acts button{display:flex;gap:10px;align-items:baseline;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:15px}
+.rl-acts button:hover{border-color:var(--c)}
+.mtag{font:800 12px var(--font-mono);color:var(--muted);flex:none;min-width:34px}
+.rl-out{grid-column:2;display:flex;align-items:center;gap:8px;font:700 12.5px var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 0 16px}
+.rl-out::after{content:"";flex:1;border-top:1.5px dashed var(--line)}
+
+/* money */
+.money{display:grid;grid-template-columns:minmax(260px,350px) minmax(0,1fr);gap:20px;align-items:start;margin-top:22px}
+.inputs{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:grid;gap:16px}
+.inp label{display:flex;justify-content:space-between;gap:8px;font-weight:700;font-size:15px;margin-bottom:6px}
+.inp output{font:700 14px var(--font-mono);white-space:nowrap}
+.inp input[type=range]{width:100%;accent-color:var(--brand)}
+.inp.ck label{justify-content:flex-start;align-items:center;gap:10px;margin:0;font-weight:400}
+.inp.ck input{width:18px;height:18px;accent-color:var(--brand)}
+.bars{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;display:grid;gap:18px}
+.bl{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;font-size:15px;margin-bottom:7px}
+.bl b{font:800 15.5px var(--font-display)}
+.bl span{font:700 14.5px var(--font-mono);font-variant-numeric:tabular-nums}
+.bar{display:flex;height:30px;border-radius:7px;overflow:hidden;background:var(--surface-2)}
+.bar i{display:block;height:100%;transition:width .3s}
+.s-energy{background:var(--c-seller)} .s-margin{background:var(--brand)} .s-credit{background:repeating-linear-gradient(135deg,var(--bad) 0 5px,transparent 5px 9px)} .s-pay{background:var(--c-buyer)}
+.s-net{background:var(--c-seller)} .s-tds{background:var(--c-admin)} .s-rebate{background:var(--c-fin)} .s-held{background:var(--line)} .s-keep{background:var(--brand)}
+.keys{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;color:var(--muted)}
+.keys span{display:inline-flex;align-items:center;gap:6px}
+.keys i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.calc{display:grid;font-size:15px;margin-top:4px}
+.calc div{display:flex;justify-content:space-between;align-items:baseline;gap:14px;border-bottom:1px dashed var(--line);padding:8px 0}
+.calc div:last-child{border-bottom:0}
+.calc small{display:block;color:var(--muted);font-size:13.5px}
+.calc .v{font:700 15px var(--font-mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+.calc .tot{font-weight:700}
+
+/* side quests */
+.sq{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:14px;margin-top:22px}
+.sqc{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:grid;gap:11px;align-content:start}
+.sqc .where{font:700 12.5px var(--font-mono);color:var(--muted);letter-spacing:.03em}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fchip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 3px 4px;border-radius:999px;background:var(--surface-2);font-size:14.5px;line-height:1.25}
+.fchip .rbs{display:inline-flex}
+.fchip .rbs .rb+.rb{margin-left:-6px}
+.farr{color:var(--muted);font-weight:800}
+.sqc ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:15px;color:var(--muted)}
+
+/* quiz */
+.quiz{max-width:780px;margin:22px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px}
+.qprog{display:flex;gap:4px;margin-bottom:20px}
+.qprog span{flex:1;height:6px;border-radius:3px;background:var(--surface-2)}
+.qprog .ok{background:var(--good)} .qprog .no{background:var(--bad)} .qprog .on{background:var(--ink)}
+.qtop{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font:700 13px var(--font-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.qq{font:900 26px/1.25 var(--font-display);margin:10px 0 20px;text-wrap:balance}
+.qhint{margin:-8px 0 18px;font-size:15px;color:var(--muted);line-height:1.9}
+.qopts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qo{--c:var(--c-sys);display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);cursor:pointer;text-align:left;font:800 16px var(--font-display)}
+.qo:hover:not(:disabled){border-color:var(--c)}
+.qo:disabled{cursor:default}
+.qo.right{border-color:var(--good);background:var(--surface-2)}
+.qo.wrong{border-color:var(--bad);background:var(--surface-2)}
+.qfb{margin-top:18px;padding:14px 16px;border-radius:12px;background:var(--surface-2);display:grid;gap:6px}
+.qfb b{font:800 17px var(--font-display)}
+.qfb.ok b{color:var(--good)} .qfb.no b{color:var(--bad)}
+.qend{text-align:center;display:grid;gap:12px;justify-items:center}
+.qend .big{font:900 64px/1 var(--font-display)}
+
+@media (max-width:900px){
+  .intro,.mhead,.relay-top,.money{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .lad{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .lanes-wrap.stack .rail{display:none}
+}
+@media (max-width:720px){
+  .map-svg{display:none}
+  .ll{display:block}
+  .pgrid,.sq{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:540px){
+  .stats{grid-template-columns:repeat(2,auto)}
+  .qopts{grid-template-columns:1fr}
+  .top-in{column-gap:12px}
+  .brand svg{width:30px;height:30px}
+  .xp b,.xp-n{display:none}
+  .xp-bar{width:64px}
+  .brand small{display:none}
+  .bm{grid-template-columns:110px minmax(0,1fr) 22px}
+}
+@media (max-width:360px){
+  .xp{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <button class="brand" type="button" data-go="map" aria-label="REIA Playbook home">
+      <svg viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" rx="9" fill="#FFC845"/><path d="M6 23h10a5 5 0 0 0 5-5v-1a5 5 0 0 1 5-5h4" fill="none" stroke="#162F6A" stroke-width="3.4" stroke-linecap="round"/><circle cx="8" cy="23" r="3.6" fill="#FFFFFF" stroke="#162F6A" stroke-width="2.4"/><circle cx="28" cy="12" r="3.6" fill="#FFFFFF" stroke="#162F6A" stroke-width="2.4"/></svg>
+      <span><b>REIA Playbook</b><small>Every step, role and hand-off on the REIA desk</small></span>
+    </button>
+    <button class="xp" type="button" id="xp" data-go="map" title="Your progress: missions marked done and your best quiz score"></button>
+    <button class="theme-btn" type="button" id="theme" aria-label="Switch light or dark"></button>
+    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+  </div>
+</header>
+<main id="app" tabindex="-1"></main>
+<div class="scrim" id="scrim" hidden></div>
+<div class="dlayer"><aside class="drawer" id="drawer" aria-hidden="true" aria-label="Step details"></aside></div>
+<div class="hud" id="hud" hidden></div>
+<div class="switch" id="switch" hidden></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ───────────────────────── data: roles ───────────────────────── */
+const R = {
+  M: { b:'M',  name:'REIA Maker', short:'Maker', c:'maker', side:'SJVN', cls:'Prepares', level:'Signs no approval level', demo:'REIA Maker',
+       line:'Prepares the desk’s work: onboards companies, drafts contracts, records energy, raises and submits bills, sends them, runs reconciliations.' },
+  C: { b:'C',  name:'REIA Checker', short:'Checker', c:'checker', side:'SJVN', cls:'Decides', level:'Bill approval: Level 1', demo:'REIA Checker',
+       line:'Decides on what the maker prepared: verifies documents, approves companies, signs contracts, validates and locks energy, approves Level 1, runs disputes, pays sellers, signs statements.' },
+  H: { b:'H',  name:'REIA Approver (HOD)', short:'HOD', c:'hod', side:'SJVN', cls:'Sanctions', level:'Bill approval: Level 3', demo:'REIA Approver',
+       line:'The final word on the desk: approves bills at Level 3 and decides disputes.' },
+  F: { b:'F',  name:'Finance', short:'Finance', c:'fin', side:'SJVN', cls:'Concurs and confirms money', level:'Bill approval: Level 2', demo:'Finance',
+       line:'Concurs on bills at Level 2, confirms money that reached SJVN’s bank, concurs on large reconciliations, handles advances and TDS certificates.' },
+  G: { b:'MG', name:'Management', short:'Management', c:'mgmt', side:'SJVN', cls:'Sanctions and oversees', level:'Bill approval: Level 3, as the HOD’s alternate', demo:'Management',
+       line:'Can do what the HOD does at Level 3 and on disputes, approves break-glass access, and is alerted when a dispute breaches its SLA.' },
+  A: { b:'A',  name:'SJVN Admin', short:'Admin', c:'admin', side:'SJVN', cls:'Governs', level:'Signs no approval level', demo:'SJVN Admin',
+       line:'Runs the platform: SJVN users, company log-ins, project access, additional charge, the audit trail. Takes part in onboarding. Never drafts, approves or releases a transaction.' },
+  S: { b:'S',  name:'Seller (generator)', short:'Seller', c:'seller', side:'Company', cls:'PPA side', level:'Has its own Levels 1–3 inside the company', demo:'Seller',
+       line:'The solar or wind developer SJVN buys from. Accepts the energy figure, raises its own bill, disputes, signs its reconciliation.' },
+  B: { b:'B',  name:'Buyer (DISCOM)', short:'Buyer', c:'buyer', side:'Company', cls:'PSA side', level:'Has its own Levels 1–3 inside the company', demo:'Buyer',
+       line:'The distribution company SJVN sells to. Receives bills, disputes them, tells SJVN it has paid, signs its reconciliation.' },
+  X: { b:'',   name:'Platform (automatic)', short:'Automatic', c:'sys', side:'System', cls:'Runs on its own', level:'—',
+       line:'Scheduled jobs that need nobody to log in.' },
+};
+const ROLE_ORDER = ['M','C','H','F','G','A','S','B'];
+const AUTO_JOBS = [
+  'Every hour: creates last month’s reconciliation statement for each ACTIVE contract.',
+  'Dispute SLA check: not acknowledged in 2 days or not resolved in 15 → ESCALATED, Management alerted.',
+  'Payment security: reminders as an instrument nears its expiry date.',
+  'Daily alert to SJVN Admin when a project has nobody to act at a tier.',
+];
+
+/* ───────────────────────── data: missions ───────────────────────── */
+const SELLER_DOCS = ['Company Registration (PAN / GST / CIN)','Generation License / CEA Registration','Environmental Clearance','Grid Connectivity (CTU / STU / RLDC)','COD Certificate','Plant Technical Docs (SLD / Capacity)','Board Resolution / Power of Attorney','Bank Account Proof (Cancelled Cheque)'];
+const BUYER_DOCS = ['Company Registration (PAN / GST / CIN)','DISCOM / Procurer License or Registration','Board Resolution / Power of Attorney','Bank Account Proof (Cancelled Cheque)'];
+
+const MISSIONS = [
+{ n:1, zone:'setup', short:'Onboard & KYC', name:'Onboard and verify the companies', screen:'REIA Billing & Settlement › Stakeholders & KYC Desk',
+  goal:'Bring the seller and the buyer onto the platform, with every required document checked by a second person.',
+  start:'A new seller or buyer to deal with', end:'Company {APPROVED}, bank account verified',
+  steps:[
+    { who:'M', t:'Onboard the company', where:'REIA Billing & Settlement › Stakeholders & KYC Desk', press:['+ Onboard Stakeholder','Submit'],
+      fill:['Entity type: Seller (Generator) or Buyer (Beneficiary / DISCOM)','Name, category, PAN, GSTIN','Seller: technology and capacity (MW). Buyer: contracted capacity (MW)','Address, authorised signatory and designation','Commercial contact: name, email, phone','Bank: name, account number, IFSC, branch address'],
+      res:{o:'Company', t:'PENDING'},
+      rules:['PAN is checked as soon as you leave the field: 5 letters, 4 digits, 1 letter. A wrong one opens a popup.','GSTIN is the 2-digit state code, the same PAN, then 3 characters (for example 08AAQCS1432K1Z5).','A PAN or GSTIN already on another company is refused.'],
+      block:'Checker: no `+ Onboard Stakeholder` on the desk.' },
+    { who:'M', t:'Fill the regulatory checklist', where:'Company › View › Regulatory Approvals', press:['Update','Save'],
+      fill:['Reference / approval no.','Issued by, issued on, valid until','Status: SUBMITTED'],
+      lists:{ 'Seller: 8 required items':SELLER_DOCS, 'Buyer: 4 required items':BUYER_DOCS, 'Buyer: optional':['SERC / Regulatory Commission Approval'] },
+      res:{o:'Each item', f:'NOT_STARTED', t:'SUBMITTED'},
+      rules:['The maker can choose only NOT_STARTED, SUBMITTED or EXPIRED.','A company can upload its own evidence from its portal (Level 2 and above). SJVN still decides.'],
+      refuse:['Marking Environmental Clearance verified is the REIA checker’s decision.'],
+      block:'Maker: no VERIFIED or REJECTED in the list, and no “Approval Action” box.' },
+    { who:'C', t:'Verify each document', where:'Company › Regulatory Approvals', press:['Update','VERIFIED','Save'],
+      res:{o:'Each item', f:'SUBMITTED', t:'VERIFIED'},
+      rules:['The checker decides each item: VERIFIED, REJECTED or NOT_APPLICABLE.','The checker does not type the details in. That stays with the maker.'],
+      refuse:['The REIA maker records COD Certificate’s details; the checker decides on them.'] },
+    { who:'C', t:'Approve the company', where:'Company › Approval Action', press:['Standard Approval'],
+      res:{o:'Company', f:'PENDING', t:'APPROVED'},
+      rules:['Refused while any required item is not VERIFIED. The popup lists what is still pending.','Four eyes: whoever onboarded the company cannot approve it, administrators included.','The bank account is marked verified at the same time, because its proof was verified. If not: `Confirm against bank proof` › `Confirm account`.','`Reject`, with a reason, ends at REJECTED.'],
+      refuse:['Approval was refused'] },
+  ],
+  also:['Changing an APPROVED company (details, contacts or bank) sends it back to PENDING until the checker approves it again.','Blacklisting: REIA Checker or SJVN Admin.','Direct admission without the checklist is for administrators only, and is not part of the normal run.','Onboarding counts as governance, so SJVN Admin may also act on this desk. The four-eyes rule still applies.'],
+  extra:'docs' },
+
+{ n:2, zone:'setup', short:'Company logins', name:'Give the companies their log-ins', screen:'REIA Billing & Settlement › Company Users',
+  goal:'Each company gets its own sign-in, then decides who in its team prepares, checks and approves.',
+  start:'Company onboarded (its screens open once KYC is {APPROVED})', end:'Seller and buyer signed in with their own passwords',
+  steps:[
+    { who:'A', t:'Create the company’s first log-in', where:'REIA Billing & Settlement › Company Users', press:['Add Team Member','Add to team'],
+      fill:['Search the company (“Type to search company…”) and pick it','Full name, email (their sign-in), designation, phone','Access level: Level 3 — Approver for the first log-in','Tick “Set the temporary password myself”, or let the platform make one (shown once)'],
+      res:{o:'Listed as', text:'Temporary password not yet changed'},
+      rules:['Only SJVN Admin (or IT Super Admin) manages company log-ins. The REIA desk no longer creates users.','A company’s Admin account can be reset or switched off only by SJVN.'],
+      block:'SJVN Admin: no `+ Generate Invoice`, and no other desk action. Read-only on transactions.' },
+    { who:'S', t:'First sign-in, set a new password', where:'Sign-in page', press:['Sign in','Save'],
+      fill:['Company email and the temporary password','Forced popup: current password, new password, confirm new password'],
+      res:{o:'Lands on', text:'Seller dashboard'},
+      rules:['Contracts, energy, invoices and the rest stay locked until the company’s KYC is APPROVED.'] },
+    { who:'B', t:'First sign-in, set a new password', where:'Sign-in page', press:['Sign in','Save'],
+      fill:['Company email and the temporary password','Forced popup: current password, new password, confirm new password'],
+      res:{o:'Lands on', text:'Buyer dashboard'},
+      rules:['A company log-in sees only its own company’s contracts, bills, payments and disputes.'] },
+    { who:'S', opt:true, noquiz:true, t:'Add its own makers and checkers', where:'Seller Portal › My Team',
+      fill:['Name, email, designation, phone','Level 1 — Maker, or Level 2 — Checker'],
+      rules:['Level 3 adds and manages Level 1 and Level 2.','Only the Company Admin (or SJVN) adds or changes a Level 3 approver.','The buyer builds its team the same way.'] },
+  ],
+  also:['A Level 1 maker prepares but cannot send anything to SJVN alone: its Level 2 or 3 sends it.','A Level 1 maker cannot sign a reconciliation.'],
+  extra:'tiers' },
+
+{ n:3, zone:'setup', short:'Contracts & mapping', name:'Contracts: PPA, PSA and the mapping', screen:'REIA Billing & Settlement › Contracts (PPA/PSA)',
+  goal:'Put the purchase (PPA) and the sale (PSA) on the platform, link them, and make both live.',
+  start:'Seller and buyer {APPROVED}', end:'PPA and PSA {ACTIVE}, PSA mapped to the PPA',
+  steps:[
+    { who:'M', t:'Draft the PPA (seller → SJVN)', where:'REIA Billing & Settlement › Contracts (PPA/PSA)', press:['+ New Contract','Create Draft Contract'],
+      fill:['Contract no., type PPA, the seller','Project type: Solar, Wind, Hybrid or FDRE','Total capacity (MW)','Tariff type and base tariff (₹/kWh), e.g. 2.75','Billing cycle, tenure start and end','Minimum / guaranteed CUF (%)','The signed agreement (PDF)'],
+      res:{o:'Contract', t:'DRAFT'},
+      block:'Checker: no `+ New Contract`.' },
+    { who:'M', t:'Draft the PSA (SJVN → buyer)', where:'REIA Billing & Settlement › Contracts (PPA/PSA)', press:['+ New Contract','Create Draft Contract'],
+      fill:['Contract no., type PSA, the buyer','Capacity, tariff (e.g. 2.82), billing cycle, tenure','SJVN margin (₹/MWh), optional, e.g. 70','The signed agreement (PDF)'],
+      res:{o:'Contract', t:'DRAFT'} },
+    { who:'M', t:'Map the PSA to the PPA', where:'Open the PPA › Projects Mapped', press:['+ Map PSA to this PPA','Save Map'],
+      fill:['Select PSA','Allocation %','Effective from'],
+      res:{o:'Mapping', text:'Saved at 100%'},
+      rules:['The confirmation shows the share mapped and the spread per unit, e.g. +₹0.07.','A PSA that sells below the PPA tariff needs a recorded reason.'] },
+    { who:'M', t:'Move both into negotiation', where:'Each contract', press:['Update Lifecycle Stage','UNDER_NEGOTIATION'],
+      res:{o:'Contract', f:'DRAFT', t:'UNDER_NEGOTIATION'},
+      rules:['The maker moves a contract only between DRAFT and UNDER_NEGOTIATION.'],
+      refuse:['Moving a contract to SIGNED is the REIA checker’s decision.'],
+      block:'Maker: no SIGNED, ACTIVE or TERMINATED in the list.' },
+    { who:'C', t:'Sign both contracts', where:'Each contract', press:['Update Lifecycle Stage','SIGNED'],
+      res:{o:'Contract', f:'UNDER_NEGOTIATION', t:'SIGNED'},
+      rules:['A signed agreement must be on file before a contract can say SIGNED.'] },
+    { who:'C', t:'Make both live', where:'Each contract', press:['Update Lifecycle Stage','ACTIVE'],
+      res:{o:'Contract', f:'SIGNED', t:'ACTIVE'},
+      rules:['A contract goes ACTIVE only on or after its tenure start date. Until then it stays SIGNED, and nothing is billed on it.','A renewable PPA needs its minimum CUF before it goes live.','Optional stop on the way: PENDING_REGULATORY_APPROVAL.'],
+      refuse:['PPA/… starts on 2026-09-01. It stays SIGNED until then and can be made ACTIVE from that date.','PPA/… has no minimum CUF. Enter the CUF the PPA guarantees (Edit Draft or amendment) before making it ACTIVE.'] },
+  ],
+  also:['Amendment: the maker drafts it, the checker makes it live, and the old version becomes AMENDED.','Hold: maker, checker, HOD or Management can hold a contract. Only the HOD or Management overrides a hold.','Terminate, close, renew: the checker.','Many contracts at once: the maker’s bulk upload.'] },
+
+{ n:4, zone:'setup', short:'Payment security', name:'Payment security: the buyer’s LC', screen:'REIA Billing & Settlement › Payment Security',
+  goal:'Hold the buyer’s letter of credit, confirmed by its bank, so SJVN is covered if the buyer does not pay.',
+  start:'PSA in place', end:'LC {ACTIVE}, bank confirmation received',
+  steps:[
+    { who:'M', t:'Record the buyer’s LC', where:'REIA Billing & Settlement › Payment Security', press:['+ Instrument','Save'],
+      fill:['Contract: the PSA','Mechanism: Letter of credit','Limit (₹), e.g. 5,00,00,000','Bank’s LC number, issuing bank','Validity start and end','Remarks'],
+      res:{o:'LC', t:'ACTIVE'},
+      rules:['The LC gets a number like PS/LC/2026/000NN. Its SFMS column reads “Pending” until the bank confirms.','A buyer can also submit its own instrument from its portal. It arrives as DRAFT for the desk to accept.'] },
+    { who:'C', t:'Record the bank’s confirmation', where:'Payment Security › the LC', press:['Record bank confirmation','Confirm'],
+      fill:['Bank’s confirmation reference (SFMS: MT700 / MT707 for an LC, MT760 / MT767 for a bank guarantee)'],
+      res:{o:'SFMS column', f:'PENDING', t:'RECEIVED'},
+      rules:['“Bank confirm” then shows the reference.'],
+      refuse:['The SFMS message date cannot be in the future'],
+      block:'Maker: no `Record bank confirmation` on the LC.' },
+  ],
+  also:['Renew: the maker. Top up (replenish): the maker or the buyer.','Drawing on, invoking or accepting a company’s instrument: the checker.','Release: the company or desk asks, the checker acts, Finance signs off. Only with no dues and no open disputes.','Short cover can be treated as adequate for up to 90 days, with a reason: HOD or Management only.'],
+  extra:'security' },
+
+{ n:5, zone:'month', short:'Energy', name:'Energy for the month', screen:'REIA Billing & Settlement › Energy Data & Validation',
+  goal:'Agree one energy figure for the month that SJVN and the seller both stand behind, then freeze it for billing.',
+  start:'PPA {ACTIVE}, month over, meter data (JMR / REA) in hand', end:'Energy {LOCKED}: ready to bill',
+  steps:[
+    { who:'M', t:'Record the month’s energy', where:'REIA Billing & Settlement › Energy Data & Validation', press:['+ Record Energy Data','Save'],
+      fill:['Contract: the PPA','Period (month)','Data type: Provisional or Final','Source, e.g. JMR (joint meter reading)','Energy (MWh), e.g. 7,920'],
+      res:{o:'Energy', t:'DRAFT'},
+      rules:['CUF is worked out for you: 7,920 MWh from 50 MW in September is 22%.','The REA can be uploaded and read in instead of typing.'],
+      block:'Maker: no `Validate`, no `Lock` on the row.' },
+    { who:'C', t:'Validate the figure', where:'Energy Data & Validation › the row', press:['Validate'],
+      res:{o:'Energy', f:'DRAFT', t:'VALIDATED'},
+      rules:['If the figure disagrees with another source for the same month, it goes to DISPUTED instead.'],
+      block:'Checker: no `+ Record Energy Data`.' },
+    { who:'S', t:'Accept the figure', where:'Seller Portal › Energy Data › the month', press:['Accept','Accept the figure'],
+      res:{o:'Seller’s answer', t:'ACCEPTED'},
+      rules:['An in-page popup asks “Accept this energy figure?”.','Or object: give the MWh you claim, a note and a file.','The seller sees the figure only after it has left DRAFT.'] },
+    { who:'C', opt:true, t:'Rule on an objection', where:'Energy Data & Validation › the row',
+      res:{o:'Objection', f:'OBJECTED', t:'UPHELD'},
+      rules:['UPHELD or REJECTED, with a note the seller reads.','If upheld, the maker records the corrected figure. It replaces the old one.'],
+      refuse:['Ruling on an objection is the REIA checker’s'] },
+    { who:'C', t:'Lock it for billing', where:'Energy Data & Validation › the row', press:['Lock'],
+      res:{o:'Energy', f:'VALIDATED', t:'LOCKED'},
+      rules:['Only a LOCKED figure can be billed: one per contract, month and kind.','A reason is required to lock a figure that failed validation, has an unanswered objection, or an upheld objection it does not meet.','Here the seller accepted, so no reason is asked.'],
+      refuse:['This period failed validation and cannot be locked without a recorded reason.'] },
+  ],
+  also:['The buyer sees its share under “Energy Allocation”, by the PSA’s mapping %.','The maker can record certified curtailment hours on a month’s figure.'] },
+
+{ n:6, zone:'month', short:'Bills & approval', name:'Bills and their approval', screen:'REIA Billing & Settlement › Billing & Invoicing',
+  goal:'Raise SJVN’s bill on the buyer, check the seller’s own bill against SJVN’s figure, and take both up the approval ladder.',
+  start:'Energy {LOCKED}', end:'Both bills {APPROVED}, buyer’s bill {SENT}',
+  steps:[
+    { who:'M', t:'Generate SJVN’s bill on the buyer', where:'REIA Billing & Settlement › Billing & Invoicing', press:['+ Generate Invoice','Generate'],
+      fill:['Contract: the PSA','Billing period, e.g. 2026-09','Invoice type: Provisional or Final'],
+      res:{o:'INV-PSA/…', t:'DRAFT'},
+      rules:['Amount = MWh × 1,000 × PSA tariff: 7,920 × 1,000 × ₹2.82 = ₹2,23,34,400 (energy plus SJVN margin).','The Month-Close Board can raise every ready bill in one go.'],
+      block:'Checker and SJVN Admin: no `+ Generate Invoice`.' },
+    { who:'M', t:'Generate SJVN’s own figure for the PPA', where:'REIA Billing & Settlement › Billing & Invoicing', press:['+ Generate Invoice','Generate'],
+      fill:['Contract: the PPA','Same billing period and type'],
+      res:{o:'INV-PPA/…', t:'DRAFT'},
+      rules:['7,920 × 1,000 × ₹2.75 = ₹2,17,80,000.','It stays DRAFT. It is only the yardstick the seller’s own bill is checked against.'],
+      refuse:['… is the developer’s own bill for 2026-09; submit that one for approval.'] },
+    { who:'S', t:'Raise its own bill', where:'Seller Portal › My Invoices', press:['+ Create Invoice','Submit to SJVN'],
+      fill:['Contract (PPA), billing period, invoice type','Your invoice ref (optional)','The form fills itself: MWh × tariff, the source (JMR, final) and the TDS note'],
+      res:{o:'Seller’s bill', t:'SUBMITTED'},
+      rules:['A Level 1 maker’s bill goes to its own checker first (PENDING_L2). Level 2 or 3 sends it on.'] },
+    { who:'M', t:'Check it against SJVN’s figure', where:'Billing & Invoicing › click the bill’s number', press:['Validate vs System'],
+      res:{o:'Validation', t:'MATCHED'},
+      rules:['PARTIAL or MISMATCH must be settled before approval: the checker sends the bill back to the seller, or waives the gap with a reason.','Clicking the contract number opens the contract, not the bill.'] },
+    { who:'M', t:'Complete the verification checklist', where:'The seller’s bill › Verification Checklist', press:['Save Verification'],
+      lists:{ 'Technical Verification: each line VERIFIED, PENDING, FAILED or NA':['REA Uploaded','Energy Verified','Tariff Verified','Contract Capacity Verified','CUF Compliance','COD Compliance','Curtailment Checked','Change in Law Verified'], 'Commercial Verification: the build-up':['Energy Charges and the bill’s other lines (filled in for you)','Change in Law','Compensation Event','Liquidated Damages (−)','Previous Adjustment'] },
+      res:{o:'Verification', t:'VERIFIED'},
+      rules:['A developer’s bill cannot be approved without a completed verification.','Only Curtailment Checked and Change in Law Verified may be NA.','Clearing a failed automatic check needs a written reason.','The build-up must come to what the bill says. If the gap is only the liquidated damages, save, then Draft LD note; otherwise the checker sends the bill back to the developer.'] },
+    { who:'M', t:'Submit both bills for approval', where:'Each bill', press:['Submit for SJVN Approval'],
+      res:{o:'Bill', f:'DRAFT', t:'UNDER_APPROVAL'},
+      rules:['Levels by amount: up to ₹1 lakh one level, above ₹1 lakh two, above ₹10 lakh three. SJVN can change the bands in its masters.'],
+      block:'Maker: no `Approve Level …` button on either bill.' },
+    { who:'C', t:'Approve Level 1', where:'Each bill › Approval Workflow', press:['Approve Level 1'],
+      fill:['Comments'],
+      res:{o:'Level 1', t:'APPROVED'},
+      rules:['Whoever verified the bill cannot approve its Level 1.','The checker can also reject, or send the seller’s bill back.'],
+      refuse:['You verified INV-…, so someone else approves its first level.'],
+      block:'HOD: no approve button while Level 1 is pending.' },
+    { who:'F', t:'Approve Level 2', where:'Each bill › Approval Workflow', press:['Approve Level 2'],
+      fill:['Comments'],
+      res:{o:'Level 2', t:'APPROVED'},
+      block:'Checker: no approve button while Level 2 is pending.' },
+    { who:'H', t:'Approve Level 3', where:'Each bill › Approval Workflow', press:['Approve Level 3'],
+      fill:['Comments','If asked: acknowledge the security position, e.g. “LC held and bank-confirmed”'],
+      res:{o:'Bill', f:'UNDER_APPROVAL', t:'APPROVED'},
+      rules:['Management can sign Level 3 instead of the HOD.','Three approvals, three different people, strictly in order.'] },
+    { who:'M', t:'Send the bill to the buyer', where:'The buyer’s bill', press:['Send Email to Buyer'],
+      res:{o:'Bill', f:'APPROVED', t:'SENT'},
+      rules:['Emailed to the buyer. With no mail server set up, it is written to the outbox and marked SIMULATED.','Send before payment: a paid bill can no longer be sent.','The buyer’s 15-day dispute window starts when the bill is presented.'] },
+  ],
+  also:['Arrear, supplementary and late-payment surcharge bills: the maker raises them, and they climb the same ladder.','Cancel a bill: maker or checker, while it is DRAFT, SUBMITTED, REJECTED, PENDING_L2 or UNDER_APPROVAL.','Invoice Verification (under Others) lists every developer bill and what it is waiting on.'],
+  extra:'ladder' },
+
+{ n:7, zone:'month', short:'Disputes', name:'Disputes', screen:'REIA Billing & Settlement › Dispute Management',
+  goal:'Let the buyer challenge part of a bill, decide it fairly, and settle what is accepted with a credit note.',
+  start:'Bill {SENT}, within 15 days of presentation', end:'Dispute {CLOSED}, credit note issued if accepted',
+  steps:[
+    { who:'B', t:'Raise a dispute', where:'Buyer Portal › Billing & Payments › the bill', press:['Raise a dispute on this bill','Submit Dispute'],
+      fill:['Amount disputed (₹)','Charge line: energy charges, SJVN margin…','Reason code, e.g. energy data mismatch','Issue description','Evidence file'],
+      res:{o:'Dispute', t:'RAISED'},
+      rules:['The bill shows DISPUTED, with the amount in dispute.','After 15 days from presentation the bill is conclusive and cannot be disputed.','The seller disputes its side the same way. The maker can raise one on a party’s behalf.'],
+      refuse:['This bill is now conclusive — the 15-day dispute window (from …) has passed.'] },
+    { who:'C', t:'Acknowledge and start the review', where:'REIA Billing & Settlement › Dispute Management › the dispute', press:['Acknowledge','Start Review'],
+      res:{o:'Dispute', f:'RAISED', t:'UNDER_REVIEW'},
+      rules:['Clock: acknowledge within 2 days, resolve within 15. A breach makes it ESCALATED and alerts Management.'],
+      block:'Maker: no Acknowledge, Start Review, Request Info, Confirm Resolution or Close Dispute.' },
+    { who:'C', opt:true, t:'Ask the buyer for information', where:'The dispute', press:['Request Info'],
+      fill:['What information is needed (at least 10 characters)'],
+      res:{o:'Dispute', f:'UNDER_REVIEW', t:'INFO_REQUESTED'},
+      refuse:['Say what information is needed (at least 10 characters) — it is what the party reads.'] },
+    { who:'B', opt:true, t:'Answer SJVN', where:'Buyer Portal › My Disputes › the dispute', press:['Send'],
+      fill:['Message to SJVN'],
+      res:{o:'Dispute', f:'INFO_REQUESTED', t:'UNDER_REVIEW'},
+      rules:['A banner says “SJVN has asked for more information”.'] },
+    { who:'H', t:'Decide the dispute', where:'REIA Billing & Settlement › Dispute Management › the dispute', press:['Confirm Resolution'],
+      fill:['Outcome: accepted (full or partial credit) or rejected','Amount accepted (₹), e.g. 50,000','Resolution reasoning, shown to both parties'],
+      res:{o:'Dispute', f:'UNDER_REVIEW', t:'RESOLVED_ACCEPTED'},
+      rules:['Accepted: a draft credit note is made for the accepted amount.','Rejected: RESOLVED_REJECTED, no note.','Management can decide instead of the HOD.'],
+      block:'Checker: no `Confirm Resolution`.' },
+    { who:'C', t:'Approve the credit note', where:'REIA Billing & Settlement › Notes for Approval', press:['Approve & issue'],
+      res:{o:'Credit note', f:'DRAFT', t:'ISSUED'},
+      rules:['Issued with its own note number. The bill shows the credit applied, and its balance falls.','A credit note is not money, so the bill reads “Partially paid — credit applied”.','Finance can approve notes too. Whoever raised a note cannot approve it.'],
+      block:'Maker: no `Approve & issue`.' },
+    { who:'B', t:'Accept the outcome', where:'Buyer Portal › My Disputes › the dispute', press:['Accept resolution','Accept and close'],
+      res:{o:'Dispute', f:'RESOLVED_ACCEPTED', t:'CLOSED'},
+      rules:['Or contest it: name the forum (SJVN senior management, legal / conciliation, arbitration, the Regulatory Commission) and the amount.','The party has 15 days to answer. After that the checker can `Close Dispute`.'] },
+  ],
+  also:['The maker keeps the record of a contested dispute: forum, hearings, how it ended.','Debit notes, and notes for other reasons, go through the same Notes for Approval queue.'],
+  extra:'clock' },
+
+{ n:8, zone:'month', short:'Buyer pays', name:'The buyer pays', screen:'Buyer Portal › Billing & Payments, then REIA Billing & Settlement › Payment Monitoring',
+  goal:'Record the buyer’s money only once Finance has seen it in SJVN’s bank.',
+  start:'Bill {SENT}', end:'Bill {PAID}',
+  steps:[
+    { who:'B', t:'Tell SJVN about the payment', where:'Buyer Portal › Billing & Payments › the bill', press:['Intimate payment to SJVN','Send to SJVN Finance'],
+      fill:['Amount credited to SJVN (bill less credit notes), e.g. 2,22,84,400','Payment date, mode (RTGS…), UTR / reference','Remarks'],
+      res:{o:'Intimation', t:'SUBMITTED'},
+      rules:['A buyer’s Level 1 maker sends it to its checker first (PENDING_CHECKER). The checker sends it on or returns it.','The buyer can withdraw it until Finance acts.'] },
+    { who:'F', t:'Confirm the money arrived', where:'REIA Billing & Settlement › Payment Monitoring › Payments to confirm', press:['Confirm receipt','Confirm and record the payment'],
+      fill:['Value date in SJVN’s bank'],
+      res:{o:'Bill', f:'SENT', t:'PAID'},
+      rules:['Only Finance confirms money. The desk that raised the bill never marks it paid.','Part of the bill paid: PARTIALLY_PAID.','Money beyond the bill can be held as the buyer’s advance (Advances & Unapplied Receipts).'],
+      block:'Maker and checker cannot confirm a receipt.' },
+  ],
+  also:['Paid late: surcharge accrues from the due date, and the maker can raise a late-payment surcharge bill.','Paid early: the buyer earns the contract’s early-payment rebate.','Payment Monitoring shows both sides: what buyers owe SJVN, and what SJVN owes generators.'] },
+
+{ n:9, zone:'month', short:'Pay the seller', name:'Pay the seller: pay-when-paid', screen:'REIA Billing & Settlement › Billing & Invoicing › the seller’s bill',
+  goal:'Pass the buyer’s money on to the seller: only what was realised, less the rebate SJVN earns and the TDS.',
+  start:'Buyer’s bill {PAID}, seller’s bill {APPROVED}', end:'Seller’s bill {PAID}',
+  steps:[
+    { who:'F', opt:true, noquiz:true, t:'See what each seller can be paid', where:'REIA Billing & Settlement › Others › Developer Release Planner',
+      rules:['Shows what buyers paid that belongs to each generator (its energy share; no SJVN margin, no credit notes), what has gone out, and what can be released now.'] },
+    { who:'C', alt:['F'], t:'Release to the generator', where:'The seller’s bill › Release Payment to Generator (Pay-when-paid)', press:['Release to Generator'],
+      fill:['Net amount paid (₹)','TDS deducted (₹)','Fund source: DISCOM realization, own fund or payment security fund','Payment date, reference'],
+      res:{o:'Seller’s bill', f:'APPROVED', t:'PAID'},
+      rules:['The section shows what the DISCOM has realised, what is already released, and what is available.','Net + TDS may not exceed the lower of what is available and the bill less the early-payment rebate: 1.5% if paid within 5 days of the bill, 1% within 30 days, unless the PPA sets its own.','TDS u/s 194Q: 0.1% of the bill above ₹50 lakh in the year.','Net + TDS + rebate = the bill, exactly. Finance can release too.'],
+      refuse:['₹2,17,80,000 is more than the ₹2,14,53,300 left on … (₹2,17,80,000 owed, less the 1.50% early-payment rebate it earns if paid today).'],
+      block:'Maker: the release section does not appear.' },
+    { who:'S', opt:true, noquiz:true, t:'See the money', where:'Seller Portal › My Dashboard / Payments & Ledger',
+      rules:['“Latest payments from SJVN” shows the release. No other company is named anywhere.'] },
+  ],
+  also:['Finance files the quarterly TDS certificates (Form 16A) for sellers from Counterparty Ledgers & TDS.','The Money tab works through these figures and lets you change them.'],
+  extra:'release' },
+
+{ n:10, zone:'month', short:'Reconciliation', name:'Reconcile the month', screen:'REIA Billing & Settlement › Reconciliation',
+  goal:'Agree, contract by contract, that the month’s energy, bills and payments tie up, and have both sides sign.',
+  start:'Month billed and paid', end:'Statement {CLOSED}, signed by both',
+  steps:[
+    { who:'X', noquiz:true, t:'Statement created automatically', where:'Hourly job',
+      res:{o:'Statement', t:'PENDING_SIGN_OFF'},
+      rules:['Every hour the platform creates last month’s statement for each ACTIVE contract.','If a statement was made before payments landed, use `Regenerate statement (Re-sync)`.'] },
+    { who:'M', opt:true, t:'Run a reconciliation', where:'REIA Billing & Settlement › Reconciliation', press:['+ Run Reconciliation','Run'],
+      fill:['Scope: REIA contract (PPA / PSA)','Contract','Period type: Monthly','Period'],
+      res:{o:'Statement', t:'PENDING_SIGN_OFF'},
+      rules:['NEEDS_REVIEW instead when a line does not match.','Lines: energy (metered vs billed), billed vs paid, tax / SAP, performance, penalty (CUF assessed at year end).','Tax and SAP lines read NOT_CONNECTED unless a figure is supplied. That is expected.'],
+      refuse:['R… is already open for 2026-09. Open it and use "Regenerate statement" to refresh its figures, or finish it first.'],
+      block:'Checker: no `+ Run Reconciliation`.' },
+    { who:'C', opt:true, t:'Override an exception', where:'The statement › the line', press:['Override'],
+      fill:['Why accepting variance…'],
+      res:{o:'Line', text:'Accepted with a reason'},
+      block:'Maker: no `Override`.' },
+    { who:'F', t:'Concur for Finance', where:'The statement', press:['Concur for Finance'],
+      rules:['Needed when the statement covers more than ₹1 crore billed. The desk cannot sign before it.'],
+      refuse:['R… covers ₹2,23,34,400 billed, above the ₹1,00,00,000 limit. Finance concurs before SJVN signs.'] },
+    { who:'C', t:'Sign for SJVN', where:'The statement', press:['✓ SJVN Agree & Sign-Off','✓ Confirm & Sign Off'],
+      fill:['Tick “I confirm digital sign-off”'],
+      res:{o:'SJVN side', text:'Signed'},
+      rules:['Only with no open lines.'],
+      block:'Maker: no `SJVN Agree & Sign-Off`.' },
+    { who:'B', t:'Sign for the buyer', where:'Buyer Portal › Reconciliation › the PSA statement', press:['I agree — sign off','Sign off'],
+      fill:['Tick “I have reviewed this statement…”'],
+      res:{o:'PSA statement', t:'CLOSED'},
+      rules:['A Level 1 maker cannot sign. Level 2, 3 or the Company Admin can.'] },
+    { who:'S', t:'Sign for the seller', where:'Seller Portal › Reconciliation › the PPA statement', press:['I agree — sign off','Sign off'],
+      fill:['Tick “I have reviewed this statement…”'],
+      res:{o:'PPA statement', t:'CLOSED'},
+      rules:['The statement then shows “Signed by both — closed”.'] },
+  ],
+  also:['Reopen: a party or the desk asks; Finance or the checker decides.','The maker can raise a dispute from a statement line, inside the dispute window.'],
+  extra:'recon' },
+];
+
+/* ───────────────────────── data: powers matrix ─────────────────────────
+   Codes in role order M C H F MG A S B: Y does it · y can also · r sees only · x blocked · - no access */
+const MX = [
+  ['KYC','Onboard a company','Y x r r r y - -','`+ Onboard Stakeholder`'],
+  ['KYC','Record a checklist item’s details (SUBMITTED)','Y x r r r y y y','Companies submit from their portal (Level 2 and above)'],
+  ['KYC','Verify or reject a checklist item','x Y r r r y - -',''],
+  ['KYC','Approve a company (Standard Approval)','x Y r r r y - -','Never the person who onboarded it'],
+  ['KYC','Confirm a company’s bank account','x Y r r r y - -',''],
+  ['KYC','Blacklist a company','x Y r r r Y - -',''],
+  ['KYC','Create company log-ins','x x - - - Y y y','Company Level 3 adds its own makers and checkers'],
+  ['Contracts','Draft a PPA or PSA (+ New Contract)','Y x r r r r r r',''],
+  ['Contracts','Map a PSA to a PPA','Y x r r r r - -',''],
+  ['Contracts','Move a draft into negotiation','Y x r r r r - -',''],
+  ['Contracts','Sign, activate, terminate or close a contract','x Y r r r r - -',''],
+  ['Contracts','Draft an amendment','Y x r r r r - -',''],
+  ['Contracts','Put a contract on hold','y y y r y r - -',''],
+  ['Contracts','Override a hold','r r Y r Y r - -',''],
+  ['Security','Record an instrument (+ Instrument)','Y x r r r r y y','A company’s own submission arrives as DRAFT'],
+  ['Security','Accept a company’s instrument','x Y r r r r - -',''],
+  ['Security','Record the bank’s confirmation (SFMS)','x Y r r r r - -',''],
+  ['Security','Issue the demand letter for an invocation','Y x r r r r - -',''],
+  ['Security','Draw on or invoke security','x Y r r r r - -',''],
+  ['Security','Release an instrument','x Y r Y r r y y','Company asks, checker acts, Finance signs off'],
+  ['Security','Treat short cover as adequate (up to 90 days)','x x Y r Y r - -',''],
+  ['Energy','Record energy (+ Record Energy Data)','Y x r r r r - -',''],
+  ['Energy','Validate energy','x Y r r r r - -',''],
+  ['Energy','Accept or object to the energy figure','r r r r r r Y -',''],
+  ['Energy','Rule on an objection','x Y r r r r - -',''],
+  ['Energy','Lock energy for billing','x Y r r r r - -',''],
+  ['Bills','Generate SJVN’s bill (+ Generate Invoice)','Y x r r r x - r',''],
+  ['Bills','Raise its own bill to SJVN','r r r r r r Y -','Level 1 needs its own checker first'],
+  ['Bills','Validate a seller’s bill vs System','Y y r r r r - -',''],
+  ['Bills','Complete the verification checklist','Y x r r r r - -',''],
+  ['Bills','Submit a bill for SJVN approval','Y x r r r r - -',''],
+  ['Bills','Approve Level 1','x Y x r r r - -','Not whoever verified the bill'],
+  ['Bills','Approve Level 2','x x x Y r r - -',''],
+  ['Bills','Approve Level 3','x x Y r Y r - -',''],
+  ['Bills','Send a seller’s bill back, or waive a mismatch','x Y r r r r - -',''],
+  ['Bills','Send a bill to the buyer','Y x r r r r - -',''],
+  ['Bills','Cancel a bill','y y r r r r - -',''],
+  ['Disputes','Raise a dispute','y r r r r r Y Y','The maker raises on a party’s behalf'],
+  ['Disputes','Acknowledge, review, ask for information on, or close a dispute','x Y r r r r - -',''],
+  ['Disputes','Answer a request for information','r r r r r r Y Y',''],
+  ['Disputes','Decide a dispute (Confirm Resolution)','x x Y r Y r - -',''],
+  ['Disputes','Approve a credit note (Approve & issue)','x Y r y r r - -',''],
+  ['Disputes','Accept or contest the outcome','r r r r r r Y Y',''],
+  ['Disputes','Keep the forum and hearing record','Y r r r r r - -',''],
+  ['Money','Tell SJVN a payment was made','r r r r r r - Y','Buyer Level 1 needs its checker first'],
+  ['Money','Confirm money received','x x r Y r r - -',''],
+  ['Money','Release payment to a seller','x Y r y r r - -',''],
+  ['Money','Apply or refund an advance','r r r Y r r - -',''],
+  ['Money','File TDS certificates (Form 16A)','r r r Y r r - y','Finance for sellers; a buyer files its own'],
+  ['Money','Raise a late-payment surcharge bill','Y x r r r r - -',''],
+  ['Reconciliation','Run a reconciliation','Y x r r r r - -','The hourly job also creates them'],
+  ['Reconciliation','Override an exception','x Y r r r r - -',''],
+  ['Reconciliation','Concur on a statement above ₹1 crore','r r r Y r r - -',''],
+  ['Reconciliation','Sign for SJVN','x Y r r r r - -',''],
+  ['Reconciliation','Sign for the company','r r r r r r Y Y','Not a Level 1 maker'],
+  ['Reconciliation','Decide a reopen request','r Y r Y r r - -',''],
+  ['Notes','Draft a debit or credit note','Y x r y r r - -',''],
+  ['Notes','Approve or reject a note','x Y r y r r - -',''],
+  ['Notes','Apply an issued note to its bill','Y x r y r r - -',''],
+  ['SAP posting','Prepare the month’s posting','Y x r r r r - -',''],
+  ['SAP posting','Post the month’s posting, push it to SAP, or reverse it','x Y r r r r - -',''],
+  ['Governance','Create SJVN users','- - - - - Y - -',''],
+  ['Governance','Assign projects to users','- - - - r Y - -',''],
+  ['Governance','Give someone additional charge (up to 90 days)','- - - - r Y - -',''],
+  ['Governance','Approve break-glass access (up to 72 hours)','- - - - Y Y - -',''],
+  ['Governance','Read the audit trail','- - - - - Y - -',''],
+].map(([mod, a, cells, note]) => {
+  const c = cells.split(' ');
+  return { mod, a, note, cell: Object.fromEntries(ROLE_ORDER.map((k, i) => [k, c[i]])) };
+});
+const MODS = [...new Set(MX.map(r => r.mod))];
+
+/* ───────────────────────── data: company tiers (team screen, as enforced) ───────────────────────── */
+const TIERS = {
+  S: [['See contracts, energy data, invoices, payments and disputes',1,1,1,1],['Prepare an invoice or upload a document',1,1,1,1],['Approve a maker’s draft and submit it to SJVN',0,1,1,1],['Submit KYC documents for SJVN’s verification',0,1,1,1],['Raise a dispute, request a release',1,1,1,1],['Sign a reconciliation',0,1,1,1],['Add makers and checkers, reset their passwords, switch them off',0,0,1,1],['Add or change an Approver (Level 3)',0,0,0,1]],
+  B: [['See PSAs, allocated energy, bills, payments and disputes',1,1,1,1],['Prepare a payment intimation or upload a document',1,1,1,1],['Send a payment intimation to SJVN Finance',0,1,1,1],['Submit KYC documents, file a TDS certificate (Form 16A)',0,1,1,1],['Raise a dispute, request a release',1,1,1,1],['Sign a reconciliation',0,1,1,1],['Add makers and checkers, reset their passwords, switch them off',0,0,1,1],['Add or change an Approver (Level 3)',0,0,0,1]],
+};
+
+/* ───────────────────────── data: lifecycles ───────────────────────── */
+const LIFE = [
+  { id:'company', name:'Company (KYC)', tracks:[
+    { title:'The company record', main:[{s:'PENDING', by:['M'], act:'Onboard'},{s:'APPROVED', by:['C'], act:'`Standard Approval`'}],
+      br:[{f:'PENDING', t:'REJECTED', by:['C'], act:'`Reject`, with a reason'},{f:'APPROVED', t:'PENDING', by:['M','S','B'], act:'Any change to details, contacts or bank', note:'until the checker approves again'}] },
+    { title:'Each checklist item', main:[{s:'NOT_STARTED'},{s:'SUBMITTED', by:['M','S','B'], act:'Details and evidence'},{s:'VERIFIED', by:['C'], act:'Verify'}],
+      br:[{f:'SUBMITTED', t:'REJECTED', by:['C'], act:'Reject', note:'the maker resubmits'},{f:'SUBMITTED', t:'NOT_APPLICABLE', by:['C'], act:'Not applicable'},{f:'VERIFIED', t:'EXPIRED', by:['M'], act:'Validity lapsed'}] } ],
+    notes:['Blacklisting is a separate flag, set by the REIA Checker or SJVN Admin.'] },
+  { id:'contract', name:'Contract (PPA / PSA)', tracks:[
+    { title:'A contract', main:[{s:'DRAFT', by:['M'], act:'`+ New Contract`'},{s:'UNDER_NEGOTIATION', by:['M'], act:'Update stage'},{s:'SIGNED', by:['C'], act:'Agreement on file'},{s:'ACTIVE', by:['C'], act:'From tenure start'},{s:'NEARING_EXPIRY', by:['C'], act:'Close to tenure end'},{s:'EXPIRED', by:['C'], act:'Tenure over'},{s:'CLOSED', by:['C'], act:'Close'}],
+      br:[{f:'UNDER_NEGOTIATION', t:'DRAFT', by:['M'], act:'Back to draft'},{f:'SIGNED', t:'PENDING_REGULATORY_APPROVAL', by:['C'], act:'Waiting on a regulator', note:'then ACTIVE'},{f:'ACTIVE', t:'AMENDED', by:['C'], act:'Its amendment goes live'},{f:'EXPIRED', t:'RENEWED', by:['C'], act:'Renew', note:'then ACTIVE'},{f:'ACTIVE', t:'TERMINATED', by:['C'], act:'Terminate, with reason and date', note:'then CLOSED'}] } ],
+    notes:['The maker moves only between DRAFT and UNDER_NEGOTIATION. Every other move is the checker’s.'] },
+  { id:'security', name:'Payment security', tracks:[
+    { title:'An instrument (LC, BG, fund)', main:[{s:'DRAFT', by:['S','B'], act:'Company submits'},{s:'ACTIVE', by:['C'], act:'Accept'},{s:'RELEASE_PENDING', by:['S','B'], act:'Release requested'},{s:'RELEASED', by:['C','F'], act:'Checker acts, Finance signs off'}],
+      br:[{f:'(maker records it)', t:'ACTIVE', by:['M'], act:'`+ Instrument`'},{f:'DRAFT', t:'CLOSED', by:['C'], act:'Refuse the submission'},{f:'ACTIVE', t:'PARTIALLY_UTILIZED', by:['C'], act:'Draw on it'},{f:'ACTIVE', t:'RENEWED', by:['M'], act:'Renew'},{f:'ACTIVE', t:'EXPIRED', by:['X'], act:'Validity ends'}] },
+    { title:'An invocation', main:[{s:'ELIGIBLE', by:['M'], act:'Raise it'},{s:'NOTICE_ISSUED', by:['C'], act:'Notice (letter by the maker)'},{s:'CLAIMED', by:['C'], act:'Claim on the bank'},{s:'FUNDS_RECEIVED', by:['C'], act:'Money in'}],
+      br:[{f:'NOTICE_ISSUED', t:'REJECTED', by:['C'], act:'Bank refuses'},{f:'CLAIMED', t:'REJECTED', by:['C'], act:'Bank refuses'}] } ],
+    notes:['A buyer’s default is met from its LC, then the payment security fund, then the corpus fund. A seller’s BG answers only for the seller.'] },
+  { id:'energy', name:'Energy record', tracks:[
+    { title:'The month’s figure', main:[{s:'DRAFT', by:['M'], act:'Record'},{s:'VALIDATED', by:['C'], act:'`Validate`'},{s:'LOCKED', by:['C'], act:'`Lock`'}],
+      br:[{f:'DRAFT', t:'DISPUTED', by:['C'], act:'Validation finds a disagreement', note:'re-record, or lock with a reason'}] },
+    { title:'The seller’s answer', main:[{s:'VALIDATED'},{s:'ACCEPTED', by:['S'], act:'`Accept the figure`'}],
+      br:[{f:'VALIDATED', t:'OBJECTED', by:['S'], act:'Object, with the MWh it claims'},{f:'OBJECTED', t:'UPHELD', by:['C'], act:'Rule', note:'the maker records the corrected figure'},{f:'OBJECTED', t:'REJECTED', by:['C'], act:'Rule', note:'the figure stands'}] } ] },
+  { id:'billb', name:'SJVN’s bill on the buyer', tracks:[
+    { title:'PSA bill', main:[{s:'DRAFT', by:['M'], act:'Generate'},{s:'UNDER_APPROVAL', by:['M'], act:'Submit'},{s:'APPROVED', by:['C','F','H'], act:'Level 1 → 2 → 3'},{s:'SENT', by:['M'], act:'`Send Email to Buyer`'},{s:'PAID', by:['F'], act:'Confirm receipt'}],
+      br:[{f:'UNDER_APPROVAL', t:'REJECTED', by:['C','F','H'], act:'Reject at any level', note:'the maker fixes and resubmits'},{f:'SENT', t:'DISPUTED', by:['B'], act:'Raise a dispute'},{f:'SENT', t:'PARTIALLY_PAID', by:['F'], act:'Part payment, or a credit note applied'},{f:'DRAFT', t:'CANCELLED', by:['M','C'], act:'Cancel'}] } ],
+    notes:['Bills up to ₹1 lakh need one level, above ₹1 lakh two, above ₹10 lakh three.'] },
+  { id:'bills', name:'Seller’s bill to SJVN', tracks:[
+    { title:'PPA bill', main:[{s:'PENDING_L2', by:['S'], act:'Level 1 drafts'},{s:'SUBMITTED', by:['S'], act:'Level 2 / 3 sends'},{s:'UNDER_APPROVAL', by:['M'], act:'Matched, verified, submitted'},{s:'APPROVED', by:['C','F','H'], act:'Level 1 → 2 → 3'},{s:'PAID', by:['C','F'], act:'Release to Generator'}],
+      br:[{f:'SUBMITTED', t:'REJECTED', by:['C'], act:'Send back, saying what to fix', note:'the seller revises and resubmits'},{f:'UNDER_APPROVAL', t:'REJECTED', by:['C','F','H'], act:'Reject at any level'}] } ],
+    notes:['A seller’s Level 2 or 3 goes straight to SUBMITTED.'] },
+  { id:'dispute', name:'Dispute', tracks:[
+    { title:'A dispute', main:[{s:'RAISED', by:['B','S'], act:'Raise'},{s:'ACKNOWLEDGED', by:['C'], act:'`Acknowledge`'},{s:'UNDER_REVIEW', by:['C'], act:'`Start Review`'},{s:'RESOLVED_ACCEPTED', by:['H'], act:'`Confirm Resolution`'},{s:'CLOSED', by:['B','S'], act:'`Accept and close`'}],
+      br:[{f:'UNDER_REVIEW', t:'INFO_REQUESTED', by:['C'], act:'`Request Info`'},{f:'INFO_REQUESTED', t:'UNDER_REVIEW', by:['B','S'], act:'Party answers'},{f:'UNDER_REVIEW', t:'RESOLVED_REJECTED', by:['H'], act:'Reject the claim', note:'then CLOSED'},{f:'(open)', t:'ESCALATED', by:['X'], act:'SLA breached', note:'back to review or resolved'},{f:'RESOLVED_ACCEPTED', t:'CLOSED', by:['C'], act:'`Close Dispute` after 15 days unanswered'}] } ],
+    notes:['Management can decide in place of the HOD.'] },
+  { id:'note', name:'Debit / credit note', tracks:[
+    { title:'A note', main:[{s:'DRAFT', by:['M'], act:'Draft, or made by a dispute'},{s:'ISSUED', by:['C'], act:'`Approve & issue`'},{s:'SETTLED', by:['M'], act:'Applied to its bill'}],
+      br:[{f:'DRAFT', t:'REJECTED', by:['C'], act:'Reject'},{f:'(note)', t:'CANCELLED', by:['C'], act:'Cancel'}] } ],
+    notes:['Finance can draft, approve and apply notes as well.'] },
+  { id:'intimation', name:'Payment intimation', tracks:[
+    { title:'The buyer’s payment intimation', main:[{s:'PENDING_CHECKER', by:['B'], act:'Level 1 prepares'},{s:'SUBMITTED', by:['B'], act:'Level 2 / 3 sends'},{s:'CONFIRMED', by:['F'], act:'`Confirm receipt`'}],
+      br:[{f:'PENDING_CHECKER', t:'RETURNED_BY_CHECKER', by:['B'], act:'Its checker returns it'},{f:'SUBMITTED', t:'REJECTED', by:['F'], act:'Not in the bank'},{f:'SUBMITTED', t:'WITHDRAWN', by:['B'], act:'Withdraw before Finance acts'}] } ] },
+  { id:'recon', name:'Reconciliation statement', tracks:[
+    { title:'A monthly statement', main:[{s:'NEEDS_REVIEW', by:['X','M'], act:'Created, a line differs'},{s:'PENDING_SIGN_OFF', by:['C'], act:'`Override` with a reason'},{s:'CLOSED', by:['F','C','B','S'], act:'Finance concurs, SJVN signs, the company signs'}],
+      br:[{f:'(created)', t:'PENDING_SIGN_OFF', by:['X','M'], act:'Every line matches'},{f:'CLOSED', t:'REOPENED', by:['C','F'], act:'Reopen request accepted'}] } ],
+    notes:['AUTO_MATCHED counts as ready to sign.','Finance concurs only on statements above ₹1 crore.'] },
+];
+
+/* ───────────────────────── data: rules of the game ───────────────────────── */
+const RULES = [
+  { who:['M','C'], t:'Maker prepares, checker decides', d:'The checker never creates. The maker never verifies, approves, locks or signs.' },
+  { who:['M','C'], t:'Four eyes on every decision', d:'Whoever onboarded a company cannot approve it. Whoever verified a bill cannot approve its Level 1.' },
+  { who:['C','F','H'], t:'Bills climb by amount', d:'Up to ₹1 lakh: 1 level. Above ₹1 lakh: 2. Above ₹10 lakh: 3. Three different people, in order.' },
+  { who:['F'], t:'Only Finance says money arrived', d:'The desk that raises a bill never marks it paid. Finance confirms against SJVN’s bank.' },
+  { who:['A'], t:'Admin governs, never transacts', d:'Users, company log-ins, project access, delegation. Read-only on bills and money.' },
+  { who:['S','B'], t:'Companies have their own maker–checker', d:'Level 1 prepares, Level 2 or 3 sends to SJVN, Level 3 runs the team.' },
+  { icon:'clock', t:'The clocks run', d:'15 days to dispute a bill. SJVN acknowledges in 2 days and resolves in 15. The party has 15 days to accept or contest.' },
+  { who:['B','S'], t:'Pay-when-paid', d:'A seller is paid only from what the buyer paid, less the early-payment rebate and TDS.' },
+  { who:['F','C'], t:'Big statements need Finance', d:'A reconciliation above ₹1 crore needs Finance’s concurrence before SJVN signs.' },
+  { icon:'check', t:'Affirm before you commit', d:'Important actions open a “Statutory affirmation” popup: tick the declaration, then “Confirm and submit”.' },
+];
+
+/* ───────────────────────── data: side quests ───────────────────────── */
+const SIDE = [
+  { t:'Late payment and surcharge', where:'REIA Billing & Settlement › Payment Monitoring', flow:[[['X'],'Bill passes its due date'],[['X'],'Surcharge accrues'],[['M'],'Raise a surcharge bill'],[['C','F','H'],'Usual approval']],
+    rules:['Outstanding = bill − rebate + surcharge billed − disputed − payments and deductions.','Surcharge runs at the contract’s rate (15% a year when none is set), rising 0.5% for each further month of delay, to at most 3% above that base.','One screen, two sides: what buyers owe SJVN, and what SJVN owes generators.'] },
+  { t:'Debit and credit notes', where:'REIA Billing & Settlement › Notes for Approval', flow:[[['M'],'Draft the note'],[['C'],'`Approve & issue`'],[['M'],'Apply to its bill']],
+    rules:['Reasons: revised REA, change in law, transmission charges, late payment surcharge, compensation event, liquidated damages, schedule shortfall or excess, other.','A note asked for by a dispute shows the dispute, its evidence and the reasoning beside the button.','Finance can draft and approve notes too.'] },
+  { t:'Deviation settlement (DSM)', where:'REIA Billing & Settlement › Others › Deviation Settlement (DSM)', flow:[[['M'],'Take the week’s figure from the NRPC statement, or estimate'],[['M'],'Dispatch'],[['M'],'Supplementary bill drafted'],[['C','F','H'],'Usual approval']],
+    rules:['1 LU = 100 MWh.','NRPC prints Paid (+) / Received (−). The platform shows + recoverable / − payable.','An estimate is (actual − scheduled) MWh × rate, and stays labelled as an estimate.'] },
+  { t:'Month-Close Board', where:'REIA Billing & Settlement › Others › Month-Close Board', flow:[[['X'],'One row per live contract'],[['M'],'Raise every ready bill at once']],
+    rules:['Each row answers: energy locked? the seller’s bill in? already billed?'] },
+  { t:'Invoice Verification', where:'REIA Billing & Settlement › Others › Invoice Verification', flow:[[['S'],'Bills arrive'],[['M'],'Verify each bill'],[['C'],'Send back what fails']],
+    rules:['Every developer bill waiting to be verified, and what each one is waiting on: REA, energy, tariff, capacity, CUF, COD, curtailment, change in law.'] },
+  { t:'Developer Release Planner', where:'REIA Billing & Settlement › Others › Developer Release Planner', flow:[[['F'],'See each seller’s realised share'],[['C','F'],'Release to each generator']],
+    rules:['A seller’s share is its energy part of what the buyer paid: no SJVN margin, no credit notes.'] },
+  { t:'Ledgers and TDS', where:'REIA Billing & Settlement › Others › Counterparty Ledgers & TDS', flow:[[['S','B'],'Each company sees its own account'],[['F'],'Files quarterly Form 16A for sellers'],[['B'],'Files its own certificate']],
+    rules:['A statement of account for each seller: bills, notes, payments and TDS.','A buyer’s certificate is filed by its Level 2, 3 or Admin.'] },
+  { t:'Finance posting to SAP', where:'Finance & SAP Integration › REIA › Finance Posting (FI)', flow:[[['M'],'Prepare the month’s posting'],[['C'],'Post it, push it to SAP'],[['C'],'Reverse if wrong']],
+    rules:['The month-end handover to corporate Finance: the desk hands the month over and records the voucher Finance returns.','The platform books the sale; SAP takes the finance (FI) part.','Reading back from SAP: maker or checker.'] },
+  { t:'Generation performance', where:'REIA Billing & Settlement › Others › Generation Performance', flow:[[['X'],'Energy vs what capacity × CUF should give'],[['M'],'Draft the CUF true-up note'],[['C'],'Approve it']],
+    rules:['Energy against what each project’s capacity could make.','A shortfall below the PPA’s minimum CUF is assessed at the year end.'] },
+  { t:'Compliance Desk', where:'REIA Billing & Settlement › Others › Compliance Desk', flow:[[['X'],'Flags tenure, commissioning, security, approvals'],[['M'],'Raise a compliance request on the contract']],
+    rules:['One desk for contract compliance and statutory approvals.'] },
+  { t:'Power diversion', where:'REIA Billing & Settlement › Others › Power Diversion', flow:[[['M'],'Record a diversion'],[['M'],'Record what it recovered'],[['M'],'Bill the deficit']],
+    rules:['Two reasons: the buyer did not pay, or did not take the power.','A surplus beyond the buyer’s dues becomes an advance.'] },
+  { t:'Energy banking', where:'REIA Billing & Settlement › Others › Energy Banking', flow:[[['M'],'Bank energy the buyer could not take'],[['M'],'Draw it back'],[['C'],'Settle what is left']],
+    rules:['The cycle is the financial year, ending 31 March.','Unused energy settles in cash at a discount to tariff.'] },
+  { t:'Advances and unapplied receipts', where:'REIA Billing & Settlement › Others › Advances & Unapplied Receipts', flow:[[['F'],'Money no bill could take'],[['F'],'Apply it to a later bill, or refund it']],
+    rules:['Only Finance applies or refunds it, and only to the same company’s open bills.'] },
+  { t:'Contract changes', where:'REIA Billing & Settlement › Contracts (PPA/PSA)', flow:[[['M'],'Draft the amendment'],[['C'],'Make it live'],[['X'],'Old version AMENDED']],
+    rules:['Hold: maker, checker, HOD or Management. Hold override: HOD or Management.','Terminate, close, renew: the checker.'] },
+  { t:'Security in trouble', where:'REIA Billing & Settlement › Payment Security', flow:[[['M'],'Raise the invocation, issue the letter'],[['C'],'Notice → claim → funds received'],[['S','B'],'Later: ask for release'],[['C','F'],'Release']],
+    rules:['A release needs no dues and no open disputes.','Short cover can be treated as adequate for up to 90 days, with a reason: HOD or Management.'] },
+  { t:'Arrear and supplementary bills', where:'REIA Billing & Settlement › Billing & Invoicing', flow:[[['M'],'Raise, with the reason'],[['C','F','H'],'Approval by amount'],[['M'],'Send']],
+    rules:['They follow exactly the same ladder as a monthly bill.'] },
+  { t:'Cover when someone is away', where:'Platform › Additional Charge & Break-glass', flow:[[['A'],'Give additional charge (up to 90 days)'],[['C'],'Acts as “X for Y” from the top bar']],
+    rules:['Break-glass: emergency access for up to 72 hours, approved by Management or SJVN Admin.','Every change made while acting is its own audit entry.'] },
+  { t:'Project access', where:'Platform › Project Assignments', flow:[[['A'],'Give a user ALL or SELECTED projects'],[['X'],'They see only those']],
+    rules:['A daily alert tells SJVN Admin when a project has nobody to act at a tier.'] },
+  { t:'Audit trail', where:'Platform › Audit Trail', flow:[[['X'],'Every action logged'],[['A'],'SJVN Admin and the compliance auditor read it']],
+    rules:['Who, when, and the value before and after.'] },
+];
+
+/* ───────────────────────── helpers ───────────────────────── */
+const KEY = 'reia-playbook-v1';
+const P = (() => { let v = {}; try { v = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { v = {}; } return Object.assign({ done:{}, best:0, theme:'', lastM:0 }, v); })();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) { /* storage blocked: progress lives for this visit only */ } };
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const REDUCE = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+
+const ICON = {
+  lock:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7.5" rx="1.6" fill="currentColor"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  login:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5H13v11H9.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M2 8h8M7 4.8 10.2 8 7 11.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.2 8.4 3 3 6.6-6.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg>',
+  clock:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  auto:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12.2 1.6v3.2H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  sun:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.2" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  moon:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7z" fill="currentColor"/></svg>',
+};
+const KIND = {};
+'APPROVED ACTIVE VERIFIED LOCKED PAID CLOSED ISSUED SETTLED CONFIRMED RELEASED FUNDS_RECEIVED MATCHED ACCEPTED AGREED RECEIVED'.split(' ').forEach((k) => { KIND[k] = 'good'; });
+'REJECTED TERMINATED CANCELLED DISPUTED MISMATCH EXPIRED ESCALATED OBJECTED RETURNED_BY_CHECKER'.split(' ').forEach((k) => { KIND[k] = 'bad'; });
+'PENDING PENDING_L2 PENDING_CHECKER SUBMITTED UNDER_APPROVAL UNDER_REVIEW INFO_REQUESTED PENDING_SIGN_OFF NEEDS_REVIEW RELEASE_PENDING NOTICE_ISSUED CLAIMED ACKNOWLEDGED UNDER_NEGOTIATION PENDING_REGULATORY_APPROVAL NEARING_EXPIRY PARTIALLY_PAID PARTIALLY_UTILIZED VALIDATED REOPENED ELIGIBLE UPHELD'.split(' ').forEach((k) => { KIND[k] = 'wait'; });
+'DRAFT NOT_STARTED'.split(' ').forEach((k) => { KIND[k] = 'start'; });
+
+const st = (s, big) => `<span class="st ${KIND[s] || ''}${big ? ' big' : ''}">${esc(String(s).replace(/_/g, ' '))}</span>`;
+const fmt = (s) => esc(s)
+  .replace(/`([^`]+)`/g, '<span class="ui">$1</span>')
+  .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  .replace(/\{([A-Z][A-Z0-9_]*)\}/g, (m, t) => st(t));
+const rb = (k, size = '') => `<span class="rb ${size}" style="--c:var(--c-${R[k].c})" role="img" aria-label="${esc(R[k].name)}" title="${esc(R[k].name)}">${k === 'X' ? ICON.auto : R[k].b}</span>`;
+const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+const crore = (n) => `₹${(n / 1e7).toFixed(2)} Cr`;
+const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+
+const playersOf = (m) => [...new Set(m.steps.map((s) => s.who))];
+const loginsIn = (m) => { let n = 0; let prev = null; m.steps.forEach((s) => { if (s.who !== prev && s.who !== 'X') n++; prev = s.who; }); return n; };
+const loginHint = (k) => k === 'X' ? 'No log-in: the platform does this on its own.'
+  : R[k].side === 'SJVN' ? `Sign-in page › Quick Demo Login › “${R[k].demo}”.`
+  : `Sign in with the ${R[k].short.toLowerCase()} company’s own email and password.`;
+function sessions(filter) {
+  const out = [];
+  MISSIONS.forEach((m) => {
+    if (filter !== 'all' && m.zone !== filter) return;
+    m.steps.forEach((s, i) => {
+      const last = out[out.length - 1];
+      if (last && last.who === s.who) last.items.push({ m, s, i });
+      else out.push({ who:s.who, items:[{ m, s, i }] });
+    });
+  });
+  return out;
+}
+const TOTAL_STEPS = MISSIONS.reduce((a, m) => a + m.steps.length, 0);
+const LOGINS = sessions('all').filter((s) => s.who !== 'X').length;
+const MAXXP = TOTAL_STEPS * 10 + 100;
+const RANKS = [[0,'Trainee'],[0.2,'Desk Officer'],[0.45,'Senior Officer'],[0.7,'Desk Lead'],[1,'REIA Pro']];
+const xpNow = () => MISSIONS.reduce((a, m) => a + (P.done[m.n] ? m.steps.length * 10 : 0), 0) + (P.best || 0) * 10;
+const rankOf = (x) => { let r = RANKS[0][1]; RANKS.forEach(([t, n]) => { if (x / MAXXP >= t - 1e-9) r = n; }); return r; };
+
+/* ───────────────────────── shell ───────────────────────── */
+const TABS = [['map','Map'],['missions','Missions'],['players','Players'],['powers','Powers'],['lifecycles','Lifecycles'],['relay','Log-in relay'],['money','Money'],['quests','Side quests'],['quiz','Quiz']];
+const app = $('#app'); const drawer = $('#drawer'); const scrim = $('#scrim'); const hud = $('#hud'); const sw = $('#switch');
+let current = 'map';
+
+function paintXP() {
+  const x = xpNow();
+  $('#xp').innerHTML = `<b>${esc(rankOf(x))}</b><span class="xp-bar"><i style="width:${Math.min(100, x / MAXXP * 100).toFixed(1)}%"></i></span><span class="xp-n">${x} / ${MAXXP} XP</span>`;
+}
+function paintTheme() {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  $('#theme').innerHTML = dark ? ICON.sun : ICON.moon;
+  $('#theme').setAttribute('aria-label', dark ? 'Switch to light' : 'Switch to dark');
+}
+function paintTabs() {
+  const sec = /^m\d+$/.test(current) ? 'missions' : current;
+  $('#tabs').innerHTML = TABS.map(([id, label]) => `<button class="tab" type="button" data-go="${id}"${id === sec ? ' aria-current="page"' : ''}>${label}</button>`).join('');
+}
+
+function go(token, push = true) {
+  if (token === 'missions') token = 'm' + (P.lastM || (MISSIONS.find((m) => !P.done[m.n]) || MISSIONS[0]).n);
+  const views = { map:viewMap, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
+  const mm = /^m(\d+)$/.exec(token);
+  if (!mm && !views[token]) token = 'map';
+  if (mm && !MISSIONS[Number(mm[1]) - 1]) token = 'm1';
+  exitPlay();
+  closeDrawer(true);
+  current = token;
+  const m2 = /^m(\d+)$/.exec(token);
+  app.innerHTML = m2 ? viewMission(Number(m2[1])) : views[token]();
+  if (m2) { P.lastM = Number(m2[1]); save(); }
+  after(token);
+  paintTabs(); paintXP();
+  window.scrollTo(0, 0);
+  if (push) { try { history.pushState(null, '', '#' + token); } catch (e) { /* framed: keep state in the page */ } }
+}
+function after(token) {
+  if (token === 'powers') paintPowers();
+  if (token === 'money') paintMoney();
+  if (/^m\d+$/.test(token)) fitLanes();
+}
+// Side-by-side lanes need about 200px a role; narrower, the cards stack and keep their lane as a stagger.
+function fitLanes() {
+  const w = $('.lanes-wrap'); if (!w) return;
+  w.classList.toggle('stack', w.clientWidth < Number(w.dataset.cols) * 200 + 10);
+}
+window.addEventListener('resize', fitLanes);
+
+/* ───────────────────────── view: map ───────────────────────── */
+const POS = { 1:[140,150], 2:[360,150], 3:[580,150], 4:[800,150], 5:[800,330], 6:[540,330], 7:[280,330], 8:[280,540], 9:[540,540], 10:[800,540] };
+function mapSvg() {
+  const chev = (x, y, r) => `<path class="chev" d="M-5 -7 L4 0 L-5 7" transform="translate(${x} ${y}) rotate(${r})"/>`;
+  const badge = (k, x, y) => `<g class="bdg" style="--c:var(--c-${R[k].c})"><circle cx="${x}" cy="${y}" r="10"/><text x="${x}" y="${y + 3.6}" text-anchor="middle">${k === 'X' ? '↻' : R[k].b}</text></g>`;
+  let s = `<svg viewBox="20 24 990 640" role="group" aria-label="REIA line map: setup stations 1 to 4 lead into a monthly loop of stations 5 to 10">`;
+  s += `<path class="ln-setup" d="M 52 150 H 800 V 330"/>`;
+  s += `<path class="ln-loop" d="M 196 330 H 884 A 56 56 0 0 1 940 386 V 484 A 56 56 0 0 1 884 540 H 196 A 56 56 0 0 1 140 484 V 386 A 56 56 0 0 1 196 330 Z"/>`;
+  s += `<path class="ln-term" d="M 52 132 V 168"/>`;
+  s += [chev(250,150,0), chev(470,150,0), chev(690,150,0), chev(800,240,90), chev(670,330,180), chev(410,330,180), chev(140,435,90), chev(410,540,0), chev(670,540,0), chev(940,435,-90)].join('');
+  s += `<text class="m-note" x="60" y="196">ONE-TIME SETUP · PER DEAL</text>`;
+  s += `<text class="m-water" x="540" y="476" text-anchor="middle">EVERY MONTH</text>`;
+  s += `<text class="m-note" transform="translate(976 435) rotate(-90)" text-anchor="middle">NEXT MONTH</text>`;
+  MISSIONS.forEach((m) => {
+    const [x, y] = POS[m.n];
+    const above = m.n <= 4;
+    const pl = playersOf(m);
+    const bw = 23; const bx0 = x - ((pl.length - 1) * bw) / 2;
+    const yb = above ? y - 40 : y + 44; const yn = above ? y - 64 : y + 78; const ym = above ? y - 88 : y + 100;
+    const done = !!P.done[m.n];
+    s += `<a class="stn${done ? ' done' : ''}" href="#m${m.n}" data-go="m${m.n}" aria-label="Mission ${m.n}: ${esc(m.name)}${done ? ', done' : ''}">`;
+    if (m.n === 5) s += `<circle class="stn-x" cx="${x}" cy="${y}" r="32"/>`;
+    s += `<circle class="stn-c" cx="${x}" cy="${y}" r="22"/><text class="stn-n" x="${x}" y="${y + 6.5}" text-anchor="middle">${done ? '✓' : m.n}</text>`;
+    s += `<text class="stn-name" x="${x}" y="${yn}" text-anchor="middle">${esc(m.short)}</text>`;
+    s += `<text class="stn-meta" x="${x}" y="${ym}" text-anchor="middle">${m.steps.length} steps · ${loginsIn(m)} log-ins</text>`;
+    s += pl.map((k, i) => badge(k, bx0 + i * bw, yb)).join('');
+    s += `</a>`;
+  });
+  return s + `</svg>`;
+}
+function mapList() {
+  const item = (m) => `<a class="ll-i ${m.zone}${P.done[m.n] ? ' done' : ''}" href="#m${m.n}" data-go="m${m.n}"><span class="ll-n">${P.done[m.n] ? '✓' : m.n}</span><span class="ll-t"><b>${esc(m.short)}</b><small>${m.steps.length} steps · ${loginsIn(m)} log-ins</small></span><span class="ll-b">${playersOf(m).map((k) => rb(k, 'xs')).join('')}</span></a>`;
+  return `<div class="ll"><p class="ll-h">One-time setup · per deal</p>${MISSIONS.filter((m) => m.zone === 'setup').map(item).join('')}<p class="ll-h">Every month · then back to Energy</p>${MISSIONS.filter((m) => m.zone === 'month').map(item).join('')}</div>`;
+}
+function viewMap() {
+  const stats = [[MISSIONS.length,'missions'],[TOTAL_STEPS,'steps'],[8,'players'],[LOGINS,'log-ins, full run']];
+  const x = xpNow(); const doneN = MISSIONS.filter((m) => P.done[m.n]).length; const next = MISSIONS.find((m) => !P.done[m.n]);
+  return `
+  <section class="intro">
+    <div>
+      <p class="eyebrow">SJVN · REIA desk · renewable energy intermediary</p>
+      <h1>How a REIA deal moves, from first document to closed month</h1>
+      <p class="lede">SJVN buys power from a seller under a PPA, sells it to a buyer under a PSA, and keeps the SJVN margin. Four stations set a deal up once. Six repeat every month. Open a station to play it step by step: who logs in, which screen, which button, what changes.</p>
+      <div class="me">
+        <div><small>Your rank</small><b>${esc(rankOf(x))}</b></div>
+        <span class="me-bar" aria-hidden="true"><i style="width:${Math.min(100, x / MAXXP * 100).toFixed(1)}%"></i></span>
+        <div class="me-n"><b>${doneN}</b> of ${MISSIONS.length} missions done · best quiz <b>${P.best || 0}</b>/10 · ${x} XP</div>
+        <button class="btn primary" type="button" data-go="m${next ? next.n : 1}">${ICON.play} ${next ? `Next: ${esc(next.short)}` : 'Replay mission 1'}</button>
+      </div>
+    </div>
+    <div class="stats">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>
+  </section>
+  <section class="mapbox" aria-label="Line map">
+    <div class="map-top"><h2>The line map</h2>
+      <div class="legend"><span class="lgd"><i class="s"></i>Setup, once per deal</span><span class="lgd"><i></i>Monthly loop</span><span class="lgd">${rb('C','xs')}Who acts at the station</span><span class="lgd"><i class="d"></i>Mission marked done</span></div>
+    </div>
+    <div class="map-svg">${mapSvg()}</div>
+    ${mapList()}
+  </section>
+  <section class="blk">
+    <div class="blk-h"><h2>The players</h2><button class="lnk" type="button" data-go="players">Every power, role by role →</button></div>
+    <div class="roster">${ROLE_ORDER.map((k) => `<button class="rcard" type="button" data-player="${k}" style="--c:var(--c-${R[k].c})">${rb(k,'lg')}<span><b>${esc(R[k].name)}</b><small>${esc(R[k].cls)} · ${esc(R[k].level)}</small></span></button>`).join('')}</div>
+  </section>
+  <section class="blk">
+    <div class="blk-h"><h2>Rules of the game</h2><p>The platform enforces each of these. Nobody can skip them.</p></div>
+    <div class="rules">${RULES.map((r) => `<div class="rule"><div class="rw">${r.who ? r.who.map((k) => rb(k,'sm')).join('') : ICON[r.icon]}</div><b>${esc(r.t)}</b><p>${fmt(r.d)}</p></div>`).join('')}</div>
+  </section>`;
+}
+
+/* ───────────────────────── view: mission ───────────────────────── */
+function resHtml(r) {
+  if (!r) return '';
+  return `<span>${esc(r.o)}:</span> ${r.text ? `<strong>${esc(r.text)}</strong>` : `${r.f ? st(r.f) + '<span class="arw">→</span>' : ''}${st(r.t)}`}`;
+}
+function handLabel(from, to) {
+  if (to === 'X') return { cls:'auto', html:`${ICON.auto} Automatic` };
+  return { cls:'', html:`${rb(to,'xs')} ${from === 'X' ? 'Log in as' : 'Log out, log in as'} ${esc(R[to].short)}` };
+}
+function stepCard(m, s, i) {
+  return `<button class="step${s.opt ? ' opt' : ''}" type="button" data-step="${m.n}:${i}" style="--c:var(--c-${R[s.who].c})">
+    <span class="sc-top">${rb(s.who,'sm')}<span class="sc-who">${esc(R[s.who].short)}</span><span class="sc-no">${m.n}.${i + 1}</span>${s.opt ? '<span class="tag">If needed</span>' : ''}${s.alt ? `<span class="tag">or ${s.alt.map((k) => esc(R[k].short)).join(', ')}</span>` : ''}${s.block ? `<span class="sc-lock" title="Blocked for the wrong role: open for details">${ICON.lock}</span>` : ''}<span class="sc-go" aria-hidden="true">›</span></span>
+    <span class="sc-t">${fmt(s.t)}</span>
+    ${s.press ? `<span class="sc-press">${s.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</span>` : ''}
+    ${s.res ? `<span class="sc-res">${resHtml(s.res)}</span>` : ''}
+    ${s.block ? `<span class="sc-block">${ICON.lock}<span>${fmt(s.block)}</span></span>` : ''}
+  </button>`;
+}
+function missionExtra(m) {
+  if (m.extra === 'docs') return `<section class="panel blk"><h3>Required documents</h3><div class="xgrid">
+    <div><p class="eyebrow">Seller · 8 required</p><ul>${SELLER_DOCS.map((d) => `<li>${esc(d)}</li>`).join('')}</ul></div>
+    <div><p class="eyebrow">Buyer · 4 required, 1 optional</p><ul>${BUYER_DOCS.map((d) => `<li>${esc(d)}</li>`).join('')}<li>SERC / regulatory commission approval (optional)</li></ul></div></div></section>`;
+  if (m.extra === 'tiers') return `<section class="blk"><div class="blk-h"><h2>Inside a company: four access levels</h2><p>What each level may do, as the platform enforces it.</p></div><div class="pgrid">${['S','B'].map((k) => `<div class="panel" style="--c:var(--c-${R[k].c})"><h3>${rb(k,'sm')} ${esc(R[k].name)}</h3>${tierTable(k)}</div>`).join('')}</div></section>`;
+  if (m.extra === 'ladder') return `<section class="panel blk"><h3>The approval ladder</h3><div class="ladder">
+    ${[['Up to ₹1 lakh',['C']],['Above ₹1 lakh',['C','F']],['Above ₹10 lakh',['C','F','H']]].map(([b, ks]) => `<div class="lad"><b>${b}</b><div class="lad-steps">${ks.map((k, i) => `<span class="lv">${rb(k,'sm')} L${i + 1} ${esc(R[k].short)}${k === 'H' ? ' / Management' : ''}</span>`).join('<span class="arw">→</span>')}</div></div>`).join('')}
+    </div><p class="lede" style="font-size:15px">Each level is a different person, in order. The maker who verified a bill cannot sign its Level 1. SJVN can change the bands and who signs each level in its masters.</p></section>`;
+  if (m.extra === 'clock') return `<section class="panel blk"><h3>${ICON.clock} The dispute clock (default days)</h3>
+    <div class="clock"><div class="clock-bar"><i style="width:${2 / 45 * 100}%;background:var(--c-checker)"></i><i style="width:${13 / 45 * 100}%;background:var(--c-hod)"></i><i style="width:${30 / 45 * 100}%;background:var(--c-buyer);opacity:.75"></i></div>
+    <div class="clock-marks"><div><b>Day 0 → 2</b>Checker acknowledges</div><div><b>By day 15</b>HOD resolves, or ESCALATED</div><div><b>Then 15 days</b>Buyer accepts or contests</div></div></div>
+    <p class="lede" style="font-size:15px">Separately, the buyer has 15 days from the bill’s presentation to raise a dispute at all.</p></section>`;
+  if (m.extra === 'security') return `<section class="panel blk"><h3>How much cover, and who answers for whom</h3><div class="xgrid">
+    <div><p class="eyebrow">Cover required on a PSA</p><ul><li>LC = 1.1 × a month’s bill (3-month average; before that, capacity × CUF × tariff)</li><li>Corpus = 10% of that</li><li>Coverage ratio = security ÷ (dues + next month’s average bill). Adequate at 1 or more.</li></ul></div>
+    <div><p class="eyebrow">When someone defaults</p><div class="flow" style="margin-bottom:8px"><span class="fchip">${rb('B','xs')} Buyer</span><span class="farr">→</span><span class="fchip">LC</span><span class="farr">→</span><span class="fchip">Payment security fund</span><span class="farr">→</span><span class="fchip">Corpus fund</span></div><div class="flow"><span class="fchip">${rb('S','xs')} Seller</span><span class="farr">→</span><span class="fchip">Its bank guarantee</span><span class="farr">→</span><span class="fchip">Funds</span></div></div></div></section>`;
+  if (m.extra === 'release') { const v = moneyCalc(DEMO); return `<section class="panel blk"><h3>The release, worked through</h3><div class="calc">
+    <div><span>Seller’s bill</span><span class="v">${inr(v.BP)}</span></div>
+    <div><span>Early-payment rebate SJVN earns (1.5%, paid within 5 days)</span><span class="v">− ${inr(v.rebate)}</span></div>
+    <div><span>TDS u/s 194Q (0.1% above ₹50 lakh)</span><span class="v">− ${inr(v.TDS)}</span></div>
+    <div class="tot"><span>Net paid to the seller</span><span class="v">${inr(v.net)}</span></div></div>
+    <p style="margin-top:10px"><button class="lnk" type="button" data-go="money">Change the numbers in the Money tab →</button></p></section>`; }
+  if (m.extra === 'recon') return `<section class="panel blk"><h3>What a statement compares</h3><div class="calc">
+    <div><span>Energy<small>Metered (the locked figure) vs energy on every bill of the month</small></span><span class="v">MWh</span></div>
+    <div><span>Billed vs paid<small>Bills of the month vs payments, credit notes included</small></span><span class="v">₹</span></div>
+    <div><span>Tax and SAP<small>NOT_CONNECTED unless a figure is supplied</small></span><span class="v">—</span></div>
+    <div><span>Performance<small>Availability against 90%; NOT_CONNECTED when none is recorded</small></span><span class="v">%</span></div>
+    <div><span>Penalty<small>CUF below the PPA minimum is assessed at the year end</small></span><span class="v">₹</span></div></div></section>`;
+  return '';
+}
+function viewMission(n) {
+  const m = MISSIONS[n - 1];
+  const cols = playersOf(m);
+  const colOf = (k) => cols.indexOf(k) + 1;
+  let row = 2; const cells = [];
+  m.steps.forEach((s, i) => {
+    const prev = m.steps[i - 1];
+    if (prev && prev.who !== s.who) {
+      const a = colOf(prev.who); const b = colOf(s.who);
+      const lo = Math.min(a, b); const hi = Math.max(a, b);
+      const h = handLabel(prev.who, s.who);
+      cells.push(`<div class="hand ${b > a ? 'fwd' : 'back'}" style="--a:${lo};--b:${hi + 1};--k:${hi - lo + 1};--l0:${lo - 1};--h0:${hi - 1};--row:${row}"><span class="ln"></span><span class="pill ${h.cls}" title="${esc(loginHint(s.who))}">${h.html}</span></div>`);
+      row++;
+    }
+    cells.push(`<div class="cell" style="--col:${colOf(s.who)};--i:${colOf(s.who) - 1};--row:${row}">${stepCard(m, s, i)}</div>`);
+    row++;
+  });
+  const heads = cols.map((k, i) => `<div class="lhead" style="--col:${i + 1}">${rb(k,'lg')}<b>${esc(R[k].short)}</b><small>${esc(R[k].side === 'Company' ? 'company log-in' : R[k].side === 'System' ? 'no log-in' : 'SJVN log-in')}</small></div>`).join('');
+  const rails = cols.map((k, i) => `<span class="rail" style="--col:${i + 1};--i:${i};--end:${row};--c:var(--c-${R[k].c})"></span>`).join('');
+  const blocks = m.steps.filter((s) => s.block);
+  const done = !!P.done[n];
+  return `
+  <nav class="mnav" aria-label="Missions">
+    ${MISSIONS.map((x) => `<button class="chip${P.done[x.n] ? ' done' : ''}" type="button" data-go="m${x.n}"${x.n === n ? ' aria-current="true"' : ''} title="${esc(x.name)}">${x.n}</button>`).join('')}
+    <span class="sp"></span>
+    ${n > 1 ? `<button class="lnk" type="button" data-go="m${n - 1}">← ${esc(MISSIONS[n - 2].short)}</button>` : ''}
+    ${n < MISSIONS.length ? `<button class="lnk" type="button" data-go="m${n + 1}">${esc(MISSIONS[n].short)} →</button>` : ''}
+  </nav>
+  <section class="mhead">
+    <div>
+      <p class="eyebrow">${m.zone === 'setup' ? 'One-time setup' : 'Every month'} · Mission ${n} of ${MISSIONS.length}</p>
+      <h1>${esc(m.name)}</h1>
+      <p class="lede">${fmt(m.goal)}</p>
+      <div class="mstats">
+        <span class="mstat"><b>${m.steps.length}</b>steps</span>
+        <span class="mstat"><b>${loginsIn(m)}</b>log-ins</span>
+        <span class="mstat"><b>${blocks.length}</b>wrong-role blocks</span>
+        <span class="mplayers">${cols.map((k) => rb(k,'md')).join('')}</span>
+      </div>
+      <div class="mact">
+        <button class="btn primary" type="button" data-play="${n}">${ICON.play} Play this mission</button>
+        <button class="btn${done ? ' ok' : ''}" type="button" data-done="${n}" aria-pressed="${done}">${ICON.check} ${done ? 'Done' : 'Mark as done'}</button>
+      </div>
+    </div>
+    <dl class="mmeta">
+      <div><dt>Starts when</dt><dd>${fmt(m.start)}</dd></div>
+      <div><dt>Ends with</dt><dd>${fmt(m.end)}</dd></div>
+      <div><dt>Main screen</dt><dd>${esc(m.screen)}</dd></div>
+    </dl>
+  </section>
+  <div class="lanes-wrap" data-cols="${cols.length}"><p class="lane-key">Lanes, left to right: ${cols.map((k) => `<span>${rb(k,'xs')}${esc(R[k].short)}</span>`).join('')}</p><div class="lanes" style="--cols:${cols.length};--nn:${Math.max(1, cols.length - 1)}">${rails}${heads}${cells.join('')}</div></div>
+  <section class="mfoot">
+    ${blocks.length ? `<div class="panel"><h3>${ICON.lock} What the platform blocks here</h3><ul class="blist">${blocks.map((s) => `<li>${rb(s.who,'sm')}<span>${fmt(s.block)}</span></li>`).join('')}</ul></div>` : ''}
+    <div class="panel"><h3>Also on this desk</h3><ul class="alist">${m.also.map((a) => `<li>${fmt(a)}</li>`).join('')}</ul></div>
+  </section>
+  ${missionExtra(m)}`;
+}
+function tierTable(k) {
+  return `<div class="tbl-wrap" style="border:0"><table class="tier"><thead><tr><th>What</th><th>L1<br>Maker</th><th>L2<br>Checker</th><th>L3<br>Approver</th><th>Company<br>Admin</th></tr></thead><tbody>
+    ${TIERS[k].map(([w, ...v]) => `<tr><td>${esc(w)}</td>${v.map((x) => `<td>${x ? ICON.check : '<span class="no">–</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+/* ───────────────────────── drawer ───────────────────────── */
+let lastFocus = null;
+function openDrawer(n, i) {
+  const m = MISSIONS[n - 1]; const s = m.steps[i]; if (!s) return;
+  const prev = m.steps[i - 1]; const next = m.steps[i + 1];
+  const switching = !prev || prev.who !== s.who;
+  const lists = s.lists ? Object.entries(s.lists).map(([h, items]) => `<div class="dsec"><h4>${esc(h)}</h4><ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('') : '';
+  drawer.innerHTML = `
+    <div class="d-top">${rb(s.who,'lg')}<div><small>Mission ${n} · step ${i + 1} of ${m.steps.length}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
+    <h2>${fmt(s.t)}</h2>
+    <div class="dsec"><h4>Log-in</h4><div class="dlog">${s.who === 'X' ? ICON.auto : ICON.login}<span>${switching && prev ? `Log out of ${esc(R[prev.who].short)}. ` : ''}${switching ? esc(loginHint(s.who)) : 'Same log-in as the step before.'}</span></div></div>
+    ${s.where ? `<div class="dsec"><h4>Where</h4><p>${esc(s.where)}</p></div>` : ''}
+    ${s.press ? `<div class="dsec"><h4>Press</h4><div class="row">${s.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</div></div>` : ''}
+    ${s.fill ? `<div class="dsec"><h4>Fill in</h4><ul>${s.fill.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
+    ${lists}
+    ${s.res ? `<div class="dsec"><h4>Result</h4><div class="row">${resHtml(s.res)}</div></div>` : ''}
+    ${s.rules ? `<div class="dsec"><h4>What the platform applies</h4><ul>${s.rules.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
+    ${s.refuse ? `<div class="dsec"><h4>If it refuses, you see</h4>${s.refuse.map((x) => `<p class="quote">“${esc(x)}”</p>`).join('')}</div>` : ''}
+    ${s.block ? `<div class="dsec"><h4>Blocked for the wrong role</h4><div class="row" style="color:var(--bad)">${ICON.lock}<span>${fmt(s.block)}</span></div></div>` : ''}
+    <div class="dsec"><h4>Next</h4><p>${next ? `${next.who !== s.who ? (next.who === 'X' ? 'The platform takes over: ' : `Hand over to ${esc(R[next.who].name)}: `) : 'Same person: '}${fmt(next.t)}` : (n < MISSIONS.length ? `Mission complete. Next mission: ${esc(MISSIONS[n].name)}.` : 'The month is closed. Next month starts again at Energy.')}</p></div>
+    <div class="dnav"><button class="btn" type="button" data-open="${n}:${i - 1}"${i === 0 ? ' disabled' : ''}>← Previous step</button><button class="btn" type="button" data-open="${n}:${i + 1}"${!next ? ' disabled' : ''}>Next step →</button></div>`;
+  if (!drawer.classList.contains('open')) lastFocus = document.activeElement;
+  drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); scrim.hidden = false;
+  drawer.scrollTop = 0;
+  const c = $('[data-close]', drawer); if (c) c.focus({ preventScroll:true });
+}
+function closeDrawer(silent) {
+  if (!drawer.classList.contains('open')) return;
+  drawer.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true'); scrim.hidden = true;
+  if (!silent && lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll:true });
+}
+
+/* ───────────────────────── play mode ───────────────────────── */
+let play = null; let swTimer = null; let swNext = null;
+function startPlay(n) {
+  closeDrawer(true);
+  play = { n, i:0 };
+  document.body.classList.add('playing');
+  showStep();
+}
+function showStep() {
+  if (!play) return;
+  const m = MISSIONS[play.n - 1]; const s = m.steps[play.i];
+  $$('.step').forEach((el) => el.classList.toggle('cur', el.dataset.step === `${play.n}:${play.i}`));
+  const el = $(`.step[data-step="${play.n}:${play.i}"]`);
+  if (el) el.scrollIntoView({ block:'center', inline:'center', behavior: REDUCE ? 'auto' : 'smooth' });
+  hud.hidden = false;
+  hud.innerHTML = `<div class="hud-dots">${m.steps.map((x, k) => `<span class="${k === play.i ? 'on' : k < play.i ? 'past' : ''}"></span>`).join('')}</div>
+    <div class="hud-row">${rb(s.who,'md')}<div class="hud-txt"><small>Step ${play.i + 1} of ${m.steps.length} · ${esc(R[s.who].name)}${s.opt ? ' · if needed' : ''}</small><b>${fmt(s.t)}</b></div>
+    <div class="hud-btns"><button class="hb" type="button" data-hud="prev"${play.i === 0 ? ' disabled' : ''} aria-label="Previous step">←</button><button class="hb" type="button" data-hud="info">Details</button><button class="hb primary" type="button" data-hud="next">${play.i === m.steps.length - 1 ? 'Finish' : 'Next →'}</button><button class="hb" type="button" data-hud="exit" aria-label="Stop playing">✕</button></div></div>`;
+}
+function stepPlay(d) {
+  if (!play) return;
+  const m = MISSIONS[play.n - 1]; const j = play.i + d;
+  if (j < 0) return;
+  if (j >= m.steps.length) { finishPlay(); return; }
+  const from = m.steps[play.i].who; const to = m.steps[j].who;
+  play.i = j;
+  if (d > 0 && from !== to && to !== 'X') showSwitch(from, to); else showStep();
+}
+function showSwitch(from, to) {
+  clearTimeout(swTimer);
+  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="Switch player"><p class="eyebrow">Switch player</p><h3>Log out, then log in as ${esc(R[to].name)}</h3>
+    <div class="sw-row"><div class="sw-who sw-from">${rb(from,'xl')}${esc(R[from].short)}</div><div class="sw-arrow">→</div><div class="sw-who">${rb(to,'xl')}${esc(R[to].short)}</div></div>
+    <p class="sw-hint">${esc(loginHint(to))}</p><div class="sw-btns"><button class="btn primary" type="button" data-sw="go">Continue</button></div></div>`;
+  sw.hidden = false;
+  swNext = () => { sw.hidden = true; swNext = null; showStep(); };
+  const b = $('[data-sw="go"]', sw); if (b) b.focus({ preventScroll:true });
+  swTimer = setTimeout(() => { if (swNext) swNext(); }, 2200);
+}
+function finishPlay() {
+  const n = play.n; const m = MISSIONS[n - 1];
+  const gain = P.done[n] ? 0 : m.steps.length * 10;
+  clearTimeout(swTimer);
+  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="Mission complete"><p class="eyebrow">Mission ${n} complete</p><h3>${esc(m.name)}</h3>
+    <div class="sw-row"><div class="sw-who">${playersOf(m).map((k) => rb(k,'md')).join('')}</div></div>
+    <p class="sw-hint">${m.steps.length} steps, ${loginsIn(m)} log-ins.${gain ? ` Marking it done adds ${gain} XP.` : ' Already marked done.'}</p>
+    <div class="sw-btns">${P.done[n] ? '' : `<button class="btn primary" type="button" data-sw="done">${ICON.check} Mark done${n < MISSIONS.length ? ' and go to the next' : ''}</button>`}${P.done[n] && n < MISSIONS.length ? `<button class="btn primary" type="button" data-sw="next">Next mission →</button>` : ''}<button class="btn" type="button" data-sw="stay">Stay here</button></div></div>`;
+  sw.hidden = false;
+  swNext = null;
+  const b = $('.sw-btns .btn', sw); if (b) b.focus({ preventScroll:true });
+}
+function exitPlay() {
+  play = null; clearTimeout(swTimer); swNext = null;
+  sw.hidden = true; hud.hidden = true;
+  document.body.classList.remove('playing');
+  $$('.step.cur').forEach((el) => el.classList.remove('cur'));
+}
+
+/* ───────────────────────── view: players ───────────────────────── */
+function playerCard(k) {
+  const r = R[k];
+  if (k === 'X') {
+    return `<article class="pc" id="p-X" style="--c:var(--c-sys)"><header>${rb('X','xl')}<div><p class="pc-cls">${esc(r.cls)}</p><h3>${esc(r.name)}</h3></div></header><p class="pc-line">${esc(r.line)}</p><ul class="pc-can">${AUTO_JOBS.map((j) => `<li>${ICON.auto}<span>${esc(j)}</span></li>`).join('')}</ul></article>`;
+  }
+  const can = MX.filter((row) => row.cell[k] === 'Y' || row.cell[k] === 'y');
+  const cant = MX.filter((row) => row.cell[k] === 'x');
+  const ms = MISSIONS.filter((m) => m.steps.some((s) => s.who === k || (s.alt || []).includes(k)));
+  const steps = MISSIONS.reduce((a, m) => a + m.steps.filter((s) => s.who === k).length, 0);
+  return `<article class="pc" id="p-${k}" style="--c:var(--c-${r.c})">
+    <header>${rb(k,'xl')}<div><p class="pc-cls">${esc(r.cls)}</p><h3>${esc(r.name)}</h3><p class="pc-lvl">${esc(r.level)}</p></div></header>
+    <p class="pc-line">${esc(r.line)}</p>
+    <div class="pc-stats"><div><b>${ms.length}</b><span>missions</span></div><div><b>${steps}</b><span>steps</span></div><div><b>${can.length}</b><span>powers</span></div><div><b>${cant.length}</b><span>blocked</span></div></div>
+    ${ms.length ? `<div class="pc-ms">${ms.map((m) => `<button class="chip" type="button" data-go="m${m.n}"><span class="chip-n">${m.n}</span>${esc(m.short)}</button>`).join('')}</div>` : ''}
+    <details open><summary>Can do (${can.length})</summary><ul class="pc-can">${can.map((row) => `<li>${ICON.check}<span>${fmt(row.a)}${row.cell[k] === 'y' ? ' <em>(shared)</em>' : ''}<span class="mod">${esc(row.mod)}</span></span></li>`).join('')}</ul></details>
+    ${cant.length ? `<details><summary>Blocked by the platform (${cant.length})</summary><ul class="pc-cant">${cant.map((row) => `<li>${ICON.lock}<span>${fmt(row.a)}<span class="mod">${esc(row.mod)}</span></span></li>`).join('')}</ul></details>` : ''}
+    ${k === 'S' || k === 'B' ? `<details><summary>Inside the company: Levels 1–3</summary>${tierTable(k)}</details>` : ''}
+    <p class="pc-login">${ICON.login}<span>${esc(loginHint(k))}</span></p>
+  </article>`;
+}
+function viewPlayers() {
+  return `<section><p class="eyebrow">Players</p><h1>Who holds which power</h1>
+    <p class="lede">Eight roles act on the REIA desk, six inside SJVN and two outside it. Each card lists what the role can do and what the platform refuses it, taken from the same rules the platform applies.</p></section>
+    <h2 class="side-h">SJVN side</h2><div class="pgrid">${['M','C','H','F','G','A'].map(playerCard).join('')}</div>
+    <h2 class="side-h">Company side</h2><div class="pgrid">${['S','B'].map(playerCard).join('')}</div>
+    <h2 class="side-h">No log-in</h2><div class="pgrid">${playerCard('X')}</div>`;
+}
+
+/* ───────────────────────── view: powers ───────────────────────── */
+const PW = { mod:'All', hl:'', q:'' };
+const CELL = { Y:'Does it', y:'Can also', r:'Sees only', x:'Blocked', '-':'No access' };
+function viewPowers() {
+  return `<section><p class="eyebrow">Powers</p><h1>Who can press what</h1>
+    <p class="lede">Every action on the REIA desk against every role. Pick a module, search an action, or click a role to light up its column.</p></section>
+    <div class="tools">
+      ${['All', ...MODS].map((x) => `<button class="chip" type="button" data-mod="${esc(x)}" aria-pressed="${PW.mod === x}">${esc(x)}</button>`).join('')}
+      <input class="search" id="pw-q" type="search" placeholder="Search an action, e.g. lock, LC, sign" value="${esc(PW.q)}" aria-label="Search actions">
+    </div>
+    <div class="pw-legend">
+      <span><span class="cd" style="--c:var(--c-maker)">${ICON.check}</span>Does it</span>
+      <span><span class="cd hollow" style="--c:var(--c-maker)">${ICON.check}</span>Can also</span>
+      <span><span class="cs"></span>Sees only</span>
+      <span><span class="cx">${ICON.lock}</span>Blocked by the platform</span>
+      <span><span class="cn">–</span>Not on their screens</span>
+    </div>
+    <div class="tbl-wrap"><table class="pw" id="pwt"></table></div>`;
+}
+function paintPowers() {
+  const t = $('#pwt'); if (!t) return;
+  const q = PW.q.trim().toLowerCase();
+  const rows = MX.filter((r) => (PW.mod === 'All' || r.mod === PW.mod) && (!q || (r.a + ' ' + r.note + ' ' + r.mod).toLowerCase().includes(q)));
+  const head = `<thead><tr><th scope="col" style="text-align:left;padding-left:14px">Action</th>${ROLE_ORDER.map((k) => `<th scope="col"><button type="button" data-hl="${k}" aria-pressed="${PW.hl === k}">${rb(k,'sm')}<span>${esc(R[k].short)}</span></button></th>`).join('')}</tr></thead>`;
+  if (!rows.length) { t.innerHTML = head + `<tbody><tr><td colspan="9" class="empty">No action matches “${esc(PW.q)}”. Try a shorter word.</td></tr></tbody>`; return; }
+  let body = ''; let mod = '';
+  rows.forEach((r) => {
+    if (r.mod !== mod) { mod = r.mod; body += `<tr class="grp"><th colspan="9" scope="rowgroup">${esc(mod)}</th></tr>`; }
+    body += `<tr><th scope="row">${fmt(r.a)}${r.note ? `<small>${fmt(r.note)}</small>` : ''}</th>${ROLE_ORDER.map((k) => {
+      const v = r.cell[k];
+      const g = v === 'Y' ? `<span class="cd" style="--c:var(--c-${R[k].c})">${ICON.check}</span>`
+        : v === 'y' ? `<span class="cd hollow" style="--c:var(--c-${R[k].c})">${ICON.check}</span>`
+        : v === 'r' ? '<span class="cs"></span>' : v === 'x' ? `<span class="cx">${ICON.lock}</span>` : '<span class="cn">–</span>';
+      return `<td class="${PW.hl === k ? 'hl' : ''}" style="--c:var(--c-${R[k].c})" title="${esc(R[k].name)}: ${CELL[v]}"><span class="vh">${CELL[v]}</span><span aria-hidden="true">${g}</span></td>`;
+    }).join('')}</tr>`;
+  });
+  t.innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+/* ───────────────────────── view: lifecycles ───────────────────────── */
+let LC = 'billb';
+function viewLife() {
+  const L = LIFE.find((x) => x.id === LC) || LIFE[0];
+  const track = (tr) => `<div class="lc-card"><h3>${esc(tr.title)}</h3><div class="trk">${tr.main.map((nd, i) => `${i || nd.by ? `<span class="edge"><span class="who">${(nd.by || []).map((k) => rb(k,'xs')).join('')}</span><span class="arr"></span><span class="lbl">${fmt(nd.act || '')}</span></span>` : ''}${st(nd.s, true)}`).join('')}</div>
+    ${tr.br && tr.br.length ? `<ul class="branches">${tr.br.map((b) => `<li>${/^[A-Z_]+$/.test(b.f) ? st(b.f) : `<span class="br-note">${esc(b.f)}</span>`}<span class="br-act"><span class="arw">→</span>${b.by.map((k) => rb(k,'xs')).join('')}${fmt(b.act)}<span class="arw">→</span></span>${st(b.t)}${b.note ? `<span class="br-note">${esc(b.note)}</span>` : ''}</li>`).join('')}</ul>` : ''}</div>`;
+  return `<section><p class="eyebrow">Lifecycles</p><h1>Every status, and who moves it</h1>
+    <p class="lede">Each record on the desk moves through fixed statuses. The main path runs left to right; side exits are listed under it. The badge on each arrow is the role that makes that move.</p></section>
+    <div class="lc-tabs">${LIFE.map((x) => `<button class="chip" type="button" data-lc="${x.id}" aria-pressed="${x.id === L.id}">${esc(x.name)}</button>`).join('')}</div>
+    ${L.tracks.map(track).join('')}
+    ${L.notes ? `<ul class="lc-notes">${L.notes.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul>` : ''}`;
+}
+
+/* ───────────────────────── view: log-in relay ───────────────────────── */
+let RF = 'all';
+function viewRelay() {
+  const ss = sessions(RF);
+  const logins = ss.filter((s) => s.who !== 'X').length;
+  const max = Math.max(...MISSIONS.map(loginsIn));
+  let count = 0;
+  return `<section class="relay-top">
+      <div><p class="eyebrow">Log-in relay</p><h1>When to log out, and who logs in next</h1>
+      <p class="lede">One complete run, from onboarding to a closed month, as a relay of log-ins. Each block is one sitting: log in, do the actions listed, log out, hand the baton on. Click an action for its details.</p>
+      <div class="tools">${[['all','Full run'],['setup','Setup only'],['month','One month']].map(([id, l]) => `<button class="chip" type="button" data-rf="${id}" aria-pressed="${RF === id}">${l}</button>`).join('')}<span class="mstat"><b>${logins}</b>log-ins</span></div></div>
+      <div class="bars-mini" aria-label="Log-ins per mission">${MISSIONS.map((m) => `<div class="bm"><span>${m.n} · ${esc(m.short)}</span><i style="width:${(loginsIn(m) / max * 100).toFixed(0)}%"></i><b>${loginsIn(m)}</b></div>`).join('')}</div>
+    </section>
+    <ol class="relay">${ss.map((s, idx) => `<li class="rl" style="--c:var(--c-${R[s.who].c})">${rb(s.who,'lg')}<div class="rl-h"><small>${s.who === 'X' ? 'Automatic' : `Log-in ${++count}`}</small><b>${esc(R[s.who].name)}</b><span>${esc(loginHint(s.who))}</span></div>
+      <ol class="rl-acts">${s.items.map((it) => `<li><button type="button" data-open="${it.m.n}:${it.i}"><span class="mtag">${it.m.n}.${it.i + 1}</span><span>${fmt(it.s.t)}${it.s.opt ? ' <em>(if needed)</em>' : ''}</span></button></li>`).join('')}</ol>
+      ${idx < ss.length - 1 && s.who !== 'X' ? `<div class="rl-out">Log out</div>` : '<div class="rl-out" style="visibility:hidden">·</div>'}</li>`).join('')}</ol>`;
+}
+
+/* ───────────────────────── view: money ───────────────────────── */
+const DEMO = { mwh:7920, ppa:2.75, margin:70, credit:50000, rebate:1.5, tds:true };
+const MV = Object.assign({}, DEMO);
+function moneyCalc(v) {
+  const BP = v.mwh * 1000 * v.ppa;
+  const margin = v.mwh * v.margin;
+  const BS = BP + margin;
+  const CN = Math.min(v.credit, BS);
+  const paid = BS - CN;
+  const realised = BS > 0 ? paid * BP / BS : 0;
+  const rebate = BP * v.rebate / 100;
+  const cap = Math.max(0, Math.min(realised, BP - rebate));
+  const TDS = v.tds ? Math.max(0, BP - 5000000) * 0.001 : 0;
+  const net = Math.max(0, cap - TDS);
+  const held = Math.max(0, (BP - rebate) - cap);
+  const keeps = paid - net - TDS;
+  return { BP, margin, BS, CN, paid, realised, rebate, cap, TDS, net, held, keeps, psa: v.ppa + v.margin / 1000 };
+}
+function viewMoney() {
+  const inp = (id, label, min, max, step, val) => `<div class="inp"><label for="${id}"><span>${label}</span><output id="${id}-o" for="${id}"></output></label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+  return `<section><p class="eyebrow">Money</p><h1>Follow one month’s money</h1>
+    <p class="lede">The worked example from the demo run: 50 MW solar, September, 7,920 MWh. Move the sliders to see how the buyer’s bill, the dispute, the rebate and TDS change what the seller is paid and what SJVN keeps.</p></section>
+    <div class="money">
+      <div class="inputs">
+        ${inp('mv-mwh','Energy (MWh)',500,20000,10,MV.mwh)}
+        ${inp('mv-ppa','PPA tariff (₹/kWh)',2,4.5,0.01,MV.ppa)}
+        ${inp('mv-margin','SJVN margin (₹/MWh)',0,200,1,MV.margin)}
+        ${inp('mv-credit','Dispute credit accepted (₹)',0,500000,5000,MV.credit)}
+        ${inp('mv-rebate','Early-payment rebate (%)',0,3,0.25,MV.rebate)}
+        <div class="inp ck"><label for="mv-tds"><input type="checkbox" id="mv-tds"${MV.tds ? ' checked' : ''}> TDS u/s 194Q applies (first bill of the year)</label></div>
+        <button class="btn" type="button" data-reset>Back to the demo figures</button>
+      </div>
+      <div class="bars" id="mv-out"></div>
+    </div>`;
+}
+function paintMoney() {
+  const out = $('#mv-out'); if (!out) return;
+  const v = moneyCalc(MV);
+  const set = (id, txt) => { const o = $('#' + id + '-o'); if (o) o.textContent = txt; };
+  set('mv-mwh', MV.mwh.toLocaleString('en-IN') + ' MWh'); set('mv-ppa', '₹' + MV.ppa.toFixed(2)); set('mv-margin', '₹' + MV.margin);
+  set('mv-credit', inr(MV.credit)); set('mv-rebate', MV.rebate.toFixed(2) + '%');
+  const scale = Math.max(v.BS, 1);
+  const w = (x) => `${Math.max(0, x / scale * 100).toFixed(2)}%`;
+  const bar = (label, total, segs) => `<div><div class="bl"><b>${label}</b><span>${inr(total)} · ${crore(total)}</span></div><div class="bar">${segs.map(([c, x, t]) => `<i class="${c}" style="width:${w(x)}" title="${esc(t)}: ${inr(x)}"></i>`).join('')}</div></div>`;
+  out.innerHTML = `
+    ${bar('SJVN’s bill on the buyer (PSA)', v.BS, [['s-energy', v.BP, 'Energy at the PPA tariff'], ['s-margin', v.margin, 'SJVN margin']])}
+    ${bar('Credit note from the dispute', v.CN, [['s-credit', v.CN, 'Credit note']])}
+    ${bar('Buyer pays SJVN', v.paid, [['s-pay', v.paid, 'Buyer payment']])}
+    ${bar('Seller’s bill on SJVN (PPA)', v.BP, [['s-net', v.net, 'Net paid to the seller'], ['s-tds', v.TDS, 'TDS'], ['s-rebate', v.rebate, 'Rebate'], ['s-held', v.held, 'Held until realised']])}
+    ${bar('SJVN keeps', Math.max(0, v.keeps), [['s-keep', Math.max(0, v.keeps), 'SJVN keeps']])}
+    <div class="keys"><span><i class="s-energy"></i>Energy / net to seller</span><span><i class="s-margin"></i>SJVN</span><span><i class="s-credit"></i>Credit note</span><span><i class="s-pay"></i>Buyer’s payment</span><span><i class="s-tds"></i>TDS</span><span><i class="s-rebate"></i>Rebate</span>${v.held > 0.5 ? '<span><i class="s-held"></i>Held until the buyer pays</span>' : ''}</div>
+    <div class="calc">
+      <div><span>PSA tariff<small>PPA tariff ₹${MV.ppa.toFixed(2)} + margin ₹${MV.margin}/MWh</small></span><span class="v">₹${v.psa.toFixed(3)}/kWh</span></div>
+      <div><span>Seller’s bill<small>${MV.mwh.toLocaleString('en-IN')} MWh × 1,000 × ₹${MV.ppa.toFixed(2)}</small></span><span class="v">${inr(v.BP)}</span></div>
+      <div><span>SJVN’s bill on the buyer<small>of which SJVN margin ${inr(v.margin)}</small></span><span class="v">${inr(v.BS)}</span></div>
+      <div><span>Buyer pays<small>bill − credit note</small></span><span class="v">${inr(v.paid)}</span></div>
+      <div><span>Seller’s share of that<small>paid × seller’s bill ÷ SJVN’s bill</small></span><span class="v">${inr(v.realised)}</span></div>
+      <div><span>Rebate SJVN earns by paying early<small>${MV.rebate.toFixed(2)}% of the seller’s bill (1.5% within 5 days of it, 1% within 30)</small></span><span class="v">${inr(v.rebate)}</span></div>
+      <div><span>Release cap<small>lower of the share and (bill − rebate)</small></span><span class="v">${inr(v.cap)}</span></div>
+      <div><span>TDS u/s 194Q<small>0.1% of the bill above ₹50 lakh</small></span><span class="v">${inr(v.TDS)}</span></div>
+      <div class="tot"><span>Net paid to the seller<small>cap − TDS</small></span><span class="v">${inr(v.net)}</span></div>
+      <div class="tot"><span>SJVN keeps<small>buyer’s payment − net − TDS${v.held > 0.5 ? `, including ${inr(v.held)} held for the seller` : ''}</small></span><span class="v">${inr(v.keeps)}</span></div>
+    </div>`;
+}
+
+/* ───────────────────────── view: side quests ───────────────────────── */
+function viewSide() {
+  return `<section><p class="eyebrow">Side quests</p><h1>Everything else on the desk</h1>
+    <p class="lede">The screens under “Others” and the platform pages, each as a mini-flow: who starts it, who decides, and the rule that matters.</p></section>
+    <div class="sq">${SIDE.map((q) => `<article class="sqc"><h3>${esc(q.t)}</h3><p class="where">${esc(q.where)}</p>
+      <div class="flow">${q.flow.map(([ks, l]) => `<span class="fchip"><span class="rbs">${ks.map((k) => rb(k,'xs')).join('')}</span>${fmt(l)}</span>`).join('<span class="farr">→</span>')}</div>
+      <ul>${q.rules.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></article>`).join('')}</div>`;
+}
+
+/* ───────────────────────── view: quiz ───────────────────────── */
+// Roles that could also fairly answer a step's question, kept out of its options.
+// 'skip' leaves the step out (both companies do it the same way).
+const QX = { '1:0':['A'], '1:1':['A','S','B'], '1:2':['A'], '1:3':['A'], '2:1':'skip', '2:2':'skip', '4:0':['S','B'], '6:3':['C'], '7:0':['S','M'], '7:3':['S'], '7:5':['F'], '7:6':['S'], '10:5':['S'], '10:6':['B'] };
+const POOL = (() => {
+  const pool = [];
+  MISSIONS.forEach((m) => m.steps.forEach((s, i) => {
+    const qx = QX[`${m.n}:${i}`];
+    if (s.who === 'X' || s.noquiz || qx === 'skip') return;
+    pool.push({ q:`Whose move: “${s.t}”?`, press:s.press || null, ctx:`Mission ${m.n} · ${m.short}`, ans:s.who, not:[s.who, ...(s.alt || []), ...(qx || []), ...(s.who === 'H' ? ['G'] : [])], why:(s.rules && s.rules[0]) || s.block || '' });
+  }));
+  MX.forEach((r) => {
+    const ys = ROLE_ORDER.filter((k) => r.cell[k] === 'Y'); const yy = ROLE_ORDER.filter((k) => r.cell[k] === 'y');
+    const a = r.a.replace(/`/g, '');
+    if (ys.length === 1 && !yy.length) pool.push({ q:`Who can ${a.charAt(0).toLowerCase()}${a.slice(1)}?`, press:null, ctx:`Powers · ${r.mod}`, ans:ys[0], not:[ys[0]], why:r.note || '' });
+  });
+  return pool;
+})();
+let QZ = null;
+function newRound() {
+  const qs = shuffle(POOL).slice(0, 10).map((p) => {
+    const others = shuffle(ROLE_ORDER.filter((k) => k !== 'G' && !p.not.includes(k))).slice(0, 3);
+    return Object.assign({}, p, { opts:shuffle([p.ans, ...others]) });
+  });
+  QZ = { qs, i:0, score:0, picked:null, res:[] };
+}
+function viewQuiz() {
+  if (!QZ) return `<section><p class="eyebrow">Quiz</p><h1>Who does it?</h1><p class="lede">Ten questions drawn from the missions and the powers matrix. Pick the role that does each action. Your best score adds to your XP.</p></section>
+    <div class="quiz qend"><div class="big">${P.best || 0}<span style="font-size:24px;color:var(--muted)"> / 10</span></div><p>Your best so far</p><button class="btn primary" type="button" data-quiz="start">${ICON.play} Start a round</button></div>`;
+  const q = QZ.qs[QZ.i];
+  if (!q) {
+    const s = QZ.score;
+    const msg = s === 10 ? 'Perfect. You know the desk.' : s >= 8 ? 'Strong. A couple to revisit.' : s >= 5 ? 'Getting there. Play the missions you missed.' : 'Worth a walk through the missions first.';
+    return `<section><p class="eyebrow">Quiz</p><h1>Round complete</h1></section><div class="quiz qend"><div class="big">${s}<span style="font-size:24px;color:var(--muted)"> / 10</span></div><p>${msg}${s >= (P.best || 0) ? ' New best.' : ` Your best is ${P.best}.`}</p><button class="btn primary" type="button" data-quiz="start">Play again</button></div>`;
+  }
+  const answered = QZ.picked !== null;
+  return `<section><p class="eyebrow">Quiz</p><h1>Who does it?</h1></section>
+    <div class="quiz">
+      <div class="qprog">${QZ.qs.map((x, k) => `<span class="${k < QZ.i ? (QZ.res[k] ? 'ok' : 'no') : k === QZ.i ? 'on' : ''}"></span>`).join('')}</div>
+      <div class="qtop"><span>Question ${QZ.i + 1} of ${QZ.qs.length}</span><span>Score ${QZ.score}</span></div>
+      <p class="qq">${esc(q.q)}</p>
+      ${q.press ? `<p class="qhint">Presses ${q.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</p>` : ''}
+      <div class="qopts">${q.opts.map((k) => `<button class="qo${answered && k === q.ans ? ' right' : ''}${answered && k === QZ.picked && k !== q.ans ? ' wrong' : ''}" type="button" data-pick="${k}" style="--c:var(--c-${R[k].c})"${answered ? ' disabled' : ''}>${rb(k,'md')}${esc(R[k].name)}</button>`).join('')}</div>
+      ${answered ? `<div class="qfb ${QZ.picked === q.ans ? 'ok' : 'no'}"><b>${QZ.picked === q.ans ? 'Right.' : `It’s the ${esc(R[q.ans].name)}.`}</b><span>${esc(q.ctx)}</span>${q.why ? `<span>${fmt(q.why)}</span>` : ''}<div><button class="btn primary" type="button" data-quiz="next">${QZ.i === QZ.qs.length - 1 ? 'See the score' : 'Next question →'}</button></div></div>` : ''}
+    </div>`;
+}
+
+/* ───────────────────────── events ───────────────────────── */
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const goEl = t.closest('[data-go]');
+  if (goEl) { e.preventDefault(); go(goEl.dataset.go); return; }
+  const stepEl = t.closest('[data-step]');
+  if (stepEl) { const [n, i] = stepEl.dataset.step.split(':').map(Number); if (play && play.n === n) { play.i = i; showStep(); } openDrawer(n, i); return; }
+  const openEl = t.closest('[data-open]');
+  if (openEl) { if (openEl.disabled) return; const [n, i] = openEl.dataset.open.split(':').map(Number); openDrawer(n, i); return; }
+  if (t.closest('[data-close]') || t === scrim) { closeDrawer(); return; }
+  const playEl = t.closest('[data-play]');
+  if (playEl) { startPlay(Number(playEl.dataset.play)); return; }
+  const doneEl = t.closest('[data-done]');
+  if (doneEl) { const n = Number(doneEl.dataset.done); P.done[n] = !P.done[n]; save(); go('m' + n, false); return; }
+  const hb = t.closest('[data-hud]');
+  if (hb) { const a = hb.dataset.hud; if (a === 'next') stepPlay(1); else if (a === 'prev') stepPlay(-1); else if (a === 'exit') exitPlay(); else if (a === 'info' && play) openDrawer(play.n, play.i); return; }
+  const swb = t.closest('[data-sw]');
+  if (swb) {
+    const a = swb.dataset.sw;
+    if (a === 'go' && swNext) { swNext(); return; }
+    if (a === 'done' && play) { const n = play.n; P.done[n] = true; save(); go(n < MISSIONS.length ? 'm' + (n + 1) : 'map'); return; }
+    if (a === 'next' && play) { go('m' + (play.n + 1)); return; }
+    if (a === 'stay') { exitPlay(); return; }
+    return;
+  }
+  if (t === sw && swNext) { swNext(); return; }
+  const pl = t.closest('[data-player]');
+  if (pl) { const k = pl.dataset.player; go('players'); const card = $('#p-' + k); if (card) { card.scrollIntoView({ block:'start' }); card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1600); } return; }
+  const md = t.closest('[data-mod]');
+  if (md) { PW.mod = md.dataset.mod; $$('[data-mod]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mod === PW.mod))); paintPowers(); return; }
+  const hl = t.closest('[data-hl]');
+  if (hl) { PW.hl = PW.hl === hl.dataset.hl ? '' : hl.dataset.hl; paintPowers(); return; }
+  const lc = t.closest('[data-lc]');
+  if (lc) { LC = lc.dataset.lc; app.innerHTML = viewLife(); return; }
+  const rf = t.closest('[data-rf]');
+  if (rf) { RF = rf.dataset.rf; app.innerHTML = viewRelay(); return; }
+  if (t.closest('[data-reset]')) { Object.assign(MV, DEMO); app.innerHTML = viewMoney(); paintMoney(); return; }
+  const qz = t.closest('[data-quiz]');
+  if (qz) {
+    if (qz.dataset.quiz === 'start') newRound();
+    else if (qz.dataset.quiz === 'next') { QZ.i++; QZ.picked = null; if (QZ.i >= QZ.qs.length && QZ.score > (P.best || 0)) { P.best = QZ.score; save(); paintXP(); } }
+    app.innerHTML = viewQuiz(); return;
+  }
+  const pick = t.closest('[data-pick]');
+  if (pick && QZ && QZ.picked === null) { const q = QZ.qs[QZ.i]; QZ.picked = pick.dataset.pick; const ok = QZ.picked === q.ans; QZ.res[QZ.i] = ok; if (ok) QZ.score++; app.innerHTML = viewQuiz(); return; }
+  if (t.closest('#theme')) {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    P.theme = dark ? 'light' : 'dark'; document.documentElement.dataset.theme = P.theme; save(); paintTheme();
+  }
+});
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.id === 'pw-q') { PW.q = t.value; paintPowers(); return; }
+  if (t.id && t.id.startsWith('mv-')) {
+    const k = t.id.slice(3);
+    if (k === 'tds') MV.tds = t.checked; else MV[k] = Number(t.value);
+    paintMoney();
+  }
+});
+document.addEventListener('change', (e) => { if (e.target.id === 'mv-tds') { MV.tds = e.target.checked; paintMoney(); } });
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches && e.target.matches('input, textarea, select')) return;
+  if (!sw.hidden) { if (swNext && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'Escape')) { e.preventDefault(); swNext(); } else if (e.key === 'Escape') exitPlay(); return; }
+  if (e.key === 'Escape') { if (drawer.classList.contains('open')) closeDrawer(); else if (play) exitPlay(); return; }
+  if (play && !drawer.classList.contains('open')) {
+    if (e.key === 'ArrowRight') { e.preventDefault(); stepPlay(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stepPlay(-1); }
+  }
+});
+window.addEventListener('popstate', () => go(location.hash.slice(1) || 'map', false));
+
+if (P.theme === 'light' || P.theme === 'dark') document.documentElement.dataset.theme = P.theme;
+paintTheme();
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintTheme); } catch (e) { /* older browsers: the icon catches up on the next toggle */ }
+go(location.hash.slice(1) || 'map', false);
+})();
+</script>
+
+</html>
