@@ -27,6 +27,7 @@ const ADMIN_GOVERNANCE_PREFIXES = {
   '/api/masters/': 'Masters — banks, parameters, losses, holidays, lookups, document types',
   '/api/project-scope/': 'Assigning REIA officers to projects — user administration (Target #2 Phase C)',
   '/api/delegations/': 'Recording an additional charge — user administration (Target #2 Phase D)',
+  '/api/role-powers/': 'Giving and taking away role powers — user administration',
 };
 
 // Where a platform administrator may still write. Everything else that changes
@@ -41,6 +42,7 @@ const ADMIN_MAY_WRITE = [
   [/^\/api\/circulars\/admin/, 'public circulars and statutory disclosures on the website — site content, like broadcasts'],
   [/^\/api\/project-scope\//, 'assigning REIA officers to projects — user administration'],
   [/^\/api\/delegations\//, 'recording an additional charge; approving break-glass — governance (Target #2 Phase D)'],
+  [/^\/api\/role-powers\//, 'giving and taking away role powers — user administration'],
   [/^\/api\/notifications\//, 'mail delivery retries and the test e-mail — platform operation'],
   [/^\/api\/market-analytics\/alerts/, 'the user\'s own price alerts'],
   [/^\/api\/cerc-market\/(trigger|scan)$/, 'fetching CERC\'s published reports — a data feed, not a transaction'],

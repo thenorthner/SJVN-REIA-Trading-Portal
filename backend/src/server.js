@@ -126,7 +126,9 @@ import { repairAuditChainIfBroken, verifyRecentIntegrity } from './auditEngine.j
 import { db } from './db/index.js';
 import { backupDatabase } from './services/dbBackup.js';
 
-import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS, userFromToken } from './middleware/auth.js';
+import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS, userFromToken, rolePowerGuard } from './middleware/auth.js';
+import { attachApp as attachRolePowers } from './services/rolePowers.js';
+import rolePowersRoutes from './routes/rolePowers.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
 import { statutoryDeclarations } from './services/statutoryDeclaration.js';
 import publicInfoRoutes from './routes/publicInfo.js';
@@ -201,6 +203,8 @@ app.use('/api', statutoryDeclarations(userFromToken));
 // Project-wise authorisation (Target #2 Phase C): a REIA officer on SELECTED
 // projects is refused other projects' records and sees only theirs in lists.
 app.use('/api', projectScopeGuard(userFromToken));
+// Role powers: a power an administrator took from a role is refused before any router.
+app.use('/api', rolePowerGuard(userFromToken));
 // REIA beta (REIA_BETA=1): list answers lose the other desks' rows. A no-op otherwise.
 app.use('/api', reiaBetaFilter());
 // `dev` writes ANSI colour codes, which journalctl stores verbatim and every
@@ -269,6 +273,7 @@ app.use('/api/tds-recon', tdsReconRoutes);
 app.use('/api/balance-confirmations', balanceConfirmationRoutes);
 app.use('/api/sjvn-desk', sjvnDeskRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/role-powers', rolePowersRoutes);
 app.use('/api/invoices', requireAuth, invoicesRoutes);
 app.use('/api/billing-trail', requireAuth, billingTrailRoutes);
 app.use('/api/station-beta', requireAuth, stationBetaRoutes);
@@ -462,6 +467,9 @@ app.use((err, req, res, next) => {
 // Exported so tests can drive the routes without binding a port. Listening and
 // the background sweeps are started below, and only when this file is the entry
 // point — importing it must not take over port 4000 or start timers.
+// The role powers read the mounted routes to know what each power covers.
+attachRolePowers(app);
+
 export { app };
 
 const PORT = process.env.PORT || 4000;

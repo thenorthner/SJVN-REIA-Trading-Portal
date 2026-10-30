@@ -23,6 +23,7 @@ import { secureLogAudit } from '../auditEngine.js';
 import { passwordComplaint, lockoutState, clearLoginAttempts } from './auth.js';
 import { generatePassword } from './team.js';
 import { betaRows } from '../services/reiaBeta.js';
+import { customRole, customRoles, isCustomRole } from '../services/rolePowers.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -64,6 +65,20 @@ export const STAFF_ROLES = {
 };
 const ROLES = Object.keys(STAFF_ROLES);
 const TOP = ['IT_SUPER_ADMIN', 'SJVN_ADMIN'];
+const MADE_DESK = 'Roles made here';
+
+/** A role's name, desk and purpose — the platform's own, or one an administrator made on Role Powers. */
+export function roleInfo(role) {
+  if (STAFF_ROLES[role]) return STAFF_ROLES[role];
+  const c = isCustomRole(role) ? customRole(role) : null;
+  if (!c) return { label: role, desk: '', does: '' };
+  const retired = c.status !== 'ACTIVE';
+  return { label: retired ? `${c.label} (retired)` : c.label, desk: MADE_DESK, does: c.description, made: true, base: c.base_role, retired };
+}
+const madeInUse = () => customRoles().map((c) => c.code);
+// Made roles that were retired still name the switched-off accounts that held them.
+const madeEver = () => db.prepare("SELECT code FROM custom_roles ORDER BY created_at, code").all().map((r) => r.code);
+const order = (role) => (ROLES.includes(role) ? ROLES.indexOf(role) : ROLES.length);
 /**
  * Which roles the holder of a role may add, change and switch off. Only the
  * platform administrators (Target #2 Phase B): a desk head who checks the
@@ -71,37 +86,25 @@ const TOP = ['IT_SUPER_ADMIN', 'SJVN_ADMIN'];
  * heads' former power over their desk's users is the SJVN Administrator's now.
  */
 const MANAGES = {
-  IT_SUPER_ADMIN: ROLES,
-  SJVN_ADMIN: ROLES.filter((r) => r !== 'IT_SUPER_ADMIN'),
+  IT_SUPER_ADMIN: () => [...ROLES, ...madeInUse()],
+  SJVN_ADMIN: () => [...ROLES.filter((r) => r !== 'IT_SUPER_ADMIN'), ...madeInUse()],
 };
 
-/** What each role reaches, section by section, as the navigation and the routes enforce it. */
-const ACCESS = [
-  ['Hydro billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
-  ['Thermal billing — stations, stakeholders, billing', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', THERMAL_ADMIN: 'Full', THERMAL_USER: 'Full', FINANCE_USER: 'Read' }],
-  ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Approve', REIA_APPROVER: 'Approve', REIA_CHECKER: 'Check', REIA_MAKER: 'Prepare', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
-  ['Payments — recording, confirming a buyer\'s payment, releases', { REIA_MAKER: 'Record', FINANCE_USER: 'Full' }],
-  ['Power trading — bids, exchange, clients', { SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', FINANCE_USER: 'Read', TRADING_ADMIN: 'Full', TRADING_USER: 'Full' }],
-  ['Masters — banks, parameters, losses, holidays, lookups, document types', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full' }],
-  ['Companies\' users — reset or switch off a company admin', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full' }],
-  ['SJVN\'s own users — this page', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'All but IT admins' }],
-  ['Audit trail', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
-].map(([what, by]) => ({ what, by }));
-
 function scopeOf(user) {
-  const manages = MANAGES[user.role];
+  const manages = MANAGES[user.role]?.();
   if (!manages) throw fail(403, 'Only an administrator manages SJVN\'s users');
   // A desk's administrator sees its own desk; the platform's administrators see everyone.
-  const sees = TOP.includes(user.role) ? ROLES : [user.role, ...manages];
+  const sees = TOP.includes(user.role) ? [...ROLES, ...madeEver()] : [user.role, ...manages];
   return { manages, sees, top: TOP.includes(user.role) };
 }
-const isStaff = (u) => !!u && !u.linked_entity_id && ROLES.includes(u.role);
+const isStaff = (u) => !!u && !u.linked_entity_id && (ROLES.includes(u.role) || isCustomRole(u.role));
 function memberFor(scope, id) {
   const m = db.prepare('SELECT * FROM users WHERE id = ?').get(String(id || ''));
   if (!isStaff(m) || !scope.sees.includes(m.role)) throw fail(404, 'User not found');
   return m;
 }
-const canManage = (scope, m, me) => scope.manages.includes(m.role) && m.id !== me.id;
+// An officer left on a retired made role can still be moved to another one.
+const canManage = (scope, m, me) => (scope.manages.includes(m.role) || (scope.top && isCustomRole(m.role))) && m.id !== me.id;
 const activeAdmins = (exceptId) => db.prepare(`SELECT COUNT(*) n FROM users WHERE role IN ('IT_SUPER_ADMIN','SJVN_ADMIN') AND is_active = 1 AND linked_entity_id IS NULL AND id <> ?`).get(exceptId || '').n;
 
 function cleanEmail(v) {
@@ -116,9 +119,10 @@ function cleanPhone(v) {
 }
 function roleFor(scope, asked) {
   // A screen still offering the old REIA role names gets the roles they became.
-  const role = canonicalRole(text(asked, 30).toUpperCase());
-  if (!STAFF_ROLES[role]) throw fail(400, 'Choose a role');
-  if (!scope.manages.includes(role)) throw fail(403, `You cannot give someone the ${STAFF_ROLES[role].label} role`);
+  const role = canonicalRole(text(asked, 60).toUpperCase());
+  const info = roleInfo(role);
+  if (!STAFF_ROLES[role] && !(info.made && !info.retired)) throw fail(400, 'Choose a role');
+  if (!scope.manages.includes(role)) throw fail(403, `You cannot give someone the ${info.label} role`);
   return role;
 }
 
@@ -129,7 +133,7 @@ function view(scope, m, me, signIns) {
   const name = (id) => (id ? db.prepare('SELECT name FROM users WHERE id = ?').get(id)?.name || null : null);
   return {
     id: m.id, name: m.name, email: m.email, phone: m.phone || '', designation: m.designation || '',
-    role: m.role, role_label: STAFF_ROLES[m.role].label, desk: STAFF_ROLES[m.role].desk,
+    role: m.role, role_label: roleInfo(m.role).label, desk: roleInfo(m.role).desk,
     is_active: !!m.is_active, is_me: m.id === me.id, is_admin: TOP.includes(m.role),
     created_at: m.created_at, created_by_name: name(m.created_by),
     last_login_at: s.last_login || null, logins_30d: s.logins_30d || 0, never_signed_in: !s.last_login,
@@ -156,7 +160,7 @@ function health(members) {
     ['REIA_CHECKER', 'nobody on the REIA desk to approve a bill\'s first level, validate energy data or verify documents'],
     ['REIA_APPROVER', 'no REIA approver to sign a bill\'s last level or decide disputes (Management can, if it is told)'],
   ]) {
-    if (!active.some((m) => m.role === role) && members.some((m) => m.role === role)) out.push({ level: 'red', text: `Every ${STAFF_ROLES[role].label} account is switched off — there is ${why}.` });
+    if (!active.some((m) => m.role === role) && members.some((m) => m.role === role)) out.push({ level: 'red', text: `Every ${roleInfo(role).label} account is switched off — there is ${why}.` });
   }
   const stale = active.filter((m) => m.never_signed_in && (Date.now() - new Date(`${String(m.created_at).replace(' ', 'T')}Z`).getTime()) > 7 * 86400000);
   if (stale.length) out.push({ level: 'blue', text: `${stale.map((m) => m.name).join(', ')} ${stale.length === 1 ? 'has' : 'have'} never signed in, more than a week after being added. Switch off an account nobody is using.` });
@@ -179,12 +183,12 @@ function staff(req) {
     `).all(...ids)) signIns.set(r.user_id, r);
   }
   const members = rows.map((m) => view(scope, m, req.user, signIns))
-    .sort((a, b) => (b.is_active - a.is_active) || (ROLES.indexOf(a.role) - ROLES.indexOf(b.role)) || a.name.localeCompare(b.name));
+    .sort((a, b) => (b.is_active - a.is_active) || (order(a.role) - order(b.role)) || a.name.localeCompare(b.name));
   const active = members.filter((m) => m.is_active);
-  const desks = [...new Set(scope.sees.map((r) => STAFF_ROLES[r].desk))];
+  const desks = [...new Set(scope.sees.map((r) => roleInfo(r).desk))];
   return {
     can_manage: true, sees_everyone: scope.top,
-    assignable_roles: scope.manages.map((r) => ({ value: r, label: STAFF_ROLES[r].label, does: STAFF_ROLES[r].does, desk: STAFF_ROLES[r].desk })),
+    assignable_roles: scope.manages.map((r) => ({ value: r, label: roleInfo(r).label, does: roleInfo(r).does, desk: roleInfo(r).desk })),
     members,
     totals: {
       active: active.length, inactive: members.length - active.length,
@@ -193,8 +197,9 @@ function staff(req) {
       by_desk: desks.map((d) => ({ desk: d, count: active.filter((m) => m.desk === d).length })),
     },
     health: health(members),
-    roles: scope.sees.map((r) => ({ role: r, ...STAFF_ROLES[r], count: active.filter((m) => m.role === r).length })),
-    access: ACCESS, role_order: ROLES.filter((r) => scope.sees.includes(r)),
+    roles: scope.sees.filter((r) => !roleInfo(r).retired || members.some((m) => m.role === r))
+      .map((r) => ({ role: r, ...roleInfo(r), count: active.filter((m) => m.role === r).length })),
+    role_order: scope.sees.filter((r) => !roleInfo(r).retired || members.some((m) => m.role === r)),
   };
 }
 
@@ -251,7 +256,7 @@ router.patch('/:id', (req, res) => send(res, () => {
   db.prepare('UPDATE users SET name = ?, phone = ?, designation = ?, role = ?, sessions_revoked_at = CASE WHEN ? THEN ? ELSE sessions_revoked_at END WHERE id = ?')
     .run(next.name, next.phone, next.designation, next.role, roleChanged ? 1 : 0, nowSeconds(), m.id);
   audit(req, roleChanged ? 'STAFF_ROLE_CHANGED' : 'STAFF_USER_UPDATED', m.id, { beforeValue: before, afterValue: next });
-  if (roleChanged) pushNotification({ userId: m.id, type: 'STAFF', message: `Your role was changed to ${STAFF_ROLES[next.role].label} by ${req.user.name}. Sign in again to use it.` });
+  if (roleChanged) pushNotification({ userId: m.id, type: 'STAFF', message: `Your role was changed to ${roleInfo(next.role).label} by ${req.user.name}. Sign in again to use it.` });
   return staff(req);
 }));
 
@@ -273,8 +278,9 @@ router.post('/:id/deactivate', (req, res) => send(res, () => {
 router.post('/:id/reactivate', (req, res) => send(res, () => {
   const scope = scopeOf(req.user);
   const m = memberFor(scope, req.params.id);
-  if (!canManage(scope, m, req.user)) throw fail(403, 'You cannot switch on this user');
   if (m.is_active) throw fail(400, 'This account is already active');
+  if (roleInfo(m.role).retired) throw fail(400, `The role ${roleInfo(m.role).label} has been retired — give the officer another role before switching the account on`);
+  if (!canManage(scope, m, req.user)) throw fail(403, 'You cannot switch on this user');
   db.prepare('UPDATE users SET is_active = 1, deactivated_at = NULL, deactivated_by = NULL, deactivation_reason = NULL WHERE id = ?').run(m.id);
   audit(req, 'STAFF_USER_REACTIVATED', m.id, { beforeValue: { is_active: 0 }, afterValue: { is_active: 1 } });
   return staff(req);
@@ -322,8 +328,8 @@ router.get('/history', (req, res) => send(res, () => {
     const before = parse(a.before_value);
     const after = parse(a.after_value);
     let detail = a.reason || '';
-    if (a.action === 'STAFF_ROLE_CHANGED' && before && after) detail = `${STAFF_ROLES[before.role]?.label || before.role} → ${STAFF_ROLES[after.role]?.label || after.role}`;
-    if (a.action === 'STAFF_USER_ADDED' && after) detail = `${STAFF_ROLES[after.role]?.label || after.role} · ${after.email}`;
+    if (a.action === 'STAFF_ROLE_CHANGED' && before && after) detail = `${roleInfo(before.role).label} → ${roleInfo(after.role).label}`;
+    if (a.action === 'STAFF_USER_ADDED' && after) detail = `${roleInfo(after.role).label} · ${after.email}`;
     if (a.action === 'STAFF_USER_UPDATED' && before && after) detail = ['name', 'phone', 'designation'].filter((k) => before[k] !== after[k]).map((k) => `${k}: ${before[k] || '—'} → ${after[k] || '—'}`).join('; ');
     return { id: a.id, what: words(a), member_name: names.get(a.entity_id) || '—', by: a.user_name, detail, at: a.created_at };
   });

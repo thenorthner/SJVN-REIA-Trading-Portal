@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
+import { actsAs } from '../../lib/rolePages.js';
 
 // Advances / unapplied receipts (decided 17-Oct-2026): money a buyer paid that
 // no bill could take — a payment beyond the bill, or a diversion surplus beyond
@@ -10,7 +11,7 @@ const SOURCE = { EXCESS_PAYMENT: 'Paid beyond the bill', DIVERSION_SURPLUS: 'Div
 
 export default function Advances() {
   const { user } = useAuth();
-  const canAct = user?.role === 'FINANCE_USER';
+  const canAct = actsAs(user, ['FINANCE_USER']);
   const [data, setData] = useState({ advances: [], totals: {} });
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);

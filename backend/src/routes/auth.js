@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/index.js';
+import { pagesFor, screensFor, isCustomRole, customRole } from '../services/rolePowers.js';
 import { signToken, requireAuth, canonicalRole } from '../middleware/auth.js';
 import { logAudit, pushNotification } from '../util.js';
 
@@ -17,6 +18,16 @@ function withBranding(u) {
   try {
     base.must_change_password = !!db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(u.id)?.must_change_password;
   } catch { base.must_change_password = false; }
+  // Pages an administrator's change to the role's powers opens or closes, and
+  // screens drawn as another role where a power was given (role powers). A role
+  // an administrator made is shown by its name and drawn as the role it works like.
+  if (!base.linked_entity_id) {
+    const held = canonicalRole(u.role_held || u.role);
+    const made = isCustomRole(held) ? customRole(held) : null;
+    if (made) Object.assign(base, { role: made.base_role, role_held: held, role_label: made.label, custom_role: held });
+    base.pages = pagesFor(held);
+    base.screens = screensFor(held);
+  }
   if (base.linked_entity_id) {
     const ent = db.prepare('SELECT id, name, logo_url, category, entity_type, status FROM entities WHERE id = ?').get(base.linked_entity_id);
     if (ent) base.entity = { id: ent.id, name: ent.name, logo_url: ent.logo_url, category: ent.category, entity_type: ent.entity_type, status: ent.status };

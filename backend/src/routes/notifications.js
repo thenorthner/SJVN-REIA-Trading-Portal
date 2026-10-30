@@ -51,10 +51,13 @@ router.post('/test-email', requireRole(...TEST_MAIL_ROLES), async (req, res) => 
 });
 
 // L. Notification and Alert System
+// A role an administrator made reads what is addressed to it and to the role it works like.
+const inboxRoles = (u) => [u.role, u.role_held || u.role];
+
 router.get('/', (req, res) => {
   const rows = db.prepare(`
-    SELECT * FROM notifications WHERE user_id = ? OR role = ? ORDER BY created_at DESC LIMIT 50
-  `).all(req.user.id, req.user.role);
+    SELECT * FROM notifications WHERE user_id = ? OR role IN (?, ?) ORDER BY created_at DESC LIMIT 50
+  `).all(req.user.id, ...inboxRoles(req.user));
   res.json(rows);
 });
 
@@ -69,7 +72,7 @@ router.post('/read-all', requireAuth, (req, res) => {
     const placeholders = ids.map(() => '?').join(',');
     db.prepare(`UPDATE notifications SET is_read = 1 WHERE id IN (${placeholders})`).run(...ids);
   }
-  db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? OR role = ?').run(req.user.id, req.user.role);
+  db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? OR role IN (?, ?)').run(req.user.id, ...inboxRoles(req.user));
   res.json({ ok: true });
 });
 

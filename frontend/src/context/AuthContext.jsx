@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '../api/client.js';
+import { screenRoles } from '../lib/rolePages.js';
 
 const AuthContext = createContext(null);
 
@@ -74,4 +76,23 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+/**
+ * Around the page itself (not the menu): the signed-in user as the screen is
+ * to be drawn for — another role's, on the screens of a power an administrator
+ * gave beyond the user's own role — and every role whose controls it draws
+ * there (lib/rolePages.js, screenRoles and actsAs).
+ */
+export function ScreenRole({ children }) {
+  const auth = useContext(AuthContext);
+  const { pathname } = useLocation();
+  const roles = screenRoles(auth?.user, pathname);
+  const key = roles.join(' ');
+  const value = useMemo(
+    () => (auth?.user && roles.length > 1 ? { ...auth, user: { ...auth.user, role: roles[0], roles } } : auth),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` stands for `roles`
+    [auth, key],
+  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

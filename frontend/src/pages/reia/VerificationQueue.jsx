@@ -7,6 +7,7 @@ import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDateTime } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // Every developer bill waiting to be verified, and what each one is waiting on.
 //
@@ -36,8 +37,8 @@ export default function VerificationQueue() {
 
   const { user } = useAuth() || {};
   // Phase B.2: the maker verifies a bill's checklist; sending it back is the checker's.
-  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
-  const canSendBack = ROLE_GROUPS.REIA_CHECK.includes(user?.role);
+  const canWrite = actsAs(user, ROLE_GROUPS.REIA_MAKE);
+  const canSendBack = actsAs(user, ROLE_GROUPS.REIA_CHECK);
   const [picked, setPicked] = useState([]);
   const [popup, setPopup] = useState(null);
   const [reload, setReload] = useState(0);

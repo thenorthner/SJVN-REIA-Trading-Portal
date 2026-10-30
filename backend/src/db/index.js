@@ -4146,8 +4146,37 @@ function migrateGenerationAssets() {
   fixAll();
 }
 
+/**
+ * Roles an administrator makes on the Role Powers screen (30-Oct-2026) are
+ * CUSTOM_<NAME>, which the users.role CHECK has to admit. The table is rebuilt
+ * from its own DDL, as for the REIA tiers above, with the one clause added.
+ */
+function migrateCustomRoles() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql;
+  if (!ddl || ddl.includes("GLOB 'CUSTOM_*'")) return;
+  const widened = ddl
+    .replace(/CREATE TABLE "?users"?/, 'CREATE TABLE users_role_migration')
+    .replace(/CHECK\s*\(\s*role IN\s*\(/, "CHECK (role GLOB 'CUSTOM_*' OR role IN (");
+  if (!widened.includes("GLOB 'CUSTOM_*'")) throw new Error('users.role CHECK not found to widen for made roles');
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.transaction(() => {
+      db.exec('DROP TABLE IF EXISTS users_role_migration');
+      db.exec(widened);
+      db.exec(`INSERT INTO users_role_migration (${cols.join(',')}) SELECT ${cols.join(',')} FROM users`);
+      db.exec('DROP TABLE users');
+      db.exec('ALTER TABLE users_role_migration RENAME TO users');
+    })();
+    console.log('[MIGRATE] users.role admits roles made on the Role Powers screen');
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
 try {
   migrateReiaThreeTier();
+  migrateCustomRoles();
   seedReiaApprover();
   migratePublicCirculars();
   migrateGenerationAssets();

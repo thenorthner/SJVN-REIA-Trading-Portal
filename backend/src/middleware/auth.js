@@ -1,6 +1,7 @@
 import { secureLogAudit } from '../auditEngine.js';
 import jwt from 'jsonwebtoken';
 import db from '../db/index.js';
+import { grantedPower, revokedPower, actingRole } from '../services/rolePowers.js';
 
 const DEV_SECRET = 'sjvn-dev-secret-change-me';
 
@@ -58,8 +59,26 @@ export function requireAuth(req, res, next) {
   if (ended) return res.status(401).json({ error: ended });
   const acting = applyActing(req.user, req.get?.('X-Acting-As'));
   if (acting.error) return res.status(403).json({ error: acting.error, code: 'ACTING_ENDED' });
+  applyRolePersona(req, req.user);
   recordActingRequest(req);
   next();
+}
+
+/**
+ * Role powers: the role a request runs as (services/rolePowers.js,
+ * actingRole). A role an administrator made runs as the role it works like;
+ * a power given beyond a role's own gates runs as that power's owner. The
+ * role held stays on the request as `role_held`, and that is the role the
+ * audit trail records and the overrides are read for.
+ */
+function applyRolePersona(req, claims) {
+  if (!claims?.role || claims.linked_entity_id) return;
+  const held = claims.role;
+  const role = actingRole(req, held);
+  if (role && role !== held) {
+    claims.role_held = held;
+    claims.role = role;
+  }
 }
 
 /**
@@ -148,6 +167,7 @@ export function userFromToken(req) {
     if (sessionEnded(claims)) return null;
     // Middleware ahead of the routers sees the same acting role the routes will.
     if (applyActing(claims, req.get?.('X-Acting-As')).error) return null;
+    applyRolePersona(req, claims);
     return claims;
   } catch {
     return null;
@@ -172,7 +192,9 @@ function sessionEnded(claims) {
 export function requireRole(...roles) {
   const gate = (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
-    if (!roles.includes(req.user.role)) {
+    // An administrator may have given this role the power the route belongs to (role powers).
+    const held = req.user.role_held || req.user.role;
+    if (!roles.includes(req.user.role) && !grantedPower(req, held)) {
       // A refused action is recorded as well as a permitted one. A log of
       // successes alone cannot show someone repeatedly reaching for something
       // they are not entitled to, which is the pattern worth seeing.
@@ -182,11 +204,11 @@ export function requireRole(...roles) {
           module: 'AUTH',
           entityType: 'route',
           entityId: `${req.method} ${req.baseUrl || ''}${req.path || ''}`,
-          reason: `Role ${req.user.role} is not authorized`,
+          reason: `Role ${held} is not authorized`,
           details: { required_roles: roles },
         });
       } catch { /* refusing the request matters more than recording it */ }
-      return res.status(403).json({ error: `Role ${req.user.role} is not authorized for this action` });
+      return res.status(403).json({ error: `Role ${held} is not authorized for this action` });
     }
     next();
   };
@@ -279,3 +301,30 @@ export const ROLE_GROUPS = {
   // Cross-vertical executive view — the Consolidated Dashboard and the MIS pack.
   EXECUTIVE: ['SJVN_ADMIN', 'MANAGEMENT', 'FINANCE_USER', 'IT_SUPER_ADMIN'],
 };
+
+/**
+ * Role powers (30-Oct-2026): a power an administrator took from a role is
+ * refused here, ahead of the routers, so it holds for routes whose handler
+ * decides as well as for gated ones. `resolveUser` reads the token, as the
+ * project-scope guard does.
+ */
+export function rolePowerGuard(resolveUser) {
+  return (req, res, next) => {
+    const user = resolveUser(req);
+    if (!user?.role) return next();
+    const held = user.role_held || user.role;
+    const power = revokedPower(req, held);
+    if (!power) return next();
+    try {
+      secureLogAudit({ user, traceId: req.traceId, ip: req.ip }, {
+        action: 'ACCESS_DENIED',
+        module: 'AUTH',
+        entityType: 'route',
+        entityId: `${req.method} ${(req.originalUrl || '').split('?')[0]}`,
+        reason: `The power "${power.label}" was taken away from ${held}`,
+        details: { power: power.key },
+      });
+    } catch { /* refusing the request matters more than recording it */ }
+    return res.status(403).json({ error: `Your role no longer has the power "${power.label}". Ask the SJVN Administrator if you need it.`, code: 'POWER_WITHDRAWN', power: power.key });
+  };
+}

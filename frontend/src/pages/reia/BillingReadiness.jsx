@@ -4,6 +4,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, StatCard, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { actsAs } from '../../lib/rolePages.js';
 
 // B5: one row per live REIA contract for a month — energy locked? PPA bill in?
 // already billed? — and every ready one raised in one go.
@@ -14,7 +15,7 @@ const yes = (v) => <span style={{ fontWeight: 600, color: v ? 'var(--on-green-2)
 export default function BillingReadiness() {
   const { user } = useAuth();
   // Generating ready bills, running statements and raising LPS bills are the maker's (Phase B.2).
-  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+  const canWrite = actsAs(user, ROLE_GROUPS.REIA_MAKE);
   const [period, setPeriod] = useState('');
   const [board, setBoard] = useState(null);
   const [close, setClose] = useState(null);

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { DefaultDashboard, DiversionPnl } from '../../components/DiversionPanels.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { actsAs } from '../../lib/rolePages.js';
 
 const EMPTY = {
   contract_id: '', period_month: '', reason: 'PAYMENT_DEFAULT', quantum_mwh: '',
@@ -19,7 +20,7 @@ function Signed({ v }) {
 export default function PowerDiversion() {
   const { user } = useAuth();
   // Phase B.2: recording a diversion, its recovery and the deficit bill is the maker's.
-  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+  const canWrite = actsAs(user, ROLE_GROUPS.REIA_MAKE);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [summary, setSummary] = useState({});

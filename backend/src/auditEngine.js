@@ -80,7 +80,9 @@ export function secureLogAudit(req, { action, module, entityType, entityId, befo
   const user = req?.user;
   const userId = user?.id || null;
   const userName = user?.name || 'SYSTEM';
-  const userRole = user?.role || 'SYSTEM';
+  // The role the person holds, not the one a request runs as (role powers: a
+  // made role works as its base, a given power as its owner).
+  const userRole = user?.role_held || user?.role || 'SYSTEM';
   
   const traceId = req?.traceId || newId('TRC');
   const sessionId = req?.sessionID || null;

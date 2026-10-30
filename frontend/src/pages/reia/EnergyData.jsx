@@ -10,6 +10,7 @@ import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
 import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 import DeskTasksPanel from '../../components/DeskTasksPanel.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
@@ -200,14 +201,14 @@ export default function EnergyData() {
     // What the seller or buyer has said to the figure: accepted, objected, or not yet answered.
     { key: 'response', header: 'Counterparty', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
     { key: 'deviation_notes', header: 'Notes', render: (r) => r.deviation_notes || '-' },
-    ...(CAN_WRITE.includes(user?.role) ? [{
+    ...(actsAs(user, CAN_WRITE) ? [{
       key: 'actions', header: 'Actions', render: (r) => (
         <div className="cell-actions">
-          {CAN_CHECK.includes(user?.role) && ['DRAFT', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>{r.status === 'DISPUTED' ? 'Re-validate' : 'Validate'}</button>}
-          {CAN_CHECK.includes(user?.role) && ['VALIDATED', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-success btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
+          {actsAs(user, CAN_CHECK) && ['DRAFT', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>{r.status === 'DISPUTED' ? 'Re-validate' : 'Validate'}</button>}
+          {actsAs(user, CAN_CHECK) && ['VALIDATED', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-success btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
           <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
           <button className="btn btn-outline btn-sm" title="Source document, 15-minute blocks and the counterparty's answer" onClick={(e) => { e.stopPropagation(); setRecordId(r.id); }}>Record</button>
-          {CAN_MAKE.includes(user?.role) && !r.is_superseded && <button className="btn btn-outline btn-sm" title="SLDC/RLDC-certified curtailment hours, taken out of CUF's possible generation"
+          {actsAs(user, CAN_MAKE) && !r.is_superseded && <button className="btn btn-outline btn-sm" title="SLDC/RLDC-certified curtailment hours, taken out of CUF's possible generation"
             onClick={(e) => { e.stopPropagation(); setCurtail({ row: r, hours: r.curtailment_hours ?? '', reference: r.curtailment_ref || '' }); }}>Curtailment</button>}
         </div>
       ),
@@ -236,7 +237,7 @@ export default function EnergyData() {
             >
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_MAKE.includes(user?.role) && (
+            {actsAs(user, CAN_MAKE) && (
               <>
                 <button className="btn btn-secondary" onClick={() => { setAccountResult(null); setShowAccountUpload(true); }}>Upload JMR / SEA</button>
                 <button className="btn btn-secondary" onClick={openCreate}>+ Record Energy Data</button>
@@ -255,7 +256,7 @@ export default function EnergyData() {
 
       {view === 'main' && (
       <>
-      <DeskTasksPanel desk="ENERGY_DATA" canWrite={CAN_WRITE.includes(user?.role)} />
+      <DeskTasksPanel desk="ENERGY_DATA" canWrite={actsAs(user, CAN_WRITE)} />
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
       {accountResult && (
         <div className="alert alert-success" role="status">

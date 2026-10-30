@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Badge, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
 import { fmtDate } from '../../datetime.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // D3: Finance's queue of draft debit / credit notes. A note a dispute asked
 // for shows the dispute, its evidence and the resolver's reasoning beside the
@@ -19,7 +20,7 @@ function saveBlob(blob, name) {
 export default function NoteApprovals() {
   const { user } = useAuth();
   // Phase B.2: approving or rejecting a note is the checker's or Finance's (routes/notes.js).
-  const canAct = ['FINANCE_USER', 'REIA_CHECKER'].includes(user?.role);
+  const canAct = actsAs(user, ['FINANCE_USER', 'REIA_CHECKER']);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rejecting, setRejecting] = useState(null);

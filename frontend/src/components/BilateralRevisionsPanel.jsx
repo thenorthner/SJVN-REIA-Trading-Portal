@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 import { Field } from './ui.jsx';
+import { actsAs } from '../lib/rolePages.js';
 
 // What a bilateral deal became partway through its term: a rate revised from a
 // date, and its power split between buyers. The settlement beside this panel
@@ -19,7 +20,7 @@ const small = { fontSize: 15, color: 'var(--slate-600, #475569)' };
 
 export default function BilateralRevisionsPanel({ transaction, onChanged }) {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.TRADING_WRITE.includes(user?.role);
+  const canWrite = actsAs(user, ROLE_GROUPS.TRADING_WRITE);
   const [revisions, setRevisions] = useState([]);
   const [sets, setSets] = useState([]);
   const [revForm, setRevForm] = useState(null);

@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { REIA_BETA } from '../../reiaBeta.js';
 import { PageHeader, Card, Badge, StatCard, Field, AlertPopup, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
+import { actsAs } from '../../lib/rolePages.js';
 
 // What each project generated against what its contract expects.
 //
@@ -242,7 +243,7 @@ export default function GenerationPerformance() {
                         )}
                         {y.state === 'DUE' && (
                           y.anchor_invoice
-                            ? (CAN_RAISE.includes(user?.role) && (
+                            ? (actsAs(user, CAN_RAISE) && (
                               <button type="button" className="btn btn-sm btn-outline" style={{ marginTop: 4 }} onClick={() => raiseTrueUp(y)}>
                                 Raise true-up note
                               </button>

@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth, ScreenRole } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
 import { TRADING_MENU, FINANCE_SAP_MENU } from '../config/tradingMenu.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
@@ -21,6 +21,7 @@ import ActingSwitch, { ActingBanner } from './ActingSwitch.jsx';
 import ReadOnlyNotice from './ReadOnlyNotice.jsx';
 import { REIA_BETA } from '../reiaBeta.js';
 import { getNotificationAction, formatTimeAgo } from '../lib/notificationRouting.js';
+import { pageOpen } from '../lib/rolePages.js';
 
 /**
  * Keeps the shell up if a screen's module fails to load or throws while
@@ -254,6 +255,8 @@ const NAV_INTERNAL = [
     links: [
       // SJVN's own officers on the platform; an administrator's page.
       { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'] },
+      // What each SJVN role may do, changed with a reason on the record.
+      { to: '/admin/role-powers', label: 'Role Powers', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR'] },
       { to: '/admin/project-assignments', label: 'Project Assignments', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR'] },
       { to: '/admin/circulars', label: 'Public Circulars', roles: ROLE_GROUPS.CIRCULARS_WRITE },
       { to: '/settings/delegations', label: 'Additional Charge & Break-glass', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR'] },
@@ -333,6 +336,11 @@ const linkIsActive = (l, pathname) => {
     : pathname === l.to || (l.to !== '/' && pathname.startsWith(l.to)));
 };
 
+// A section the role's menu leaves out still shows when a power given to the
+// role opens one of its pages (role powers).
+const sectionGiven = (section, user) => Array.isArray(user?.pages)
+  && [...(section.links || []), ...(section.groups || []).flatMap((g) => g.items)].some((l) => pageOpen(user, l.to, l.roles));
+
 /**
  * A named run of links inside a section — ISET's second level, so "Exchange" can
  * hold its thirteen screens without the section becoming a wall of forty.
@@ -341,7 +349,7 @@ const linkIsActive = (l, pathname) => {
 const NavSubGroup = ({ group, user }) => {
   const { tUI } = useGigw();
   const location = useLocation();
-  const links = group.items.filter((l) => !l.roles || l.roles.includes(user?.role));
+  const links = group.items.filter((l) => pageOpen(user, l.to, l.roles));
   const [isOpen, setIsOpen] = useState(links.some((l) => linkIsActive(l, location.pathname)));
   if (!links.length) return null;
 
@@ -382,7 +390,7 @@ const NavSubGroup = ({ group, user }) => {
 
 const NavGroup = ({ section, user }) => {
   const { tUI } = useGigw();
-  const links = (section.links || []).filter((l) => !l.roles || l.roles.includes(user?.role));
+  const links = (section.links || []).filter((l) => pageOpen(user, l.to, l.roles));
   const subGroups = section.groups || [];
   const location = useLocation();
   const isAnyActive = links.some((l) => linkIsActive(l, location.pathname))
@@ -447,6 +455,7 @@ function getPageContext(pathname, branded, entity, portalKind) {
     '/reia': { desk: 'REIA Commercial Desk', page: 'Billing & Settlement' },
     '/reia/entities': { desk: 'REIA Stakeholders', page: 'Stakeholders & KYC Desk' },
     '/reia/company-users': { desk: 'REIA Stakeholders', page: 'Company Users' },
+    '/admin/role-powers': { desk: 'Platform', page: 'Role Powers' },
     '/reia/document-desk': { desk: 'REIA Stakeholders', page: 'Documents & KYC Desk' },
     '/reia/contracts': { desk: 'REIA Contracts', page: 'PPA & PSA Mapping' },
     '/reia/contract-compliance': { desk: 'REIA Contracts', page: 'Contract Compliance' },
@@ -640,7 +649,7 @@ export default function Layout() {
           </div>
         )}
         <nav className="nav" aria-label="Main navigation">
-          {navSections.filter((s) => !s.roles || s.roles.includes(user?.role)).map((section) => (
+          {navSections.filter((s) => !s.roles || s.roles.includes(user?.role) || sectionGiven(s, user)).map((section) => (
             <NavGroup key={section.section} section={section} user={user} />
           ))}
         </nav>
@@ -912,7 +921,7 @@ export default function Layout() {
                 <div className="user-meta">
                   <strong>{tUI('Welcome')}, {user?.name}</strong>
                   <span style={{ color: 'var(--on-blue)' }}>
-                    {user?.linked_entity_id ? `${tUI('Asset')}: ${user.linked_entity_id}` : tUI(user?.role?.replaceAll('_', ' '))}
+                    {user?.linked_entity_id ? `${tUI('Asset')}: ${user.linked_entity_id}` : (user?.role_label || tUI(user?.role?.replaceAll('_', ' ')))}
                   </span>
                 </div>
               </button>
@@ -968,7 +977,7 @@ export default function Layout() {
                 here keeps the sidebar and top bar mounted while the next
                 screen's chunk loads — only the content column redraws. */}
             <Suspense fallback={<RouteSkeleton />}>
-              <Outlet />
+              <ScreenRole><Outlet /></ScreenRole>
             </Suspense>
           </RouteErrorBoundary>
         </main>

@@ -6,6 +6,7 @@ import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency,
 } from '../../components/ui.jsx';
 import { reiaTerm } from '../../reiaBeta.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // REIA's month-end handover to corporate Finance — the same three steps as the
 // hydro one (gather and check, book against Finance's voucher, reverse when
@@ -49,8 +50,8 @@ const docColumns = [
 export default function ReiaFinance() {
   const { user } = useAuth();
   // Phase B.2: the maker prepares a posting; the checker posts, withdraws or reverses it.
-  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
-  const canPost = ROLE_GROUPS.REIA_CHECK.includes(user?.role);
+  const canWrite = actsAs(user, ROLE_GROUPS.REIA_MAKE);
+  const canPost = actsAs(user, ROLE_GROUPS.REIA_CHECK);
 
   const [month, setMonth] = useState(lastMonth());
   const [category, setCategory] = useState('SALE');

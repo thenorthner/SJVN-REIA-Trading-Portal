@@ -7,13 +7,14 @@ import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Card, Badge, Modal, Field, AlertPopup, fmtCurrency } from './ui.jsx';
 import { fmtDate } from '../datetime.js';
+import { actsAs } from '../lib/rolePages.js';
 
 const STATE = { MATCHED: ['ACTIVE', 'Matches'], AWAITED: ['PENDING', '16A awaited'], OVERDUE: ['OVERDUE', '16A overdue'], SHORT: ['REJECTED', '16A short'], EXCESS: ['DISPUTED', '16A over'] };
 const fyNow = () => { const d = new Date(); const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; return `${y}-${String((y + 1) % 100).padStart(2, '0')}`; };
 
 export default function TdsReconPanel() {
   const { user } = useAuth() || {};
-  const canMark = ['FINANCE_USER'].includes(user?.role);
+  const canMark = actsAs(user, ['FINANCE_USER']);
   const [fy, setFy] = useState(fyNow());
   const [data, setData] = useState(null);
   const [mark, setMark] = useState(null);

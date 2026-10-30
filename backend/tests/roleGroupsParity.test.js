@@ -20,7 +20,8 @@ const SHARED = [
 /** The roles users.role will actually accept, read from its CHECK constraint. */
 function rolesTheDatabaseAccepts() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'users'").get().sql;
-  const check = /role\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*role\s+IN\s*\(([\s\S]*?)\)\s*\)/i.exec(sql);
+  // Roles made on Role Powers are admitted by a GLOB ahead of the list (CUSTOM_*); the list is what code may name.
+  const check = /role\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*(?:role\s+GLOB\s+'[^']*'\s+OR\s+)?role\s+IN\s*\(([\s\S]*?)\)\s*\)/i.exec(sql);
   if (!check) throw new Error('users.role no longer has a CHECK constraint — this test needs updating');
   return new Set([...check[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
 }

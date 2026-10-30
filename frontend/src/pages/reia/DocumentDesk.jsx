@@ -6,6 +6,7 @@ import {
   ReviewModal, PreviewModal, ExpiryTag, canReviewDocuments, downloadAllDocuments,
 } from '../../components/DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The REIA desk's side of Documents & KYC: what is waiting to be reviewed,
 // where every company stands, and what SJVN has asked companies to send.
@@ -215,9 +216,9 @@ const DIRECT_ADMIT_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COM
 export default function DocumentDesk({ vertical = 'REIA', embedded = false }) {
   const { user } = useAuth();
   const canReview = canReviewDocuments(user?.role);
-  const canDirectAdmit = DIRECT_ADMIT_ROLES.includes(user?.role);
+  const canDirectAdmit = actsAs(user, DIRECT_ADMIT_ROLES);
   const [popup, setPopup] = useState(null);
-  const canAdminUpload = ADMIN_ROLES.includes(user?.role);
+  const canAdminUpload = actsAs(user, ADMIN_ROLES);
 
   const [tab, setTab] = useState(canReview ? 'QUEUE' : 'REPORT');
   const [queue, setQueue] = useState([]);

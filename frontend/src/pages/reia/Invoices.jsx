@@ -31,6 +31,7 @@ import {
 } from '../../components/invoiceShared.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The server's own lists (middleware/auth.js). These were shorter copies that
 // left out REIA_CHECKER and IT_SUPER_ADMIN, so those two were allowed by the API
@@ -530,7 +531,7 @@ export default function Invoices() {
       r.invoice_type === 'PROVISIONAL' ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 14.5, padding: '2px 6px', background: 'var(--t-amber-100)', color: 'var(--on-amber)', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
-          {CAN_MAKE.includes(user?.role) && !['CANCELLED'].includes(r.status) && (
+          {actsAs(user, CAN_MAKE) && !['CANCELLED'].includes(r.status) && (
             <button 
               className="btn btn-xs btn-outline" 
               onClick={(e) => {
@@ -593,7 +594,7 @@ export default function Invoices() {
         actions={
           <>
             <button className="btn btn-secondary" onClick={() => navigate('/reia/reports')}>Billing Report</button>
-            {CAN_MAKE.includes(user?.role) && (
+            {actsAs(user, CAN_MAKE) && (
               <>
                 <button className="btn btn-secondary" onClick={openWaterfall}>Receive Buyer Payment</button>
                 <button className="btn btn-secondary" onClick={() => { setArrearForm(ARREAR_FORM); setArrearError(''); setShowArrear(true); }}>+ Arrear Bill</button>
@@ -1089,7 +1090,7 @@ export default function Invoices() {
               // B4: the buyer's advances, beside a bill they could settle.
               <div className="inline-note" style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span>The buyer holds <strong>{fmtCurrency(selected.advances.open_balance)}</strong> as advance ({selected.advances.items.map((x) => x.receipt_no).join(', ')}).</span>
-                {user?.role === 'FINANCE_USER' && (
+                {actsAs(user, ['FINANCE_USER']) && (
                   <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={async () => {
                     setBusy('advance');
                     try {
@@ -1126,7 +1127,7 @@ export default function Invoices() {
                     key={`${selected.id}-${selected.status}`}
                     invoiceId={selected.id}
                     totalAmount={selected.total_amount}
-                    canWrite={CAN_MAKE.includes(user?.role)}
+                    canWrite={actsAs(user, CAN_MAKE)}
                     onSaved={() => refreshSelected(selected.id)}
                   />
                 </div>
@@ -1157,7 +1158,7 @@ export default function Invoices() {
                 {approvalError && (
                   <div className="form-error" role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px' }}>
                     <div>{approvalError}</div>
-                    {approvalError.includes('waive the validation') && CAN_CHECK.includes(user?.role) && (
+                    {approvalError.includes('waive the validation') && actsAs(user, CAN_CHECK) && (
                       <div>
                         <button
                           type="button"
@@ -1174,9 +1175,9 @@ export default function Invoices() {
                 <div className="timeline">
                   {selected.approvals.map((a) => {
                     const isNext = a.status === 'PENDING' && a.level === nextLevel;
-                    const canDecide = CAN_APPROVE.includes(user?.role) && !isCancelled && isNext;
+                    const canDecide = actsAs(user, CAN_APPROVE) && !isCancelled && isNext;
                     // Each level is signed by its own role (L2 Finance, L3 Management / SJVN Admin).
-                    const myLevel = !a.approver_roles || a.approver_roles.includes(user?.role);
+                    const myLevel = !a.approver_roles || actsAs(user, a.approver_roles);
                     const canApprove = canDecide && approvalsOpen && mySignedLevel == null && myLevel;
                     // A seller's bill can be returned as soon as it arrives.
                     const canReject = canDecide && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'));
@@ -1304,17 +1305,17 @@ export default function Invoices() {
             </div>
 
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
-              {!isCancelled && CAN_MAKE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
+              {!isCancelled && actsAs(user, CAN_MAKE) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
                 <button className="btn btn-secondary" disabled={!!busy} onClick={handleSubmitForApproval}>{busy === 'submit' ? 'Submitting…' : 'Submit for SJVN Approval'}</button>
               )}
-              {!isCancelled && CAN_MAKE.includes(user?.role) && ['APPROVED', 'SENT'].includes(selected.status) && (
+              {!isCancelled && actsAs(user, CAN_MAKE) && ['APPROVED', 'SENT'].includes(selected.status) && (
                 <button className="btn btn-primary" disabled={!!busy} onClick={handleSend}>
                   {selected.status === 'SENT'
                     ? (selected.direction === 'SJVN_TO_BUYER' ? 'Resend Email to Buyer' : 'Resend Email to Seller')
                     : (selected.direction === 'SJVN_TO_BUYER' ? 'Send Email to Buyer' : 'Send Email to Seller')}
                 </button>
               )}
-              {!isCancelled && CAN_MAKE.includes(user?.role) && selected.invoice_type === 'PROVISIONAL' && (
+              {!isCancelled && actsAs(user, CAN_MAKE) && selected.invoice_type === 'PROVISIONAL' && (
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1338,16 +1339,16 @@ export default function Invoices() {
                   + True-Up (Final Adjustment)
                 </button>
               )}
-              {!isCancelled && CAN_WRITE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN' && (
+              {!isCancelled && actsAs(user, CAN_WRITE) && selected.direction === 'SELLER_TO_SJVN' && (
                 <button className="btn btn-secondary" onClick={handleValidate}>Validate vs System</button>
               )}
-              {!isCancelled && CAN_CHECK.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN'
+              {!isCancelled && actsAs(user, CAN_CHECK) && selected.direction === 'SELLER_TO_SJVN'
                 && ['MISMATCH', 'PARTIAL', 'NO_COUNTERPART'].includes(selected.validation_status) && (
                 <button className="btn btn-secondary" onClick={() => { setWaiveReason(''); setWaiveError(''); setShowWaive(true); }}>
                   Waive Validation
                 </button>
               )}
-              {!isCancelled && CANCELABLE.includes(selected.status) && (MAKERS_DESK.includes(selected.status) ? CAN_MAKE : CAN_CHECK).includes(user?.role) && (
+              {!isCancelled && CANCELABLE.includes(selected.status) && actsAs(user, MAKERS_DESK.includes(selected.status) ? CAN_MAKE : CAN_CHECK) && (
                 <button className="btn btn-danger" onClick={() => { setCancelReason(''); setCancelError(''); setShowCancel(true); }}>
                   Cancel Invoice
                 </button>
@@ -1355,7 +1356,7 @@ export default function Invoices() {
             </div>
 
             {/* Pay-when-paid: structured release to the generator (developer) */}
-            {CAN_RELEASE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN'
+            {actsAs(user, CAN_RELEASE) && selected.direction === 'SELLER_TO_SJVN'
               && ['APPROVED', 'SENT', 'PARTIALLY_PAID'].includes(selected.status) && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Release Payment to Generator (Pay-when-paid)</div>
@@ -1413,7 +1414,7 @@ export default function Invoices() {
               </>
             )}
 
-            {CAN_RECORD_PAYMENT.includes(user?.role) && selected.direction !== 'SELLER_TO_SJVN' && PAYABLE_STATUSES.includes(selected.status) && (
+            {actsAs(user, CAN_RECORD_PAYMENT) && selected.direction !== 'SELLER_TO_SJVN' && PAYABLE_STATUSES.includes(selected.status) && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>
                   Record Payment (Incoming from Buyer)
@@ -1461,7 +1462,7 @@ export default function Invoices() {
               <>
                 <div className="section-title" style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Other / Pass-through Charges</span>
-                  {CAN_MAKE.includes(user?.role) && CHARGES_EDITABLE.includes(selected.status) && (
+                  {actsAs(user, CAN_MAKE) && CHARGES_EDITABLE.includes(selected.status) && (
                     <button type="button" className="btn btn-xs btn-outline" onClick={() => (showOC ? setShowOC(false) : openOtherCharges())}>
                       {showOC ? 'Close' : 'Edit Charges'}
                     </button>
@@ -1476,7 +1477,7 @@ export default function Invoices() {
                     </tbody>
                   </table>
                 ) : <p className="inline-note" style={{ marginTop: 4 }}>No pass-through charges. (Rebate is never allowed on these.)</p>}
-                {CAN_MAKE.includes(user?.role) && !CHARGES_EDITABLE.includes(selected.status) && (
+                {actsAs(user, CAN_MAKE) && !CHARGES_EDITABLE.includes(selected.status) && (
                   <p className="inline-note" style={{ marginTop: 4 }}>These change the bill&apos;s total, so they are fixed once it goes for approval. Raise a debit or credit note for a later change.</p>
                 )}
 
@@ -1512,8 +1513,8 @@ export default function Invoices() {
               <NotesPanel
                 invoice={selected}
                 user={user}
-                canMake={CAN_MAKE_NOTES.includes(user?.role)}
-                canCheck={CAN_CHECK_NOTES.includes(user?.role)}
+                canMake={actsAs(user, CAN_MAKE_NOTES)}
+                canCheck={actsAs(user, CAN_CHECK_NOTES)}
                 onChanged={() => refreshSelected(selected.id)}
               />
             )}
@@ -1646,7 +1647,7 @@ export default function Invoices() {
         validationResult={validationResult}
         selectedInvoiceNo={selected?.invoice_no}
         perspective="reia"
-        canWaive={CAN_CHECK.includes(user?.role)}
+        canWaive={actsAs(user, CAN_CHECK)}
         onWaive={() => { setShowValidation(false); setShowWaive(true); }}
       />
 
@@ -1656,7 +1657,7 @@ export default function Invoices() {
         message={genPopup?.message}
         items={genPopup?.suggested ? [`Suggested: a ${genPopup.suggested.note_type.toLowerCase()} note of ${fmtCurrency(genPopup.suggested.amount)} on ${genPopup.suggested.invoice_no} — raised as a draft for Finance to approve.`] : undefined}
         okLabel={genPopup?.suggested ? 'Not now' : 'OK'}
-        actions={genPopup?.suggested && CAN_MAKE.includes(user?.role) ? (
+        actions={genPopup?.suggested && actsAs(user, CAN_MAKE) ? (
           <button type="button" className="btn btn-primary" disabled={!!busy} onClick={async () => {
             setBusy('note');
             try {

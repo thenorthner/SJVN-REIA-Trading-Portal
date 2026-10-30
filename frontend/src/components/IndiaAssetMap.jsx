@@ -9,6 +9,7 @@ import { useGigw } from '../gigw/GigwContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 import { INDIA_OUTLINE_PATH, INDIA_STATES } from './indiaMapData.js';
+import { actsAs } from '../lib/rolePages.js';
 
 /**
  * SJVN National Generation GIS Asset Map
@@ -739,7 +740,7 @@ export const SJVN_ASSETS = [
 export default function IndiaAssetMap() {
   const { lang } = useGigw();
   const { user } = useAuth();
-  const canManageMasters = ROLE_GROUPS.MASTERS_WRITE.includes(user?.role);
+  const canManageMasters = actsAs(user, ROLE_GROUPS.MASTERS_WRITE);
   const [assets, setAssets] = useState(SJVN_ASSETS);
   const [selectedAsset, setSelectedAsset] = useState(SJVN_ASSETS[0]);
   const [activeFilter, setActiveFilter] = useState('ALL');

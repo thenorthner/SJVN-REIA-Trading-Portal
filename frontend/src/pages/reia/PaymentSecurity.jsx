@@ -10,6 +10,7 @@ import { DocumentManager } from '../../components/DocumentManager.jsx';
 import SecurityInstrumentPanel, { ExpiryTag, changeText, errText, eventLabel } from '../../components/SecurityInstrumentPanel.jsx';
 import SjvnLcDesk from '../../components/SjvnLcDesk.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // Who the API lets do what. One list used to stand for all of it, so Finance
 // was offered every button and refused on each, and REIA Admin — who may do
@@ -71,11 +72,11 @@ function StatPill({ label, value, sub }) {
 export default function PaymentSecurity() {
   const [view, setView] = useState('instruments');
   const { user } = useAuth();
-  const canManage = CAN_MAKE.includes(user?.role);
-  const canCheck = CAN_CHECK.includes(user?.role);
-  const canRelease = CAN_RELEASE.includes(user?.role);
-  const canAsk = CAN_ASK_RELEASE.includes(user?.role);
-  const canOverride = CAN_OVERRIDE.includes(user?.role);
+  const canManage = actsAs(user, CAN_MAKE);
+  const canCheck = actsAs(user, CAN_CHECK);
+  const canRelease = actsAs(user, CAN_RELEASE);
+  const canAsk = actsAs(user, CAN_ASK_RELEASE);
+  const canOverride = actsAs(user, CAN_OVERRIDE);
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState(null);
   const [contracts, setContracts] = useState([]);
@@ -415,7 +416,7 @@ export default function PaymentSecurity() {
         actions={view === 'instruments' && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary" onClick={downloadRegister}>Download register (Excel)</button>
-            {CAN_RUN_ALERTS.includes(user?.role) && <button type="button" className="btn btn-secondary" disabled={busy} onClick={runAlerts}>Run Alerts</button>}
+            {actsAs(user, CAN_RUN_ALERTS) && <button type="button" className="btn btn-secondary" disabled={busy} onClick={runAlerts}>Run Alerts</button>}
             {canManage && <button type="button" className="btn btn-primary" onClick={openCreate}>+ Instrument</button>}
           </div>
         )}
@@ -697,7 +698,7 @@ export default function PaymentSecurity() {
                           {i.ok === false ? '✗' : i.ok ? '✓' : '·'} {i.label}{i.detail ? ` — ${i.detail}` : ''}
                         </div>
                       ))}
-                      {!r.finance_signoff_at && user?.role === 'FINANCE_USER' && (
+                      {!r.finance_signoff_at && actsAs(user, ['FINANCE_USER']) && (
                         <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 4 }} disabled={busy} onClick={async () => {
                           try { await api.paymentSecurity.financeSignoff(r.id); await load(); } catch (err) { setReleaseError(err.response?.data?.error || err.message); }
                         }}>Sign off for Finance</button>

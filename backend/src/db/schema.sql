@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN (
+  -- A role an administrator made on the Role Powers screen is CUSTOM_<NAME>
+  -- (custom_roles); every other role is one the code names.
+  role TEXT NOT NULL CHECK (role GLOB 'CUSTOM_*' OR role IN (
     'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
     'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','COMPLIANCE_AUDITOR',
     -- A trading client's own logins. TRADING_CLIENT reads its account; the maker
@@ -4733,3 +4735,42 @@ CREATE TABLE IF NOT EXISTS generation_assets (
 );
 CREATE INDEX IF NOT EXISTS idx_gen_assets_active ON generation_assets (is_active, type, state_code);
 
+
+-- Role powers (30-Oct-2026). Who holds a power by default is read from the
+-- routes' own requireRole gates; a row here is an administrator's change to
+-- that for one role — GRANT lets the role through the power's gates, REVOKE
+-- refuses it every action of the power. A row exists only while the role
+-- differs from the default, and every change is in audit_logs (module
+-- ROLE_POWERS) with its reason. See src/services/rolePowers.js.
+CREATE TABLE IF NOT EXISTS role_power_overrides (
+  power_key TEXT NOT NULL,
+  role TEXT NOT NULL,
+  effect TEXT NOT NULL CHECK (effect IN ('GRANT', 'REVOKE')),
+  reason TEXT NOT NULL,
+  reference TEXT,
+  changed_by TEXT,
+  changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (power_key, role)
+);
+
+-- Roles an administrator made (30-Oct-2026): a name, what it is for, and the
+-- role it works like (base_role) for whatever the matrix does not list. Its
+-- powers start as the base role's and its differences are rows in
+-- role_power_overrides under its code, like any other role's. A role is
+-- retired rather than deleted, so the audit trail's references stay readable.
+CREATE TABLE IF NOT EXISTS custom_roles (
+  code TEXT PRIMARY KEY CHECK (code GLOB 'CUSTOM_*'),
+  label TEXT NOT NULL,
+  description TEXT NOT NULL,
+  base_role TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'RETIRED')),
+  reason TEXT NOT NULL,
+  reference TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by TEXT,
+  updated_at TEXT,
+  retired_by TEXT,
+  retired_at TEXT,
+  retired_reason TEXT
+);

@@ -33,6 +33,15 @@
       "port": 4001
     },
     {
+      "name": "backend-main-4001",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4001 node src/server.js"
+      ],
+      "port": 4001
+    },
+    {
       "name": "frontend-test",
       "runtimeExecutable": "sh",
       "runtimeArgs": [

@@ -13,6 +13,7 @@ import {
   CATEGORY_OPTIONS, CREDIT_RATING_OPTIONS, TECHNOLOGY_OPTIONS, SUPPLY_CRITERIA_OPTIONS, VERTICAL_LABELS,
 } from '../../lib/kycValidation.js';
 import { showAlert } from '../../lib/dialogs.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The desks that onboard: REIA for its sellers and buyers, Commercial for a
 // hydro or thermal station's beneficiaries. Mirrors ENTITY_WRITE on the server,
@@ -101,7 +102,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
   // K2: clearances lapsing within 60 days, or lapsed.
   const [expiring, setExpiring] = useState([]);
   useEffect(() => {
-    if (!CAN_WRITE.includes(user?.role)) return;
+    if (!actsAs(user, CAN_WRITE)) return;
     api.client.get('/entities/clearances/expiring', { params: { days: 60 } }).then((r) => setExpiring(r.data || [])).catch(() => setExpiring([]));
   }, [user?.role]);
   // The last value each field was flagged for, so leaving a field that is still
@@ -601,7 +602,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
   }
 
   useEffect(() => {
-    if (!selected?.id || !selected.pending_bank_json || !CAN_WRITE.includes(user?.role)) { setCallbacks([]); return; }
+    if (!selected?.id || !selected.pending_bank_json || !actsAs(user, CAN_WRITE)) { setCallbacks([]); return; }
     api.client.get(`/entities/${selected.id}/bank-callbacks`).then((r) => setCallbacks(r.data || [])).catch(() => setCallbacks([]));
   }, [selected?.id, selected?.pending_bank_json]);
 
@@ -701,7 +702,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
     { key: 'actions', header: 'Actions', render: (r) => (
       <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
         <button type="button" className="btn btn-xs btn-outline" onClick={() => openDetail(r)}>View</button>
-        {CAN_MAKE.includes(user?.role) && (
+        {actsAs(user, CAN_MAKE) && (
           <button type="button" className="btn btn-xs btn-outline" onClick={() => startEdit(r)}>Edit</button>
         )}
       </div>
@@ -715,14 +716,14 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
         subtitle={vertical === 'REIA'
           ? 'Manage RE Generators, DISCOMs, SPVs, Verification Queue, KYC & Compliance Status'
           : `Beneficiaries and generating companies billed under ${VERTICAL_LABELS[vertical]} — KYC, bank and regulatory approvals`}
-        actions={activeTab === 'DIRECTORY' && CAN_WRITE.includes(user?.role) && (
+        actions={activeTab === 'DIRECTORY' && actsAs(user, CAN_WRITE) && (
           <>
-            {CAN_BLACKLIST.includes(user?.role) && (
+            {actsAs(user, CAN_BLACKLIST) && (
               <button className="btn btn-outline" style={{ marginRight: 8 }} onClick={() => setTypesModal({ label: '', applies_to: 'BOTH', is_mandatory: '0', help: '' })}>
                 Compliance documents
               </button>
             )}
-            {CAN_MAKE.includes(user?.role) && <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>}
+            {actsAs(user, CAN_MAKE) && <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>}
           </>
         )}
       />
@@ -874,7 +875,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
           <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <h4 style={{ margin: '0 0 8px 0' }}>4. Regulatory Approvals Checklist</h4>
-              {CAN_BLACKLIST.includes(user?.role) && (
+              {actsAs(user, CAN_BLACKLIST) && (
                 <button type="button" className="btn btn-xs btn-outline" onClick={() => setTypesModal({ label: '', applies_to: form.entity_type, is_mandatory: '0', help: '' })}>
                   + Add a compliance document
                 </button>
@@ -955,7 +956,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
             <span style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>
               {selected.parent_name ? `SPV of ${selected.parent_name}` : 'Parent Entity'} · {selected.category || 'General'}
             </span>
-            {CAN_MAKE.includes(user?.role) && (
+            {actsAs(user, CAN_MAKE) && (
               <button
                 type="button"
                 className="btn btn-sm btn-outline"
@@ -995,7 +996,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                           {selected.blacklist_reason ? ` — ${selected.blacklist_reason}` : ''}
                         </div>
                       )}
-                      {CAN_BLACKLIST.includes(user?.role) && (
+                      {actsAs(user, CAN_BLACKLIST) && (
                         <div style={{ marginTop: 6 }}>
                           <button
                             type="button"
@@ -1026,7 +1027,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                           : <Badge status="PENDING" label={selected.status === 'APPROVED' ? 'Bank not verified' : 'Verified on approval'} />}
                         {/* A record approved before approval started confirming the account
                             has no other way to be cleared for payment. */}
-                        {!selected.is_penny_drop_verified && selected.status === 'APPROVED' && CAN_VERIFY.includes(user?.role) && (
+                        {!selected.is_penny_drop_verified && selected.status === 'APPROVED' && actsAs(user, CAN_VERIFY) && (
                           <button type="button" className="btn btn-sm btn-outline" style={{ marginLeft: 8 }} onClick={confirmBank}>
                             Confirm against bank proof
                           </button>
@@ -1035,7 +1036,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                       {selected.pending_bank_json && (
                         <div style={{ fontSize: 14.5, color: 'var(--amber-strong)', marginTop: 4 }}>
                           A change of bank account is waiting. It becomes the live account when this record is re-approved.
-                          {CAN_VERIFY.includes(user?.role) && (
+                          {actsAs(user, CAN_VERIFY) && (
                             <div style={{ marginTop: 6, color: 'var(--slate-600)' }}>
                               {callbacks[0]
                                 ? <span>Call-back: {callbacks[0].contact_name} on …{String(callbacks[0].phone).slice(-4)}, {callbacks[0].called_at} — <strong>{callbacks[0].confirmed ? 'confirmed' : 'NOT confirmed'}</strong></span>
@@ -1123,7 +1124,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                     const vs = proof?.verification_status;
                     // On SJVN's side the desks' officers and the administrators take documents in
                     // (INTAKE_ROLES in routes/documents.js); stakeholders upload from their portal.
-                    const canUpload = DOC_INTAKE_ROLES.includes(user?.role) || isCounterpartyRole(user?.role);
+                    const canUpload = actsAs(user, DOC_INTAKE_ROLES) || isCounterpartyRole(user?.role);
                     return (
                       <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {proof ? (
@@ -1149,7 +1150,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                     );
                   })()}
                 </div>
-                {CAN_WRITE.includes(user?.role) && (
+                {actsAs(user, CAN_WRITE) && (
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => openApprovalEditor(item)}>Update</button>
                 )}
               </div>
@@ -1161,7 +1162,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
             <Table columns={[{key:'type', header:'Role', render: r=>r.contact_type}, {key:'name', header:'Name'}, {key:'email', header:'Email'}, {key:'phone', header:'Phone'}]} rows={selected.contacts} />
           ) : <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No contacts found.</div>}
 
-          {selected.entity_type === 'SELLER' && CAN_MAKE.includes(user?.role) && (
+          {selected.entity_type === 'SELLER' && actsAs(user, CAN_MAKE) && (
             <div style={{ marginTop: 24, padding: 16, background: 'var(--slate-50)', border: '1px dashed var(--slate-300)', borderRadius: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
@@ -1234,7 +1235,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
             />
           </div>
 
-          {selected.status === 'PENDING' && CAN_APPROVE.includes(user?.role) && (
+          {selected.status === 'PENDING' && actsAs(user, CAN_APPROVE) && (
             <div style={{ marginTop: 20, padding: 16, background: 'var(--slate-50)', borderRadius: 8, border: '1px solid var(--slate-200)' }}>
               <h4 style={{ margin: '0 0 8px 0' }}>Approval Action</h4>
               {!selected.regulatory_summary?.ready_for_approval && (
@@ -1302,7 +1303,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required for rejection" />
               </Field>
               <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                {CAN_DIRECT_ADMIT.includes(user?.role) && (
+                {actsAs(user, CAN_DIRECT_ADMIT) && (
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -1445,9 +1446,9 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                 onChange={(e) => setApprovalForm({ ...approvalForm, status: e.target.value })}
               >
                 {Object.entries(APPROVAL_STATUS_LABELS)
-                  .filter(([code]) => code === editApproval.status || (DECIDING.includes(code) ? CAN_VERIFY : CAN_RECORD).includes(user?.role))
+                  .filter(([code]) => code === editApproval.status || actsAs(user, DECIDING.includes(code) ? CAN_VERIFY : CAN_RECORD))
                   .map(([code, label]) => (
-                    <option key={code} value={code} disabled={code !== editApproval.status && !(DECIDING.includes(code) ? CAN_VERIFY : CAN_RECORD).includes(user?.role)}>
+                    <option key={code} value={code} disabled={code !== editApproval.status && !actsAs(user, DECIDING.includes(code) ? CAN_VERIFY : CAN_RECORD)}>
                       {label}
                     </option>
                   ))}

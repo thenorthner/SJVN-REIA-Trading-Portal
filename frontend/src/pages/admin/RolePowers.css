@@ -1,0 +1,119 @@
+/* Role Powers: powers × roles, a tick or a cross in each cell. Tokens only, so
+   the dark theme follows (see the token notes in styles.css). */
+
+.rp-select { width: auto; max-width: 260px; padding: 0.5rem 0.75rem; border-radius: 999px; font-size: 15px; }
+
+.rp-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; margin: -0.5rem 0 1rem; font-size: 14px; color: var(--slate-600); }
+.rp-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+
+.rp-wrap { --table-max-h: 72vh; }
+.rp-table { font-size: 15px; }
+.rp-table th, .rp-table td { vertical-align: middle; }
+.rp-table thead th.rp-role-col { text-align: center; min-width: 108px; max-width: 132px; white-space: normal; line-height: 1.25; }
+.rp-role-name { display: block; font-size: 14px; font-weight: 700; color: var(--slate-800); }
+.rp-role-users { display: block; font-size: 13px; font-weight: 500; color: var(--slate-500); margin-top: 2px; }
+
+/* The power column stays in view while the roles scroll sideways. */
+.rp-table .rp-power-col { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 280px; max-width: 360px; white-space: normal; }
+.table-wrap .rp-table thead th.rp-power-col { z-index: 3; }
+.rp-table tbody th.rp-power-col { font-weight: 400; box-shadow: 1px 0 0 var(--slate-200); }
+.rp-power-label { font-weight: 600; color: var(--slate-900); display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.rp-power-does { font-size: 14px; color: var(--slate-500); margin-top: 2px; line-height: 1.4; }
+/* On a phone the power column gives way to the roles; the cell's panel still
+   says what the power does. */
+@media (max-width: 640px) {
+  .rp-table .rp-power-col { min-width: 140px; max-width: 160px; }
+  .rp-power-does { display: none; }
+}
+.rp-kind { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--slate-100); color: var(--slate-600); }
+.rp-kind.prepare { background: var(--t-blue-50); color: var(--on-blue); }
+.rp-kind.check, .rp-kind.approve { background: var(--t-green-50); color: var(--on-green); }
+.rp-kind.finance { background: var(--t-amber-50); color: var(--on-amber); }
+.rp-kind.governance { background: var(--t-red-50); color: var(--on-red); }
+
+.rp-area th { background: var(--slate-50); color: var(--slate-700); font-size: 14px; font-weight: 700; text-align: left; letter-spacing: 0.02em; }
+/* The heading cell spans every column, so only its label can stick. */
+.rp-table tr.rp-area th > span { position: sticky; left: 1rem; }
+
+.rp-cell-td { text-align: center; padding: 0.35rem !important; }
+.rp-cell {
+  position: relative; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1px solid var(--slate-200); background: var(--surface); color: var(--slate-400); cursor: pointer;
+}
+button.rp-cell:hover { border-color: var(--slate-400); }
+.rp-cell.all { background: var(--t-green-50); border-color: var(--t-green-100); color: var(--on-green); }
+.rp-cell.some { background: var(--t-amber-50); border-color: var(--t-amber-100); color: var(--on-amber); }
+.rp-cell.none { color: var(--slate-400); }
+/* Changed by an administrator: a ring and a dot, so it shows at a glance. */
+.rp-cell.changed { box-shadow: 0 0 0 2px var(--primary); }
+.rp-cell.changed::after { content: ''; position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); border: 2px solid var(--surface); }
+.rp-cell.mini { width: 26px; height: 26px; border-radius: 7px; cursor: default; }
+.rp-cell.mini.changed::after { width: 8px; height: 8px; top: -3px; right: -3px; }
+.rp-lock { position: absolute; bottom: 2px; right: 2px; color: var(--slate-400); }
+.rp-half { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 50%); display: inline-block; }
+.rp-cell.mini .rp-half { width: 11px; height: 11px; }
+
+/* The cell's panel. */
+.rp-panel { font-size: 15px; }
+.rp-now { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.75rem; }
+.rp-now .rp-cell { cursor: default; flex-shrink: 0; }
+.rp-does { margin: 0 0 1rem; color: var(--slate-700); line-height: 1.5; }
+.rp-actions-list { margin-bottom: 1rem; }
+.rp-actions-list ul { margin: 0.5rem 0 0; padding-left: 1.2rem; max-height: 14em; overflow: auto; font-size: 14px; }
+.rp-actions-list code { font-size: 13.5px; color: var(--slate-700); }
+.rp-link { background: none; border: 0; padding: 0; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.rp-choice { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.5rem; }
+.rp-choice legend { font-weight: 700; color: var(--slate-800); margin-bottom: 0.5rem; }
+.rp-option { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.7rem 0.85rem; border: 1px solid var(--slate-200); border-radius: 10px; cursor: pointer; }
+.rp-option input { margin-top: 4px; }
+.rp-option strong { display: inline-flex; align-items: center; gap: 6px; color: var(--slate-900); }
+.rp-option.chosen { border-color: var(--primary); background: var(--t-blue-50); }
+.rp-option.blocked { cursor: not-allowed; background: var(--slate-50); }
+.rp-option.blocked strong { color: var(--slate-500); }
+.rp-why { display: flex; gap: 6px; align-items: flex-start; font-size: 14px; color: var(--slate-600); margin-top: 0.25rem; line-height: 1.4; }
+.rp-why svg { flex-shrink: 0; margin-top: 3px; }
+.rp-panel textarea.elite-input { resize: vertical; min-height: 4.5em; font: inherit; }
+
+/* Roles made here: their column, and the panels that make and change them. */
+.rp-make-btn { display: inline-flex; align-items: center; gap: 0.45rem; }
+.rp-table thead th.rp-role-col.made { background: var(--t-blue-50); }
+.rp-role-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; display: block; width: 100%; }
+.rp-role-btn:hover .rp-role-name, .rp-role-btn:focus-visible .rp-role-name { text-decoration: underline; color: var(--primary); }
+.rp-made-tag { display: inline-block; white-space: nowrap; margin-top: 3px; font-size: 13px; font-weight: 600; padding: 0 7px; border-radius: 999px; background: var(--surface); color: var(--on-blue); border: 1px solid var(--t-blue-100); }
+
+.rp-steps { display: flex; gap: 1.25rem; list-style: none; padding: 0; margin: 0 0 1.25rem; font-size: 15px; color: var(--slate-500); }
+.rp-steps li { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+.rp-steps li span { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--slate-300); font-size: 14px; }
+.rp-steps li.current { color: var(--slate-900); }
+.rp-steps li.current span { border-color: var(--primary); background: var(--primary); color: var(--surface); }
+.rp-steps li.done span { border-color: var(--primary); color: var(--primary); }
+.rp-hint { margin: 0.4rem 0 0; font-size: 14px; color: var(--slate-600); line-height: 1.45; }
+
+.rp-make-tools { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 0.75rem; }
+.rp-make-tools .elite-search { flex: 1 1 220px; }
+/* Sized to the window, so the list scrolls and the buttons under it stay in view. */
+.rp-pick { max-height: max(220px, min(52vh, calc(100vh - 510px))); overflow: auto; border: 1px solid var(--slate-200); border-radius: 12px; padding: 0.25rem 0.75rem 0.75rem; }
+.rp-pick-area { border: 0; padding: 0; margin: 0.75rem 0 0; }
+.rp-pick-area legend { font-weight: 700; color: var(--slate-700); font-size: 14px; letter-spacing: 0.02em; padding: 0.25rem 0; }
+.rp-pick-row { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.6rem 0.7rem; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
+.rp-pick-row:hover { background: var(--slate-50); }
+.rp-pick-row.on { background: var(--t-green-50); border-color: var(--t-green-100); }
+.rp-pick-row.bad { border-color: var(--t-red-100); background: var(--t-red-50); }
+.rp-pick-row.locked { cursor: not-allowed; opacity: 0.8; }
+.rp-pick-row input { margin-top: 5px; width: 17px; height: 17px; flex-shrink: 0; }
+.rp-pick-text { display: grid; gap: 2px; min-width: 0; }
+.rp-tag { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.rp-tag.beyond { background: var(--t-blue-50); color: var(--on-blue); border: 1px solid var(--t-blue-100); }
+.rp-tag.fewer { background: var(--t-amber-50); color: var(--on-amber); }
+.rp-tag.part { background: var(--slate-100); color: var(--slate-600); }
+.rp-problem { display: inline-flex; gap: 6px; align-items: flex-start; font-size: 14px; font-weight: 600; color: var(--on-red); line-height: 1.4; }
+.rp-problem svg { flex-shrink: 0; margin-top: 3px; }
+.rp-ok { font-weight: 700; color: var(--on-green); }
+.rp-summary { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; margin-top: 0.85rem; padding: 0.7rem 0.9rem; border-radius: 10px; background: var(--slate-50); font-size: 15px; color: var(--slate-700); }
+.rp-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; margin: 0 0 0.75rem; font-size: 15px; }
+.rp-facts dt { font-weight: 700; color: var(--slate-700); }
+.rp-facts dd { margin: 0; color: var(--slate-800); }
+@media (max-width: 640px) {
+  .rp-facts { grid-template-columns: 1fr; }
+  .rp-facts dd { margin-bottom: 0.4rem; }
+}

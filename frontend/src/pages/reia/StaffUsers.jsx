@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/client.js';
 import { Modal } from '../../components/ui.jsx';
 import { fmtDateTime } from '../../datetime.js';
-import { UserPlus, Download, Check, Minus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { UserPlus, Download } from 'lucide-react';
 import { PasswordReveal, MemberForm, Activity, UserTable, RoleChange } from '../shared/Team.jsx';
 import '../shared/Team-elite.css';
 
@@ -58,7 +59,6 @@ export default function StaffUsers() {
     try { done(await fn(), message); } catch (err) { setError(errText(err)); }
   };
   const chips = [['ACTIVE', 'Active', t.active], ...t.by_desk.map((x) => [x.desk, x.desk, x.count]), ['INACTIVE', 'Switched off', t.inactive], ['ALL', 'Everyone', d.members.length]];
-  const cols = d.role_order;
 
   return (
     <div className="elite-team-container">
@@ -122,19 +122,10 @@ export default function StaffUsers() {
               <tbody>{d.roles.map((r) => <tr key={r.role}><td><strong>{r.label}</strong></td><td>{r.desk}</td><td>{r.does}</td><td>{r.count}</td></tr>)}</tbody>
             </table>
           </div>
-          <div className="table-wrap" style={{ marginTop: '1.5rem' }}>
-            <table className="data-table elite-matrix">
-              <thead><tr><th scope="col">What</th>{cols.map((r) => <th key={r} scope="col" style={{ fontSize: 14.5 }}>{d.roles.find((x) => x.role === r)?.label}</th>)}</tr></thead>
-              <tbody>
-                {d.access.map((a) => (
-                  <tr key={a.what}><td>{a.what}</td>
-                    {cols.map((r) => <td key={r}>{a.by[r] === 'Full' ? <Check size={16} color="#15803d" aria-label="Full" /> : a.by[r] ? <span style={{ fontSize: 14.5, color: 'var(--slate-600)' }}>{a.by[r]}</span> : <Minus size={16} color="#cbd5e1" aria-label="None" />}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="elite-health blue" style={{ marginTop: '1.5rem' }}>
+            What each role may do — power by power, with a tick or a cross — is on <Link to="/admin/role-powers">Role Powers</Link>, where an administrator can also change it.
           </div>
-          <p className="elite-note" style={{ marginTop: '1rem' }}>A tick is full use of the section; "Read" is seeing without changing. Changing someone's role signs them out, and the new role applies from their next sign-in.</p>
+          <p className="elite-note" style={{ marginTop: '1rem' }}>Changing someone's role signs them out, and the new role applies from their next sign-in.</p>
         </div>
       )}
 

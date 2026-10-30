@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { actsAs } from '../../lib/rolePages.js';
 
 // Energy banking under a PPA: energy the buyer could not take is credited to the
 // seller and drawn back later within the cycle. Whatever is still unused when the
@@ -49,8 +50,8 @@ function CycleWindow({ endsOn, available }) {
 export default function EnergyBanking() {
   const { user } = useAuth();
   // Phase B.2: the maker banks and draws energy; settling closed cycles is the checker's.
-  const canWrite = ROLE_GROUPS.REIA_MAKE.includes(user?.role);
-  const canSettle = ROLE_GROUPS.REIA_CHECK.includes(user?.role);
+  const canWrite = actsAs(user, ROLE_GROUPS.REIA_MAKE);
+  const canSettle = actsAs(user, ROLE_GROUPS.REIA_CHECK);
   const [contracts, setContracts] = useState([]);
   const [contractId, setContractId] = useState('');
   const [rows, setRows] = useState([]);

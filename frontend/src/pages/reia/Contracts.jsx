@@ -10,6 +10,7 @@ import { ROLE_GROUPS } from '../../roles.js';
 import { paymentTermsText, rebateText, lpsText, SECURITY_TYPES, paymentSecurityText } from '../../lib/contractRules.js';
 import { showAlert } from '../../lib/dialogs.js';
 import { reiaTerm, REIA_BETA } from '../../reiaBeta.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 // Phase B.2: the maker creates, maps and amends a contract and carries a draft
@@ -163,9 +164,9 @@ const fmtTariff = (v) => (v == null || v === '' ? '—' : Number(v).toLocaleStri
 export default function Contracts() {
   const { user } = useAuth();
   // The next stages this officer may move a contract to (routes/contracts.js /status).
-  const stagesFor = (current) => allowedNextStatuses(current).filter((next) => (
-    DRAFTING.includes(current) && DRAFTING.includes(next) ? CAN_MAKE : CAN_CHECK
-  ).includes(user?.role));
+  const stagesFor = (current) => allowedNextStatuses(current).filter((next) => actsAs(
+    user, DRAFTING.includes(current) && DRAFTING.includes(next) ? CAN_MAKE : CAN_CHECK,
+  ));
   const [rows, setRows] = useState([]);
   const [allContracts, setAllContracts] = useState([]);
   const [allocSubmitting, setAllocSubmitting] = useState(false);
@@ -765,7 +766,7 @@ export default function Contracts() {
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadContractPdf}>
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_MAKE.includes(user?.role) && (
+            {actsAs(user, CAN_MAKE) && (
               <>
                 <button className="btn btn-secondary" onClick={() => setShowBulk(true)}>Load from Spreadsheet</button>
                 <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ New Contract</button>
@@ -1166,7 +1167,7 @@ export default function Contracts() {
             const sourceList = allContracts.length > 0 ? allContracts : rows;
             const ENDED = ['CLOSED', 'TERMINATED', 'EXPIRED', 'AMENDED'];
             const candidates = sourceList.filter((r) => r && r.contract_type === (isPpa ? 'PSA' : 'PPA') && !linked.has(r.id) && !ENDED.includes(r.status));
-            const canMap = CAN_MAKE.includes(user?.role) && !ENDED.includes(selected.status);
+            const canMap = actsAs(user, CAN_MAKE) && !ENDED.includes(selected.status);
             const otherKey = isPpa ? 'psa_id' : 'ppa_id';
             // What is mapped now (shares not yet ended), and so what is left.
             const position = routingPosition(selected, allocations);
@@ -1388,7 +1389,7 @@ export default function Contracts() {
                     });
                   }}>Update Lifecycle Stage</button>
                 )}
-                {CAN_MAKE.includes(user?.role) && !['CLOSED', 'TERMINATED'].includes(selected.status) && (
+                {actsAs(user, CAN_MAKE) && !['CLOSED', 'TERMINATED'].includes(selected.status) && (
                   <button className="btn btn-outline" onClick={() => setAmendForm({ ...selected, effective_from: '', amendment_reason: '' })}>
                     {['DRAFT', 'UNDER_NEGOTIATION'].includes(selected.status) ? 'Edit Draft' : 'Amend Contract'}
                   </button>

@@ -10,6 +10,7 @@ import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDateTime } from '../../datetime.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // Who the API lets do what. Management was offered Override, Dispute and
 // Sign-off, each of which it is refused; REIA Admin, who may do all of it, was
@@ -362,7 +363,7 @@ export default function Reconciliation() {
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadReconPdf}>
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_MAKE.includes(user?.role) && (
+            {actsAs(user, CAN_MAKE) && (
               <button className="btn btn-secondary" onClick={openRun}>+ Run Reconciliation</button>
             )}
           </div>
@@ -376,7 +377,7 @@ export default function Reconciliation() {
       </Tabs>
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('reconciliation')} />}
-      {view === 'balance' && <BalanceConfirmationsPanel canWrite={[...CAN_MAKE, 'FINANCE_USER'].includes(user?.role)} />}
+      {view === 'balance' && <BalanceConfirmationsPanel canWrite={actsAs(user, [...CAN_MAKE, 'FINANCE_USER'])} />}
 
       {view === 'main' && (
       <>
@@ -411,7 +412,7 @@ export default function Reconciliation() {
               <span>{rq.recon_no} / {rq.period}</span>
               <span style={{ opacity: 0.7 }}>{rq.reason}</span>
               <span style={{ fontSize: 15 }}>by {rq.requested_by_name}</span>
-              {CAN_APPROVE_REOPEN.includes(user?.role) && (
+              {actsAs(user, CAN_APPROVE_REOPEN) && (
                 <>
                   <button className="btn btn-success btn-sm" type="button" onClick={() => actReopen(rq.id, 'APPROVED')}>Approve</button>
                   <button className="btn btn-danger btn-sm" type="button" onClick={() => actReopen(rq.id, 'REJECTED')}>Reject</button>
@@ -629,7 +630,7 @@ export default function Reconciliation() {
                     <td>{figure(it.variance, it.unit)}</td>
                     <td><MatchCell status={it.match_status} /></td>
                     <td>
-                      {CAN_CHECK.includes(user?.role) && ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
+                      {actsAs(user, CAN_CHECK) && ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
                         <div className="cell-actions">
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleOverride(it.id)}>Override</button>
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRaiseDispute(it.id)}>→ Dispute</button>
@@ -642,7 +643,7 @@ export default function Reconciliation() {
               </tbody>
             </table>
             </div>
-            {CAN_CHECK.includes(user?.role) && (detail.items || []).some((it) => ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id) && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
+            {actsAs(user, CAN_CHECK) && (detail.items || []).some((it) => ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id) && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
               <Field label="Override reason (required before Override)">
                 <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Why accepting variance..." />
               </Field>
@@ -662,13 +663,13 @@ export default function Reconciliation() {
 
             {/* Action Bar */}
             <div className="form-actions" style={{ flexWrap: 'wrap', gap: 10, marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-              {CAN_MAKE.includes(user?.role) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
+              {actsAs(user, CAN_MAKE) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
                 <button type="button" className="btn btn-secondary" onClick={handleSignoffRequest}>
                   Request Sign-off
                 </button>
               )}
 
-              {CAN_CHECK.includes(user?.role) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && (
+              {actsAs(user, CAN_CHECK) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && (
                 <>
                   {!detail.sjvn_ack_at && (
                   <button type="button" className="btn btn-success" onClick={() => triggerAckModal('AGREE')}>
@@ -681,7 +682,7 @@ export default function Reconciliation() {
                 </>
               )}
 
-              {CAN_REGENERATE.includes(user?.role) && !['CLOSED', 'AGREED'].includes(detail.status) && !detail.sjvn_ack_at && !detail.counterparty_ack_at && (
+              {actsAs(user, CAN_REGENERATE) && !['CLOSED', 'AGREED'].includes(detail.status) && !detail.sjvn_ack_at && !detail.counterparty_ack_at && (
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -705,7 +706,7 @@ export default function Reconciliation() {
               <DocumentManager 
                 moduleName="RECONCILIATION"
                 contractId={detail.contract_id}
-                canUpload={CAN_MAKE.includes(user?.role)}
+                canUpload={actsAs(user, CAN_MAKE)}
                 title="Reconciliation Evidence & Approvals" 
               />
             </div>

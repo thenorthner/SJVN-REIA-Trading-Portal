@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, StatCard, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
 import { fmtDate } from '../../datetime.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // PM4: what the buyers have paid that is each generator's (its energy share,
 // no trading margin, no credit notes), what has gone out of it already, and
@@ -11,7 +12,7 @@ import { fmtDate } from '../../datetime.js';
 export default function ReleasePlanner() {
   const { user } = useAuth();
   // Paying a generator out is Finance's or the REIA checker's (Phase B.2).
-  const canRelease = ['FINANCE_USER', ...ROLE_GROUPS.REIA_CHECK].includes(user?.role);
+  const canRelease = actsAs(user, ['FINANCE_USER', ...ROLE_GROUPS.REIA_CHECK]);
   const [p, setP] = useState(null);
   const [form, setForm] = useState(null);
   const [popup, setPopup] = useState(null);

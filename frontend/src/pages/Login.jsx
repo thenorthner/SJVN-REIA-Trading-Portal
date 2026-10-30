@@ -6,6 +6,7 @@ import ThemeToggle from '../components/ThemeToggle.jsx';
 import GovStrip from '../gigw/GovStrip.jsx';
 import GigwFooter from '../gigw/GigwFooter.jsx';
 import { isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
+import { pageOpen, firstOpenPage } from '../lib/rolePages.js';
 import { 
   Mail, Lock, ArrowRight, ShieldCheck, ChevronRight, Leaf, BarChart3, Handshake, 
   Globe2, CheckCircle2, Eye, EyeOff, Zap
@@ -16,7 +17,15 @@ import {
   REIA_BETA, REIA_BETA_HOME, REIA_BETA_TITLE, inReiaBeta, betaLanding, BETA_DEMO_ACCOUNTS, BETA_DEMO_PASSWORD,
 } from '../reiaBeta.js';
 
+// Where signing in lands; a page the role's powers no longer reach gives way
+// to the first page the role can still open (lib/rolePages.js).
 export function landingFor(user, from) {
+  const target = deskLanding(user, from);
+  if (pageOpen(user, target.split('?')[0])) return target;
+  return firstOpenPage(user, REIA_BETA ? inReiaBeta : undefined) || target;
+}
+
+function deskLanding(user, from) {
   const path = from?.pathname || '';
   // The beta opens REIA screens only: anywhere else starts on the REIA landing.
   if (REIA_BETA && !inReiaBeta(path || '/')) return betaLanding(user?.role);

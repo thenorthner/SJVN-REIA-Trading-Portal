@@ -10,6 +10,7 @@ import {
   reasonLabel, chargeLabel, invoiceChargeBreakdown,
 } from '../../disputesMeta.js';
 import { ROLE_GROUPS } from '../../roles.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
@@ -101,7 +102,7 @@ export default function Disputes() {
     params.order = filters.order;
     Promise.all([
       api.disputes.list(params),
-      STATS_READERS.includes(user?.role)
+      actsAs(user, STATS_READERS)
         ? api.disputes.stats().catch(() => null)
         : Promise.resolve(null),
     ]).then(([list, s]) => {
@@ -273,7 +274,7 @@ export default function Disputes() {
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadDisputePdf}>
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
-            {CAN_RAISE.includes(user?.role) && (
+            {actsAs(user, CAN_RAISE) && (
               <button className="btn btn-secondary" onClick={openCreate}>+ Raise Dispute</button>
             )}
           </div>
@@ -305,7 +306,7 @@ export default function Disputes() {
         </div>
       )}
 
-      <ForumTrackerPanel canWrite={ROLE_GROUPS.REIA_MAKE.includes(user?.role)} />
+      <ForumTrackerPanel canWrite={actsAs(user, ROLE_GROUPS.REIA_MAKE)} />
 
       {stats?.by_reason?.length > 0 && (
         <Card title="Category patterns (root-cause)">
@@ -459,7 +460,7 @@ export default function Disputes() {
             )}
 
 
-            {CAN_RUN.includes(user?.role) && OPEN_STATUSES.includes(detail.status) && (
+            {actsAs(user, CAN_RUN) && OPEN_STATUSES.includes(detail.status) && (
               <div className="form-actions" style={{ flexWrap: 'wrap' }}>
                 {/* Acknowledging is the desk's act, so the 2-day SLA runs on a person (17-Oct-2026). */}
                 {detail.status === 'RAISED' && (
@@ -481,7 +482,7 @@ export default function Disputes() {
               </div>
             )}
 
-            {CAN_DECIDE.includes(user?.role) && ['RAISED', 'UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'].includes(detail.status) && (
+            {actsAs(user, CAN_DECIDE) && ['RAISED', 'UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'].includes(detail.status) && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Resolve</div>
                 <form onSubmit={handleResolve}>
@@ -521,7 +522,7 @@ export default function Disputes() {
               </>
             )}
 
-            {CAN_RUN.includes(user?.role) && ['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) && detail.resolution_response !== 'CONTESTED' && (() => {
+            {actsAs(user, CAN_RUN) && ['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) && detail.resolution_response !== 'CONTESTED' && (() => {
               // The party answers a resolution first; the desk closes it after
               // that, or once the answer window has run out.
               const windowDays = detail.response_window_days ?? 15;
@@ -600,7 +601,7 @@ export default function Disputes() {
               <Field label="Add comment">
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} />
               </Field>
-              {CAN_WRITE.includes(user?.role) && (
+              {actsAs(user, CAN_WRITE) && (
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14.5, marginBottom: 8 }}>
                   <input type="checkbox" checked={internalComment} onChange={(e) => setInternalComment(e.target.checked)} />
                   Internal only (hidden from buyer/seller)

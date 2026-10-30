@@ -7,6 +7,7 @@ import { DOCUMENT_TAXONOMY } from '../constants/documentTaxonomy.js';
 import { ROLE_GROUPS } from '../roles.js';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 import { showAlert, askConfirm } from '../lib/dialogs.js';
+import { actsAs } from '../lib/rolePages.js';
 
 // Sellers, buyers and trading clients send documents in; everyone else at SJVN
 // reads them, and the REIA desk reviews them. Mirrors routes/documents.js.
@@ -596,7 +597,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
   const isAdmin = canReviewDocuments(user?.role);
   // Outside roles cannot upload/replace VERIFY (KYC) documents as they are physically submitted to SJVN.
   const mayReplace = (doc) => canUpload && (isAdmin || (doc.category !== 'VERIFY' && isOutsideRole(user?.role)));
-  const canSubmitToSjvn = ['SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3'].includes(user?.role);
+  const canSubmitToSjvn = actsAs(user, ['SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3']);
   
   function load() {
     setLoading(true);
@@ -779,7 +780,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   // but SJVN_ADMIN / REIA_MAKER / REIA_CHECKER / IT_SUPER_ADMIN are fully empowered
   // to onboard stakeholders directly and upload their regulatory verification documents.
   const isInternal = !isOutsideRole(user?.role);
-  const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_MAKER', 'IT_SUPER_ADMIN'].includes(user?.role);
+  const canAdminDirectUpload = actsAs(user, ['SJVN_ADMIN', 'REIA_MAKER', 'IT_SUPER_ADMIN']);
   const filterTypes = (list) => (isInternal && !canAdminDirectUpload ? list.filter((t) => t.category !== 'VERIFY') : list);
 
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);

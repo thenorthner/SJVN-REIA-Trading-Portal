@@ -16,6 +16,7 @@ import { OPEN_RECON_STATUSES, summariseItems } from '../reconciliationConstants.
 import { lastCompleteMonth } from '../services/energyRules.js';
 import { clientScope, mayUseClient } from '../services/tradingClientScope.js';
 import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES, REASON_CODES, CHARGE_LINES } from '../disputesConstants.js';
+import { hasGrant } from '../services/rolePowers.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -371,7 +372,7 @@ router.get('/', (req, res) => {
   } else if (side === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
-  } else if (!isReia(req.user) && req.user.role !== 'COMPLIANCE_AUDITOR') {
+  } else if (!isReia(req.user) && req.user.role !== 'COMPLIANCE_AUDITOR' && !hasGrant(req.user.role, 'reia.view')) {
     // Anyone else used to fall through and was handed every statement.
     if (!ROLE_GROUPS.TRADING_ALL.includes(req.user.role) && req.user.role !== 'TRADING_CLIENT') return res.status(403).json({ error: 'Not authorized' });
     sql += ` AND r.scope = 'TRADING_CLIENT'`;

@@ -159,6 +159,20 @@ export const api = {
     history: () => g('/staff/history'),
     exportCsv: () => client.get('/staff/export.csv', { responseType: 'blob' }).then((r) => r.data),
   },
+  // What each SJVN role may do, and the administrators' changes to it.
+  rolePowers: {
+    get: () => g('/role-powers'),
+    change: (body) => p('/role-powers/change', body),
+    reset: (body) => p('/role-powers/reset', body),
+    history: () => g('/role-powers/history'),
+    actions: (key) => g(`/role-powers/${encodeURIComponent(key)}/actions`),
+    exportCsv: () => client.get('/role-powers/export.csv', { responseType: 'blob' }).then((r) => r.data),
+    // Roles an administrator makes: checked against the rules, made, renamed, retired.
+    checkRole: (body) => p('/role-powers/roles/check', body),
+    makeRole: (body) => p('/role-powers/roles', body),
+    updateRole: (code, body) => patch(`/role-powers/roles/${encodeURIComponent(code)}`, body),
+    retireRole: (code, body) => p(`/role-powers/roles/${encodeURIComponent(code)}/retire`, body),
+  },
   // What is waiting on SJVN, across every desk.
   sjvnDesk: () => g('/sjvn-desk'),
   documents: {

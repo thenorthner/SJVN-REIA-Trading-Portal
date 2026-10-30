@@ -11,7 +11,7 @@ export const REIA_BETA_TITLE = 'SJVN Limited | REIA Commercial Portal';
 // a beta tester sees the REIA desk alone whatever their role (SJVN Admin too).
 const BETA_PREFIXES = [
   '/reia', '/seller', '/buyer', '/mail', '/notification-board', '/settings',
-  '/admin/users', '/admin/project-assignments', '/audit-logs', '/masters',
+  '/admin/users', '/admin/role-powers', '/admin/project-assignments', '/audit-logs', '/masters',
 ];
 
 // REIA paths that are still another desk's work: the CERC trading-licence

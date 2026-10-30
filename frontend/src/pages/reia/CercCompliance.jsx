@@ -8,6 +8,7 @@ import { PageHeader, Card, Badge, StatCard, Tabs, Tab, Modal, Field, AlertPopup,
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 // The CERC filing calendar: every period that owes a return, and where it stands.
 //
@@ -439,8 +440,8 @@ export default function CercCompliance({ embedded = false }) {
   const [view, setView] = useState(['licence', 'next90'].includes(searchParams.get('view')) ? searchParams.get('view') : 'calendar');
   // The Form-IV screen belongs to the trading module, so the shortcut into it
   // is only offered to roles that screen will actually let in.
-  const canOpenForm = ROLE_GROUPS.TRADING_ALL.includes(user?.role);
-  const canWriteLicence = [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRADING_WRITE].includes(user?.role);
+  const canOpenForm = actsAs(user, ROLE_GROUPS.TRADING_ALL);
+  const canWriteLicence = actsAs(user, [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRADING_WRITE]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

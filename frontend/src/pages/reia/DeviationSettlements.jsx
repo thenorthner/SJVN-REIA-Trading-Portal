@@ -8,6 +8,7 @@ import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
+import { actsAs } from '../../lib/rolePages.js';
 
 const EMPTY = {
   contract_id: '', plant_code: '', plant_name: '', period_month: '', week_no: '', week_date: '',
@@ -88,7 +89,7 @@ const VERTICAL_WRITE = { REIA: ROLE_GROUPS.REIA_MAKE, HYDRO: ROLE_GROUPS.HYDRO_T
 export default function DeviationSettlements({ vertical = 'REIA' }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const canWrite = (VERTICAL_WRITE[vertical] || ROLE_GROUPS.REIA_MAKE).includes(user?.role);
+  const canWrite = actsAs(user, VERTICAL_WRITE[vertical] || ROLE_GROUPS.REIA_MAKE);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [summary, setSummary] = useState({});

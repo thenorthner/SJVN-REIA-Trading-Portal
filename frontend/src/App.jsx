@@ -212,6 +212,7 @@ const DocumentDesk = lazy(() => import('./pages/reia/DocumentDesk.jsx'));
 const SellerLedgers = lazy(() => import('./pages/reia/SellerLedgers.jsx'));
 const CompanyUsers = lazy(() => import('./pages/reia/CompanyUsers.jsx'));
 const StaffUsers = lazy(() => import('./pages/reia/StaffUsers.jsx'));
+const RolePowers = lazy(() => import('./pages/admin/RolePowers.jsx'));
 const PortfolioRegistry = lazy(() => import('./pages/masters/PortfolioRegistry.jsx'));
 const UserProfile = lazy(() => import('./pages/settings/UserProfile.jsx'));
 
@@ -392,6 +393,7 @@ export default function App() {
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
         <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><Entities initialTab="kyc" /></ProtectedRoute>} />
         <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+        <Route path="admin/role-powers" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR']}><RolePowers /></ProtectedRoute>} />
         <Route path="admin/circulars" element={<ProtectedRoute roles={ROLE_GROUPS.CIRCULARS_WRITE}><CircularsManager /></ProtectedRoute>} />
  {/* Every SJVN officer may ask for break-glass or act on a charge they hold; the screen shows each what applies. */}
         <Route path="settings/delegations" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR', 'REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER', 'THERMAL_ADMIN', 'THERMAL_USER', 'TRADING_USER', 'TRADING_ADMIN', 'FINANCE_USER']}><Delegations /></ProtectedRoute>} />

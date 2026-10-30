@@ -16,6 +16,7 @@ import { exec } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { hasGrant } from '../services/rolePowers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,7 +77,7 @@ router.get('/', (req, res) => {
   } else if (side === 'BUYER') {
     sql += " AND c.buyer_id = ? AND ed.status != 'DRAFT' AND c.status NOT IN ('DRAFT','UNDER_NEGOTIATION')";
     params.push(req.user.linked_entity_id);
-  } else if (![...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'].includes(req.user.role)) {
+  } else if (![...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'].includes(req.user.role) && !hasGrant(req.user.role, 'reia.view')) {
     // Neither SJVN nor a party to any contract: this used to fall through and return every record.
     return res.status(403).json({ error: 'Not authorized' });
   }

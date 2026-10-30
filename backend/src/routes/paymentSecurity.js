@@ -29,6 +29,7 @@ import { ACTIVE_STATUSES, WATERFALL_DEFAULTS } from '../paymentSecurityConstants
 import { takeAmendmentOnRecord, remindExpiringSecurity } from './securityDesk.js';
 import { claimFields, responseDate, claimTracker } from '../services/invocationClaims.js';
 import { deskUpload, letterProblem, deskFilePath, discardUpload } from '../services/deskFiles.js';
+import { hasGrant } from '../services/rolePowers.js';
 
 const letterUpload = deskUpload('bank-letters');
 
@@ -64,14 +65,14 @@ function isReia(user) {
 const INTERNAL_READ = [...new Set([...REIA_ALL, 'COMPLIANCE_AUDITOR'])];
 /** `null` when the caller may read nothing here; otherwise the SQL that narrows a contract alias to what it may. */
 function readScope(user, alias = 'c') {
-  if (INTERNAL_READ.includes(user?.role)) return { where: '', params: [] };
+  if (INTERNAL_READ.includes(user?.role) || hasGrant(user?.role, 'reia.view')) return { where: '', params: [] };
   const side = counterpartySide(user);
   if (side === 'SELLER') return { where: ` AND ${alias}.seller_id = ?`, params: [user.linked_entity_id] };
   if (side === 'BUYER') return { where: ` AND ${alias}.buyer_id = ?`, params: [user.linked_entity_id] };
   return null;
 }
 function canReadContract(user, contract) {
-  if (INTERNAL_READ.includes(user?.role)) return true;
+  if (INTERNAL_READ.includes(user?.role) || hasGrant(user?.role, 'reia.view')) return true;
   const side = counterpartySide(user);
   if (side === 'SELLER') return !!contract.seller_id && contract.seller_id === user.linked_entity_id;
   if (side === 'BUYER') return !!contract.buyer_id && contract.buyer_id === user.linked_entity_id;
@@ -235,7 +236,7 @@ router.get('/invocations/:id/pdf', requireRole(...REIA_ALL), (req, res) => {
 router.get('/adequacy/:contractId', (req, res) => {
   // The trading desk reads this before it bids; a counterparty reads its own.
   const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(req.params.contractId);
-  const internal = INTERNAL_READ.includes(req.user.role) || ROLE_GROUPS.TRADING_ALL.includes(req.user.role);
+  const internal = INTERNAL_READ.includes(req.user.role) || ROLE_GROUPS.TRADING_ALL.includes(req.user.role) || hasGrant(req.user.role, 'reia.view');
   if (!internal && !(c && canReadContract(req.user, c))) return res.status(403).json({ error: 'Not authorized' });
   res.json(checkAdequacy({ contractId: req.params.contractId }));
 });

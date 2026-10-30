@@ -7,6 +7,7 @@ import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
 import DeskTasksPanel from '../../components/DeskTasksPanel.jsx';
+import { actsAs } from '../../lib/rolePages.js';
 
 // Where each contract stands against its own timeline and obligations.
 //
@@ -37,11 +38,11 @@ export default function ContractCompliance({ embedded = false }) {
   const loaded = useRef(90);
   const { user } = useAuth() || {};
   // The REIA desk acts here; the administrators read (Target #2 Phase B).
-  const canDesk = ['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role);
+  const canDesk = actsAs(user, ['REIA_CHECKER', 'REIA_MAKER']);
   // Asking a counterparty for papers is the maker's (Phase B.2); a hold is either's.
-  const canAsk = ['REIA_MAKER'].includes(user?.role);
+  const canAsk = actsAs(user, ['REIA_MAKER']);
   // Lifting a hold is the approver's: the REIA HOD or Management (ROLE_GROUPS.REIA_APPROVE).
-  const canLift = ['MANAGEMENT', 'REIA_APPROVER'].includes(user?.role);
+  const canLift = actsAs(user, ['MANAGEMENT', 'REIA_APPROVER']);
   const [holdForm, setHoldForm] = useState(null); // { contract, mode: HOLD|RELEASE|OVERRIDE, reason, valid_until }
   const [notice2, setNotice2] = useState(null);
   async function act(fn, done) {
@@ -106,7 +107,7 @@ export default function ContractCompliance({ embedded = false }) {
       {view === 'main' && (
       <>
       <AlertPopup open={!!error} title="Could not show the register" message={error} onClose={() => setError('')} />
-      <DeskTasksPanel desk="CONTRACT_COMPLIANCE" canWrite={['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role)} />
+      <DeskTasksPanel desk="CONTRACT_COMPLIANCE" canWrite={actsAs(user, ['REIA_CHECKER', 'REIA_MAKER'])} />
 
       {loading && !data ? (
         <Card><div className="audit-placeholder">Loading…</div></Card>

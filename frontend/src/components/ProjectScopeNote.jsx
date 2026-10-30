@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { actsAs } from '../lib/rolePages.js';
 
 /**
  * Tells a REIA officer on SELECTED projects which ones they are, so a project
@@ -9,7 +10,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 export default function ProjectScopeNote() {
   const { user } = useAuth();
   const [mine, setMine] = useState(null);
-  const tier = ['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER'].includes(user?.role);
+  const tier = actsAs(user, ['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER']);
   useEffect(() => {
     if (!tier) return;
     api.projectScope.me().then(setMine).catch(() => setMine(null));

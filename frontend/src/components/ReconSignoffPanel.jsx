@@ -5,6 +5,7 @@ import { Badge, Field, Modal, AlertPopup, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { triggerUrjaCelebration } from './UrjaCelebration.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
+import { actsAs } from '../lib/rolePages.js';
 
 // What surrounds the signatures of a reconciliation statement: the balance
 // rolled forward, the exceptions the counterparty raised, each side's recorded
@@ -327,7 +328,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
             {fmtCurrency(d.finance_concurrence.billed)} billed — above the {fmtCurrency(d.finance_concurrence.limit)} limit, so Finance concurs before SJVN signs.{' '}
             {d.finance_concurrence.at ? <strong>Concurred by {d.finance_concurrence.by} on {fmtDateTime(d.finance_concurrence.at)}.</strong> : <strong>Awaiting Finance.</strong>}
           </span>
-          {!d.finance_concurrence.at && user?.role === 'FINANCE_USER' && (
+          {!d.finance_concurrence.at && actsAs(user, ['FINANCE_USER']) && (
             <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={async () => {
               setBusy('concur');
               try { await api.reconSignoff.sign(reconId, { decision: 'AGREE' }); await load(); onChanged?.(); } catch (e) { setError(errText(e)); } finally { setBusy(''); }
