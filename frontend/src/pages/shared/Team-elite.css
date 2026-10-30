@@ -447,3 +447,43 @@
 }
 .elite-matrix td, .elite-matrix th { text-align: center; }
 .elite-matrix td:first-child, .elite-matrix th:first-child { text-align: left; }
+
+/* The users as a table: role changed from the row's dropdown, the rest from its buttons. */
+.elite-users-wrap { margin-top: 0.25rem; }
+.elite-users-table th, .elite-users-table td { vertical-align: middle; text-align: left; }
+.elite-users-table td { font-size: 15px; }
+.elite-users-table th, .elite-users-table td { padding-left: 0.75rem; padding-right: 0.75rem; }
+.elite-users-table th:last-child, .elite-users-table td.elite-row-actions { text-align: right; }
+.elite-users-table tr.elite-row-off td { background: var(--slate-50); color: var(--slate-500); }
+.elite-sort { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.elite-sort svg { color: var(--slate-400); }
+.elite-who { display: flex; align-items: center; gap: 0.75rem; min-width: 190px; }
+.elite-who .elite-meta { word-break: break-word; }
+.elite-who-name { font-weight: 600; color: var(--slate-900); display: flex; align-items: center; gap: 0.5rem; }
+.elite-avatar.sm { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; flex-shrink: 0; }
+.elite-users-table .elite-meta { font-size: 14px; }
+.elite-users-table .elite-flags { margin-top: 0.35rem; }
+.elite-users-table .elite-flag { font-size: 13px; }
+.elite-role-pick { position: relative; display: block; min-width: 240px; max-width: 310px; }
+.elite-role-pick svg { position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); color: var(--slate-500); pointer-events: none; }
+.elite-role-select {
+  appearance: none; -webkit-appearance: none; width: 100%; padding: 0.45rem 2rem 0.45rem 0.6rem; border: 1px solid var(--slate-300); border-radius: 8px;
+  background: var(--surface); color: var(--slate-900); font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.elite-role-select:hover { border-color: var(--slate-400); }
+.elite-role-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.7rem; border-radius: 8px;
+  background: var(--slate-100); color: var(--slate-700); font-size: 15px; font-weight: 600;
+}
+.elite-role-chip.new { background: var(--t-blue-50); color: var(--on-blue); border: 1px solid var(--t-blue-100); }
+.elite-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+.elite-row-actions { white-space: nowrap; }
+.elite-icon-btn {
+  width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; margin-left: 3px;
+  border: 1px solid var(--slate-200); border-radius: 8px; background: var(--surface); color: var(--slate-600); cursor: pointer;
+}
+.elite-icon-btn:hover { background: var(--slate-50); border-color: var(--slate-300); color: var(--slate-900); }
+.elite-icon-btn.danger { color: var(--on-red); }
+.elite-icon-btn.go { color: var(--on-green); }
+.elite-role-filter { width: auto; max-width: 280px; padding: 0.5rem 0.75rem; border-radius: 999px; font-size: 15px; }
+.elite-role-change { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem; }

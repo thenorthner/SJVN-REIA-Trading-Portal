@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../api/client';
 import { Modal } from '../../components/ui';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
-import { UserPlus, Shield, Power, PowerOff, ShieldCheck, Pencil, KeyRound, Unlock, History, Download, Check, Minus, Copy } from 'lucide-react';
+import { UserPlus, Shield, Power, PowerOff, ShieldCheck, Pencil, KeyRound, Unlock, History, Download, Check, Minus, Copy, ArrowRight, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import './Team-elite.css';
 
 // The company's own users on the portal: who they are, what level each works
@@ -11,6 +11,8 @@ import './Team-elite.css';
 // account off.
 
 const errText = (e) => e.response?.data?.error || e.message;
+const TIERS = ['ADMIN', 'L3', 'L2', 'L1'];
+const tierRank = (m) => TIERS.indexOf(m.tier);
 const avatarStyle = (m) => (m.tier === 'ADMIN' ? 'admin' : ['L2', 'L3'].includes(m.tier) ? 'checker' : '');
 
 function saveBlob(blob, name) {
@@ -149,6 +151,147 @@ export function Activity({ member, entityId, load = null }) {
   );
 }
 
+const SORTS = {
+  name: (a, b) => a.name.localeCompare(b.name),
+  role: (a, b, rank) => (rank(a) - rank(b)) || a.role_label.localeCompare(b.role_label) || a.name.localeCompare(b.name),
+  status: (a, b) => (b.is_active - a.is_active) || a.name.localeCompare(b.name),
+  last: (a, b) => String(b.last_login_at || '').localeCompare(String(a.last_login_at || '')) || a.name.localeCompare(b.name),
+};
+
+function RoleOptions({ roles }) {
+  // SJVN's roles carry their desk; grouped, the list reads desk by desk.
+  if (!roles.some((r) => r.desk)) return roles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>);
+  const desks = [...new Set(roles.map((r) => r.desk))];
+  return desks.map((d) => (
+    <optgroup key={d} label={d}>
+      {roles.filter((r) => r.desk === d).map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+    </optgroup>
+  ));
+}
+
+/**
+ * The users as one table: who holds which role, and every change to them made
+ * from the row — the role from its dropdown, the rest from the row's buttons.
+ * onRole(member, role) asks before anything changes; onAction(kind, member)
+ * gets 'edit', 'unlock', 'reset', 'activity', 'off' or 'on'.
+ */
+export function UserTable({ members, roles, roleHeading = 'Role', showDesk = false, rank = () => 0, avatar = () => '', canActivity = () => true, onRole, onAction }) {
+  const [sort, setSort] = useState({ key: null, dir: 1 });
+  const rows = useMemo(() => (sort.key ? [...members].sort((a, b) => sort.dir * SORTS[sort.key](a, b, rank)) : members), [members, sort, rank]);
+  const head = (key, label) => (
+    <th scope="col" aria-sort={sort.key === key ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="elite-sort" onClick={() => setSort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }))}>
+        {label}
+        {sort.key !== key ? <ChevronsUpDown size={14} aria-hidden="true" /> : sort.dir === 1 ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+      </button>
+    </th>
+  );
+  const btn = (kind, m, Icon, label, tone = '') => (
+    <button type="button" className={`elite-icon-btn ${tone}`} title={label} aria-label={`${label} — ${m.name}`} onClick={() => onAction(kind, m)}><Icon size={16} /></button>
+  );
+
+  return (
+    <div className="table-wrap elite-users-wrap">
+      <table className="data-table elite-users-table">
+        <thead>
+          <tr>
+            {head('name', 'User')}
+            {head('role', showDesk ? `${roleHeading} · desk` : roleHeading)}
+            {head('status', 'Status')}
+            {head('last', 'Last sign-in')}
+            <th scope="col">Manage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => {
+            const current = roles.find((r) => r.value === m.role);
+            return (
+              <tr key={m.id} className={m.is_active ? '' : 'elite-row-off'}>
+                <td>
+                  <div className="elite-who">
+                    <span className={`elite-avatar sm ${avatar(m)}`} aria-hidden="true">{m.name.charAt(0).toUpperCase()}</span>
+                    <div>
+                      <div className="elite-who-name">{m.name}{m.is_me && <span className="elite-you-badge">You</span>}</div>
+                      <div className="elite-meta">{[m.designation, m.email, m.phone].filter(Boolean).join(' · ')}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  {m.can.role && current ? (
+                    <span className="elite-role-pick">
+                      <select className="elite-role-select" value={m.role} title={current.does || undefined} aria-label={`${roleHeading} of ${m.name}`} onChange={(e) => onRole(m, e.target.value)}>
+                        <RoleOptions roles={roles} />
+                      </select>
+                      <ChevronDown size={16} aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <span className="elite-role-chip" title={m.can.role ? undefined : m.is_me ? 'You cannot change your own role' : 'Only a higher administrator changes this role'}>
+                      <ShieldCheck size={14} aria-hidden="true" />{m.role_label}
+                    </span>
+                  )}
+                  {showDesk && <div className="elite-meta">{m.desk}</div>}
+                </td>
+                <td>
+                  <span className="elite-status"><span className={`elite-status-indicator ${m.is_active ? '' : 'inactive'}`} />{m.is_active ? 'Active' : 'Switched off'}</span>
+                  {(m.locked || (m.is_active && (m.must_change_password || m.never_signed_in))) && (
+                    <div className="elite-flags">
+                      {m.locked && <span className="elite-flag red">Locked · {m.locked_minutes} min</span>}
+                      {m.is_active && m.must_change_password && <span className="elite-flag amber">Temporary password</span>}
+                      {m.is_active && m.never_signed_in && <span className="elite-flag blue">Never signed in</span>}
+                    </div>
+                  )}
+                  {!m.is_active && m.deactivation_reason && <div className="elite-meta">{fmtDate(m.deactivated_at)}{m.deactivated_by_name ? ` by ${m.deactivated_by_name}` : ''} — {m.deactivation_reason}</div>}
+                </td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {m.last_login_at ? fmtDateTime(m.last_login_at) : <span className="elite-meta">Never</span>}
+                  {m.logins_30d > 0 && <div className="elite-meta">{m.logins_30d} in 30 days</div>}
+                </td>
+                <td className="elite-row-actions">
+                  {m.can.edit && btn('edit', m, Pencil, 'Edit details')}
+                  {m.can.unlock && btn('unlock', m, Unlock, 'Unlock', 'go')}
+                  {m.can.reset_password && btn('reset', m, KeyRound, 'Reset password')}
+                  {canActivity(m) && btn('activity', m, History, 'Activity')}
+                  {m.can.deactivate && btn('off', m, PowerOff, 'Switch off', 'danger')}
+                  {m.can.reactivate && btn('on', m, Power, 'Switch on', 'go')}
+                </td>
+              </tr>
+            );
+          })}
+          {rows.length === 0 && <tr><td colSpan={5} className="empty-cell">Nobody matches.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Asks before a role chosen in the table's dropdown takes effect. */
+export function RoleChange({ member, role, roles, noun = 'role', onCancel, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const to = roles.find((r) => r.value === role);
+  async function apply() {
+    setBusy(true);
+    setErr('');
+    try { await onConfirm(); } catch (e) { setErr(errText(e)); setBusy(false); }
+  }
+  return (
+    <div>
+      <div className="elite-role-change">
+        <span className="elite-role-chip">{member.role_label}</span>
+        <ArrowRight size={18} aria-label="to" />
+        <span className="elite-role-chip new">{to?.label || role}</span>
+      </div>
+      {to?.does && <p className="elite-note" style={{ marginTop: 0 }}>{to.does}</p>}
+      <p style={{ margin: '0 0 0.5rem', fontSize: 15.5 }}>{member.name} is signed out at once, and the new {noun} applies from their next sign-in. The change is kept in the change history.</p>
+      {err && <div className="form-error" role="alert">{err}</div>}
+      <div className="elite-modal-actions">
+        <button type="button" className="elite-btn-cancel" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button type="button" className="elite-btn-submit" onClick={apply} disabled={busy}>{busy ? 'Changing…' : `Change ${noun}`}</button>
+      </div>
+    </div>
+  );
+}
+
 /** @param entityId  the company whose team to show — for SJVN's admins; a company's own users see theirs */
 export default function Team({ entityId = null }) {
   const [team, setTeam] = useState(null);
@@ -235,54 +378,15 @@ export default function Team({ entityId = null }) {
             <input className="elite-search" type="search" placeholder="Search by name, email, designation…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search the team" />
             {chips.map(([k, l, n]) => <button key={k} type="button" className={`nb-chip ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>{l}<small>{n}</small></button>)}
           </div>
-          <div className="elite-team-grid">
-            {shown.map((m) => (
-              <div key={m.id} className={`elite-user-card ${!m.is_active ? 'inactive' : ''}`}>
-                <div className="elite-card-top">
-                  <div className={`elite-avatar ${avatarStyle(m)}`}>{m.name.charAt(0).toUpperCase()}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.969rem', color: 'var(--slate-500)', fontWeight: 500 }}>
-                    <div className={`elite-status-indicator ${!m.is_active ? 'inactive' : ''}`} />
-                    {m.is_active ? 'Active' : 'Switched off'}
-                  </div>
-                </div>
-
-                <div className="elite-user-info">
-                  <h3>{m.name}{m.is_me && <span className="elite-you-badge">You</span>}</h3>
-                  {m.designation && <p className="elite-meta"><strong>{m.designation}</strong></p>}
-                  <p className="elite-meta">{m.email}{m.phone ? ` · ${m.phone}` : ''}</p>
-                  <div className="elite-role-badge" style={{ marginTop: '0.6rem' }}>
-                    <ShieldCheck size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }} />
-                    {m.role_label}
-                  </div>
-                  <div className="elite-flags">
-                    {m.locked && <span className="elite-flag red">Locked out · {m.locked_minutes} min</span>}
-                    {m.is_active && m.must_change_password && <span className="elite-flag amber">Temporary password not yet changed</span>}
-                    {m.is_active && m.never_signed_in && <span className="elite-flag blue">Never signed in</span>}
-                  </div>
-                  {!m.is_active && m.deactivation_reason && (
-                    <p className="elite-meta" style={{ marginTop: '0.5rem' }}>Switched off {fmtDate(m.deactivated_at)}{m.deactivated_by_name ? ` by ${m.deactivated_by_name}` : ''} — {m.deactivation_reason}</p>
-                  )}
-                </div>
-
-                <div className="elite-card-footer">
-                  <div className="elite-joined">Added {fmtDate(m.created_at)}{m.created_by_name ? ` by ${m.created_by_name}` : ''}</div>
-                  <div className="elite-joined">{m.last_login_at ? `Last sign-in ${fmtDateTime(m.last_login_at)}` : 'No sign-in yet'}{m.logins_30d ? ` · ${m.logins_30d} in 30 days` : ''}</div>
-                </div>
-
-                {(m.can.edit || m.can.reactivate || team.can_manage) && (
-                  <div className="elite-card-actions">
-                    {m.can.edit && <button type="button" className="elite-action" onClick={() => { setError(''); setModal({ kind: 'edit', member: m }); }}><Pencil size={13} /> {m.can.role ? 'Edit / change level' : 'Edit details'}</button>}
-                    {m.can.unlock && <button type="button" className="elite-action go" onClick={() => act(() => api.team.unlock(m.id, entityId), `${m.name} can sign in again.`)}><Unlock size={13} /> Unlock</button>}
-                    {m.can.reset_password && <button type="button" className="elite-action" onClick={() => { setError(''); setModal({ kind: 'reset', member: m }); }}><KeyRound size={13} /> Reset password</button>}
-                    {(team.can_manage || m.is_me) && <button type="button" className="elite-action" onClick={() => setModal({ kind: 'activity', member: m })}><History size={13} /> Activity</button>}
-                    {m.can.deactivate && <button type="button" className="elite-action danger" onClick={() => { setError(''); setModal({ kind: 'off', member: m, reason: '' }); }}><PowerOff size={13} /> Switch off</button>}
-                    {m.can.reactivate && <button type="button" className="elite-action go" onClick={() => act(() => api.team.reactivate(m.id, entityId), `${m.name}'s account is switched back on.`)}><Power size={13} /> Switch on</button>}
-                  </div>
-                )}
-              </div>
-            ))}
-            {shown.length === 0 && <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--slate-500)' }}>Nobody matches.</div>}
-          </div>
+          <UserTable members={shown} roles={team.assignable_roles} roleHeading="Access level" rank={tierRank} avatar={avatarStyle}
+            canActivity={(m) => team.can_manage || m.is_me}
+            onRole={(m, role) => { setError(''); setModal({ kind: 'role', member: m, role }); }}
+            onAction={(kind, m) => {
+              setError('');
+              if (kind === 'unlock') act(() => api.team.unlock(m.id, entityId), `${m.name} can sign in again.`);
+              else if (kind === 'on') act(() => api.team.reactivate(m.id, entityId), `${m.name}'s account is switched back on.`);
+              else setModal({ kind, member: m, reason: '' });
+            }} />
         </>
       )}
 
@@ -338,6 +442,13 @@ export default function Team({ entityId = null }) {
         {modal?.kind === 'edit' && (
           <MemberForm roles={team.assignable_roles} member={modal.member} canRole={modal.member.can.role} onCancel={() => setModal(null)}
             onSave={async (body) => done(await api.team.update(modal.member.id, body, entityId), `${body.name}'s details were saved.`)} />
+        )}
+      </Modal>
+
+      <Modal open={modal?.kind === 'role'} onClose={() => setModal(null)} title={modal?.member ? `Change ${modal.member.name}'s access level` : ''} width={500}>
+        {modal?.kind === 'role' && (
+          <RoleChange member={modal.member} role={modal.role} roles={team.assignable_roles} noun="access level" onCancel={() => setModal(null)}
+            onConfirm={async () => done(await api.team.update(modal.member.id, { role: modal.role }, entityId), `${modal.member.name} is now ${team.assignable_roles.find((r) => r.value === modal.role)?.label}. It applies from their next sign-in.`)} />
         )}
       </Modal>
 

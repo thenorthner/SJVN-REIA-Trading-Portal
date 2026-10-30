@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/client.js';
 import { Modal } from '../../components/ui.jsx';
-import { fmtDate, fmtDateTime } from '../../datetime.js';
-import { UserPlus, ShieldCheck, Power, PowerOff, Pencil, KeyRound, Unlock, History, Download, Check, Minus } from 'lucide-react';
-import { PasswordReveal, MemberForm, Activity } from '../shared/Team.jsx';
+import { fmtDateTime } from '../../datetime.js';
+import { UserPlus, Download, Check, Minus } from 'lucide-react';
+import { PasswordReveal, MemberForm, Activity, UserTable, RoleChange } from '../shared/Team.jsx';
 import '../shared/Team-elite.css';
 
 // SJVN's own users on the platform: who holds which role, when each last signed
@@ -11,6 +11,7 @@ import '../shared/Team-elite.css';
 // resetting a password and switching an account off.
 
 const errText = (e) => e.response?.data?.error || e.message;
+const avatarOf = (m) => (m.is_admin ? 'admin' : m.desk === 'Finance' || m.desk === 'Management' ? 'checker' : '');
 function saveBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -28,6 +29,7 @@ export default function StaffUsers() {
   const [tab, setTab] = useState('members');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('ACTIVE');
+  const [roleFilter, setRoleFilter] = useState('');
   const [modal, setModal] = useState(null);
 
   const load = useCallback(() => { api.staff.get().then(setD).catch((e) => setError(errText(e))); }, []);
@@ -40,9 +42,11 @@ export default function StaffUsers() {
       if (filter === 'ACTIVE' && !m.is_active) return false;
       if (filter === 'INACTIVE' && m.is_active) return false;
       if (!['ACTIVE', 'INACTIVE', 'ALL'].includes(filter) && (m.desk !== filter || !m.is_active)) return false;
+      if (roleFilter && m.role !== roleFilter) return false;
       return !needle || [m.name, m.email, m.designation, m.phone, m.role_label].some((v) => String(v || '').toLowerCase().includes(needle));
     });
-  }, [d, q, filter]);
+  }, [d, q, filter, roleFilter]);
+  const rank = useCallback((m) => (d?.role_order || []).indexOf(m.role), [d]);
 
   if (error && !d) return <div className="elite-team-container"><div className="form-error">{error}</div></div>;
   if (!d) return <div className="elite-team-container" style={{ textAlign: 'center', padding: '3rem', color: 'var(--slate-400)' }}>Loading users...</div>;
@@ -94,46 +98,19 @@ export default function StaffUsers() {
           <div className="elite-toolbar">
             <input className="elite-search" type="search" placeholder="Search by name, email, role…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search users" />
             {chips.map(([k, l, n]) => <button key={k} type="button" className={`nb-chip ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>{l}<small>{n}</small></button>)}
+            <select className="elite-input elite-role-filter" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} aria-label="Show one role">
+              <option value="">All roles</option>
+              {d.roles.map((r) => <option key={r.role} value={r.role}>{r.label} ({r.count})</option>)}
+            </select>
           </div>
-          <div className="elite-team-grid">
-            {shown.map((m) => (
-              <div key={m.id} className={`elite-user-card ${!m.is_active ? 'inactive' : ''}`}>
-                <div className="elite-card-top">
-                  <div className={`elite-avatar ${m.is_admin ? 'admin' : m.desk === 'Finance' || m.desk === 'Management' ? 'checker' : ''}`}>{m.name.charAt(0).toUpperCase()}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.969rem', color: 'var(--slate-500)', fontWeight: 500 }}>
-                    <div className={`elite-status-indicator ${!m.is_active ? 'inactive' : ''}`} />{m.is_active ? 'Active' : 'Switched off'}
-                  </div>
-                </div>
-                <div className="elite-user-info">
-                  <h3>{m.name}{m.is_me && <span className="elite-you-badge">You</span>}</h3>
-                  {m.designation && <p className="elite-meta"><strong>{m.designation}</strong></p>}
-                  <p className="elite-meta">{m.email}{m.phone ? ` · ${m.phone}` : ''}</p>
-                  <div className="elite-role-badge" style={{ marginTop: '0.6rem' }}>
-                    <ShieldCheck size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }} />{m.role_label}
-                  </div>
-                  <div className="elite-flags">
-                    {m.locked && <span className="elite-flag red">Locked out · {m.locked_minutes} min</span>}
-                    {m.is_active && m.must_change_password && <span className="elite-flag amber">Temporary password not yet changed</span>}
-                    {m.is_active && m.never_signed_in && <span className="elite-flag blue">Never signed in</span>}
-                  </div>
-                  {!m.is_active && m.deactivation_reason && <p className="elite-meta" style={{ marginTop: '0.5rem' }}>Switched off {fmtDate(m.deactivated_at)}{m.deactivated_by_name ? ` by ${m.deactivated_by_name}` : ''} — {m.deactivation_reason}</p>}
-                </div>
-                <div className="elite-card-footer">
-                  <div className="elite-joined">Added {fmtDate(m.created_at)}{m.created_by_name ? ` by ${m.created_by_name}` : ''}</div>
-                  <div className="elite-joined">{m.last_login_at ? `Last sign-in ${fmtDateTime(m.last_login_at)}` : 'No sign-in yet'}{m.logins_30d ? ` · ${m.logins_30d} in 30 days` : ''}</div>
-                </div>
-                <div className="elite-card-actions">
-                  {m.can.edit && <button type="button" className="elite-action" onClick={() => { setError(''); setModal({ kind: 'edit', member: m }); }}><Pencil size={13} /> {m.can.role ? 'Edit / change role' : 'Edit details'}</button>}
-                  {m.can.unlock && <button type="button" className="elite-action go" onClick={() => act(() => api.staff.unlock(m.id), `${m.name} can sign in again.`)}><Unlock size={13} /> Unlock</button>}
-                  {m.can.reset_password && <button type="button" className="elite-action" onClick={() => { setError(''); setModal({ kind: 'reset', member: m }); }}><KeyRound size={13} /> Reset password</button>}
-                  <button type="button" className="elite-action" onClick={() => setModal({ kind: 'activity', member: m })}><History size={13} /> Activity</button>
-                  {m.can.deactivate && <button type="button" className="elite-action danger" onClick={() => { setError(''); setModal({ kind: 'off', member: m, reason: '' }); }}><PowerOff size={13} /> Switch off</button>}
-                  {m.can.reactivate && <button type="button" className="elite-action go" onClick={() => act(() => api.staff.reactivate(m.id), `${m.name}'s account is switched back on.`)}><Power size={13} /> Switch on</button>}
-                </div>
-              </div>
-            ))}
-            {shown.length === 0 && <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--slate-500)' }}>Nobody matches.</div>}
-          </div>
+          <UserTable members={shown} roles={d.assignable_roles} showDesk rank={rank} avatar={avatarOf}
+            onRole={(m, role) => { setError(''); setModal({ kind: 'role', member: m, role }); }}
+            onAction={(kind, m) => {
+              setError('');
+              if (kind === 'unlock') act(() => api.staff.unlock(m.id), `${m.name} can sign in again.`);
+              else if (kind === 'on') act(() => api.staff.reactivate(m.id), `${m.name}'s account is switched back on.`);
+              else setModal({ kind, member: m, reason: '' });
+            }} />
         </>
       )}
 
@@ -188,6 +165,12 @@ export default function StaffUsers() {
         {modal?.kind === 'edit' && (
           <MemberForm roles={d.assignable_roles} member={modal.member} canRole={modal.member.can.role} levelLabel="Role" onCancel={() => setModal(null)}
             onSave={async (body) => done(await api.staff.update(modal.member.id, body), `${body.name}'s details were saved.`)} />
+        )}
+      </Modal>
+      <Modal open={modal?.kind === 'role'} onClose={() => setModal(null)} title={modal?.member ? `Change ${modal.member.name}'s role` : ''} width={500}>
+        {modal?.kind === 'role' && (
+          <RoleChange member={modal.member} role={modal.role} roles={d.assignable_roles} onCancel={() => setModal(null)}
+            onConfirm={async () => done(await api.staff.update(modal.member.id, { role: modal.role }), `${modal.member.name} is now ${d.assignable_roles.find((r) => r.value === modal.role)?.label}. It applies from their next sign-in.`)} />
         )}
       </Modal>
       <Modal open={modal?.kind === 'off'} onClose={() => setModal(null)} title={modal?.member ? `Switch off ${modal.member.name}'s account` : ''} width={480}>
