@@ -6,10 +6,13 @@ import { ROLE_GROUPS } from '../../roles.js';
 import { DefaultDashboard, DiversionPnl } from '../../components/DiversionPanels.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { actsAs } from '../../lib/rolePages.js';
+import { REIA_BETA } from '../../reiaBeta.js';
 
+// The beta names no market: the power is sold to a third party, and the
+// form asks for no exchange.
 const EMPTY = {
   contract_id: '', period_month: '', reason: 'PAYMENT_DEFAULT', quantum_mwh: '',
-  exchange_platform: 'IEX', sale_rate_per_mwh: '', expenses: '', notes: '',
+  exchange_platform: REIA_BETA ? '' : 'IEX', sale_rate_per_mwh: '', expenses: '', notes: '',
 };
 
 function Signed({ v }) {
@@ -148,13 +151,13 @@ export default function PowerDiversion() {
     <div>
       <PageHeader
         title="Power Diversion (Default Management)"
-        subtitle="On buyer default / non-requisition, divert power to the exchange and recover against dues (PSA Art. 6.6)"
+        subtitle={`On buyer default / non-requisition, ${REIA_BETA ? 'sell the power to a third party' : 'divert power to the exchange'} and recover against dues (PSA Art. 6.6)`}
         actions={canWrite && <button className="btn btn-primary" onClick={() => { setForm(EMPTY); setError(''); setShow(true); }}>+ Record Diversion</button>}
       />
 
       <div className="kpi-grid">
         <StatCard label="Diversions" value={summary.total ?? 0} hint={`${fmtNumber(summary.total_mwh || 0)} MWh`} />
-        <StatCard label="Exchange Sale" value={fmtCurrency(summary.total_sale || 0)} />
+        <StatCard label={REIA_BETA ? 'Third-party Sale' : 'Exchange Sale'} value={fmtCurrency(summary.total_sale || 0)} />
         <StatCard label="Net Gain" value={fmtCurrency(summary.total_gain || 0)} tone="green" />
         <StatCard label="Deficit (buyer owes)" value={fmtCurrency(summary.total_deficit || 0)} tone="amber" />
         <StatCard label="Recovered" value={fmtCurrency(summary.total_recovered || 0)} tone="green" />
@@ -197,12 +200,14 @@ export default function PowerDiversion() {
           </div>
           <div className="form-grid">
             <Field label="Quantum Diverted (MWh)"><input required type="number" min="0.001" step="0.001" value={form.quantum_mwh} onChange={(e) => setForm({ ...form, quantum_mwh: e.target.value })} /></Field>
-            <Field label="Exchange">
-              <select value={form.exchange_platform} onChange={(e) => setForm({ ...form, exchange_platform: e.target.value })}>
-                <option value="IEX">IEX</option>
-                <option value="PXIL">PXIL</option>
-              </select>
-            </Field>
+            {!REIA_BETA && (
+              <Field label="Exchange">
+                <select value={form.exchange_platform} onChange={(e) => setForm({ ...form, exchange_platform: e.target.value })}>
+                  <option value="IEX">IEX</option>
+                  <option value="PXIL">PXIL</option>
+                </select>
+              </Field>
+            )}
           </div>
           <div className="form-grid">
             <Field label="Sale Rate (₹/MWh)"><input required type="number" min="0.01" max="20000" step="0.01" value={form.sale_rate_per_mwh} onChange={(e) => setForm({ ...form, sale_rate_per_mwh: e.target.value })} /></Field>

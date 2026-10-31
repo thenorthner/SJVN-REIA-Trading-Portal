@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { SEARCH_OPEN_EVENT } from '../components/PortalSearchModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { canRoleOpenPath } from '../roles.js';
+import { REIA_BETA, inReiaBeta } from '../reiaBeta.js';
 
 /**
  * 404 Buddy Page — Urja with Disconnected Power Plug 🔌
@@ -13,7 +14,10 @@ export default function NotFound({ standalone = false }) {
   const location = useLocation();
   const { user } = useAuth();
   // Only the desks this officer can open; a visitor is offered the public page.
-  const deskLinks = DESK_LINKS.filter((d) => (user ? canRoleOpenPath(user.role, d.to) : d.public));
+  // The beta lists the REIA desk alone, whatever the role (SJVN Admin opens every desk).
+  const deskLinks = DESK_LINKS
+    .filter((d) => (user ? canRoleOpenPath(user.role, d.to) : d.public))
+    .filter((d) => !REIA_BETA || inReiaBeta(d.to));
 
   const handleOpenSearch = () => {
     window.dispatchEvent(new CustomEvent(SEARCH_OPEN_EVENT));
@@ -534,7 +538,7 @@ export default function NotFound({ standalone = false }) {
       </div>
 
       {/* ===================== QUICK JUMP FEEDERS ===================== */}
-      <div
+      {deskLinks.length > 0 && <div
         style={{
           borderTop: '1px solid var(--border, #e2e8f0)',
           paddingTop: 24,
@@ -573,7 +577,7 @@ export default function NotFound({ standalone = false }) {
             </Link>
           ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

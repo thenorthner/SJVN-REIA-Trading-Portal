@@ -97,6 +97,14 @@ describe('REIA beta lists', () => {
     expect(modules.filter((m) => /TRADING/.test(m))).toEqual([]);
   });
 
+  it('name no exchange for a diverted sale', async () => {
+    const { scrub } = await import('../src/services/reiaBeta.js');
+    const out = scrub([{ diversion_no: 'PDV/2026-09/001', exchange_platform: 'IEX',
+      message: '120 MWh of PSA/REIA/BETA/001 for 2026-09 was sold on the exchange (payment default).' }], { ids: new Set(), words: [] });
+    expect(out[0]).not.toHaveProperty('exchange_platform');
+    expect(out[0].message).toBe('120 MWh of PSA/REIA/BETA/001 for 2026-09 was sold to a third party (payment default).');
+  });
+
   it('do not change what a write may do', async () => {
     const r = await request(app).post('/api/contracts').set(auth(signToken(makeUser('SELLER', { linked_entity_id: solar.id })))).send({});
     // A seller still may not raise a contract: the beta filters answers, not permissions.

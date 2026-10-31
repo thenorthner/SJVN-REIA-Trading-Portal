@@ -5,6 +5,10 @@
  * things that decide whether a month can be billed at all.
  */
 
+import { REIA_BETA } from '../../reiaBeta.js';
+
+// The beta's contracts are solar, wind, hybrid and storage: hydro's wider band
+// is the Hydro desk's and is left out of what a beta tester reads.
 const energyGuide = {
   eyebrow: 'Module reference',
   title: 'Energy Data & Validation',
@@ -17,7 +21,7 @@ const energyGuide = {
   facts: [
     { label: 'Checks', value: 'Two', hint: 'Against expectation, and against other sources' },
     { label: 'Normal tolerance', value: '30%', hint: 'Deviation from expected generation' },
-    { label: 'Hydro tolerance', value: '80%', hint: 'Seasonal flow makes hydro swing' },
+    ...(REIA_BETA ? [] : [{ label: 'Hydro tolerance', value: '80%', hint: 'Seasonal flow makes hydro swing' }]),
     { label: 'Cross-source', value: '2%', hint: 'How far two sources may differ' },
   ],
 
@@ -88,10 +92,12 @@ const energyGuide = {
           + 'that, and a deviation beyond the tolerance flags the month.' },
         { type: 'table',
           columns: ['Project type', 'Tolerance', 'Why'],
-          rows: [
-            ['Hydro and pumped storage', '80%', 'Seasonal flow swings output enormously between months'],
-            ['Everything else', '30%', 'Solar and wind vary, but within a narrower band'],
-          ] },
+          rows: REIA_BETA
+            ? [['Solar, wind, hybrid and storage', '30%', 'Sun and wind vary from month to month, within this band']]
+            : [
+              ['Hydro and pumped storage', '80%', 'Seasonal flow swings output enormously between months'],
+              ['Everything else', '30%', 'Solar and wind vary, but within a narrower band'],
+            ] },
         { type: 'note', tone: 'warn', title: 'Measured on commissioned capacity, not contracted', text:
           'A plant part-way through phased commissioning cannot generate from megawatts that '
           + 'are not built yet. Measuring against the full contracted capacity let a 10 MW '
@@ -118,11 +124,11 @@ const energyGuide = {
             a: 'Because locking is what makes a month billable, and it is the last point where '
               + 'validating it can still change anything. A period that was locked and billed '
               + 'without ever being checked is a bill resting on nothing.' },
-          { q: 'Hydro gets an 80% tolerance. Is that not far too loose?',
+          ...(REIA_BETA ? [] : [{ q: 'Hydro gets an 80% tolerance. Is that not far too loose?',
             a: 'For hydro it is the honest figure. A monsoon month and a lean month differ by '
               + 'more than any tighter band would allow, so a 30% tolerance would flag most '
               + 'months and train everyone to ignore the flag. The cross-source check is what '
-              + 'catches a wrong hydro number.' },
+              + 'catches a wrong hydro number.' }]),
           { q: 'Two sources disagree by 3%. Which one is right?',
             a: 'The module does not decide — it flags that they disagree, names both figures '
               + 'and the gap, and leaves it to whoever can find out. The regional account is '

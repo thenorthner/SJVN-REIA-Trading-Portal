@@ -152,7 +152,7 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   const expensesIn = b.expenses === undefined || b.expenses === null || b.expenses === '' ? 0 : Number(b.expenses);
   if (!Number.isFinite(quantum) || quantum <= 0) return res.status(400).json({ error: 'quantum_mwh must be positive' });
   if (!Number.isFinite(rate) || rate <= 0) return res.status(400).json({ error: 'sale_rate_per_mwh must be a positive ₹/MWh figure' });
-  if (rate > RATE_CEILING) return res.status(400).json({ error: `₹${rate.toLocaleString('en-IN')}/MWh is above the exchange price ceiling (₹${RATE_CEILING.toLocaleString('en-IN')}/MWh). The rate is per MWh.` });
+  if (rate > RATE_CEILING) return res.status(400).json({ error: `₹${rate.toLocaleString('en-IN')}/MWh is above the price ceiling (₹${RATE_CEILING.toLocaleString('en-IN')}/MWh). The rate is per MWh.` });
   if (!Number.isFinite(expensesIn) || expensesIn < 0) return res.status(400).json({ error: 'expenses must be zero or more' });
   // A PSA can only divert what its capacity could deliver in the month.
   const ceiling = billableCapacityMw(contract) * 24 * daysInMonth(period);
@@ -196,7 +196,7 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   logAudit({ req, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'power_diversion', entityId: id, details: b });
   // The buyer is told its power has gone elsewhere, and on what ground.
   notifyCounterparty(contract.id, 'BUYER', 'POWER_DIVERTED',
-    `${quantum.toLocaleString('en-IN')} MWh of ${contract.contract_no} for ${period} was sold on the exchange (${b.reason === 'PAYMENT_DEFAULT' ? 'payment default' : 'power not requisitioned'}). Net proceeds ${rupees(net_gain)}.`);
+    `${quantum.toLocaleString('en-IN')} MWh of ${contract.contract_no} for ${period} was sold to a third party (${b.reason === 'PAYMENT_DEFAULT' ? 'payment default' : 'power not requisitioned'}). Net proceeds ${rupees(net_gain)}.`);
   res.status(201).json(withNames(db.prepare('SELECT * FROM power_diversions WHERE id = ?').get(id)));
 });
 

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import './Mail-elite.css';
 import { askConfirm } from '../lib/dialogs.js';
+import { REIA_BETA } from '../reiaBeta.js';
 
 const FOLDERS = [
   { key: 'INBOX', label: 'Inbox', icon: Inbox },
@@ -549,7 +550,7 @@ function DisclaimerModal({ open, onClose }) {
             1. Purpose of Quick Connect
           </h4>
           <p style={{ margin: 0 }}>
-            This messaging feature is provided solely for rapid operational desk-to-desk coordination, technical queries, daily clarifications, and convenient communication between registered stakeholders (SJVN internal desks, sellers, buyers, and trading clients).
+            This messaging feature is provided solely for rapid operational desk-to-desk coordination, technical queries, daily clarifications, and convenient communication between registered stakeholders (SJVN internal desks, sellers{REIA_BETA ? ' and buyers' : ', buyers, and trading clients'}).
           </p>
         </div>
 

@@ -7,6 +7,9 @@
  * fewer checked lines than it has lines.
  */
 
+import { REIA_BETA } from '../../reiaBeta.js';
+
+// The beta shows contracts alone; the trading clients' lines are left out.
 const reconciliationGuide = {
   eyebrow: 'Module reference',
   title: 'Reconciliation',
@@ -45,10 +48,12 @@ const reconciliationGuide = {
           + 'the platform already holds — the metered energy, the invoices raised, the '
           + 'payments received, the open disputes — and set out as a list of comparisons. '
           + 'Each comparison is a line, and each line either matches or does not.' },
-        { type: 'p', text:
-          'It runs for a contract, or for a trading client. The lines differ between the two '
-          + 'because the questions differ: a contract has metered energy and availability, a '
-          + 'trading client has bids and clearing.' },
+        { type: 'p', text: REIA_BETA
+          ? 'It runs for a contract, and its lines follow what a contract carries: metered '
+            + 'energy and availability, bills and payments.'
+          : 'It runs for a contract, or for a trading client. The lines differ between the two '
+            + 'because the questions differ: a contract has metered energy and availability, a '
+            + 'trading client has bids and clearing.' },
         { type: 'note', tone: 'info', title: 'Both sides sign it', text:
           'The point of the statement is agreement, not a report. SJVN acknowledges it and so '
           + 'does the counterparty, each from their own screen, and only when both have is the '
@@ -73,9 +78,9 @@ const reconciliationGuide = {
             ['Open disputes', 'One line per dispute still open on the period, carrying its amount'],
             ['Carry-forward', 'Anything left unresolved from the previous period'],
           ] },
-        { type: 'p', text:
+        ...(REIA_BETA ? [] : [{ type: 'p', text:
           'A trading client statement carries three lines instead: bid against cleared quantum, '
-          + 'billed against paid, and the SAP mirror.' },
+          + 'billed against paid, and the SAP mirror.' }]),
         { type: 'note', tone: 'warn', title: 'Two lines show as Not checked', text:
           'The tax line needs a figure filed with the GST portal and the SAP line needs the '
           + 'finance system’s own total. Neither connector exists, so unless a run is given '

@@ -6,6 +6,9 @@
  * rule and the expiry cascade — rather than a description of the screen.
  */
 
+import { REIA_BETA } from '../../reiaBeta.js';
+
+// The beta shows contracts alone; the trading clients' lines are left out.
 const securityGuide = {
   eyebrow: 'Module reference',
   title: 'Payment Security',
@@ -51,8 +54,8 @@ const securityGuide = {
           + 'contract for what is at risk? Is any of it about to expire? And when a default '
           + 'happens, what gets drawn, in what order, and for how much?' },
         { type: 'note', tone: 'info', title: 'Adequacy is not only paperwork', text:
-          'A trading client’s PSA cover is checked before their bids are placed. A contract '
-          + 'that is short on security is not just flagged — it can stop scheduling. Seller '
+          (REIA_BETA ? '' : 'A trading client’s PSA cover is checked before their bids are placed. ')
+          + 'A contract that is short on security is not just flagged — it can stop scheduling. Seller '
           + 'security on a PPA does not gate buyer scheduling; only PSA payment cover does.' },
       ],
     },

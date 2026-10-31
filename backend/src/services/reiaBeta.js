@@ -35,12 +35,17 @@ const OTHER_NAME_RE = /^(hydro|thermal|trading|commercial)/i;
 const OTHER_PARAM_RE = /(^|_)(hydro|thermal)(_|$)|^freq_response_|^cerc_(licen|category|min_net_worth|afc_)|^market_price_cap$|^power_regulation_/;
 // Prose the beta words for REIA alone: the REIA margin is the SJVN margin (as
 // the front end has it; the CERC regulation's title stays), Quick Connect is
-// between SJVN, sellers and buyers, and CERT-In's idle timeout is for financial screens.
+// between SJVN, sellers and buyers, CERT-In's idle timeout is for financial
+// screens, and diverted power was sold to a third party (notices sent before
+// 31-Oct-2026 named the exchange).
 const BETA_PROSE = [
   [/(?<!Fixation of )\b([Tt])rading ([Mm])argin/g, (_, t, m) => `SJVN ${m}argin`],
   [/,? (and|or) trading clients/g, ''],
   [/trading and banking screens/g, 'financial screens'],
+  [/sold on the exchange/g, 'sold to a third party'],
 ];
+// Fields that name an exchange (a diverted sale's platform): the beta drops them.
+const MARKET_KEYS = new Set(['exchange_platform']);
 const betaProse = (v) => BETA_PROSE.reduce((out, [re, to]) => out.replace(re, to), v);
 // A role code of those desks, as a list entry or a key ("THERMAL_ADMIN": "Full").
 const OTHER_ROLE_CODE_RE = /^(TRADING|COMMERCIAL|THERMAL|HYDRO)(_[A-Z0-9]+)*$/;
@@ -105,7 +110,7 @@ export function scrub(body, h) {
   if (body && typeof body === 'object') {
     const out = {};
     for (const [k, v] of Object.entries(body)) {
-      if (OTHER_ROLE_CODE_RE.test(k)) continue;
+      if (OTHER_ROLE_CODE_RE.test(k) || MARKET_KEYS.has(k)) continue;
       // An entity also billed by another desk is shown as REIA's alone.
       if (k === 'verticals' && typeof v === 'string') out[k] = 'REIA';
       else out[k] = v && typeof v === 'object' ? scrub(v, h) : typeof v === 'string' ? betaProse(v) : v;
