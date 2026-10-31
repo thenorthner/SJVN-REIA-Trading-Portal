@@ -464,46 +464,474 @@ const RULES = [
   { icon:'check', t:'Affirm before you commit', d:'Important actions open a “Statutory affirmation” popup: tick the declaration, then “Confirm and submit”.' },
 ];
 
-/* ───────────────────────── data: side quests ───────────────────────── */
-const SIDE = [
-  { t:'Late payment and surcharge', where:'REIA Billing & Settlement › Payment Monitoring', flow:[[['X'],'Bill passes its due date'],[['X'],'Surcharge accrues'],[['M'],'Raise a surcharge bill'],[['C','F','H'],'Usual approval']],
-    rules:['Outstanding = bill − rebate + surcharge billed − disputed − payments and deductions.','Surcharge runs at the contract’s rate (15% a year when none is set), rising 0.5% for each further month of delay, to at most 3% above that base.','One screen, two sides: what buyers owe SJVN, and what SJVN owes generators.'] },
-  { t:'Debit and credit notes', where:'REIA Billing & Settlement › Notes for Approval', flow:[[['M'],'Draft the note'],[['C'],'`Approve & issue`'],[['M'],'Apply to its bill']],
-    rules:['Reasons: revised REA, change in law, transmission charges, late payment surcharge, compensation event, liquidated damages, schedule shortfall or excess, other.','A note asked for by a dispute shows the dispute, its evidence and the reasoning beside the button.','Finance can draft and approve notes too.'] },
-  { t:'Deviation settlement (DSM)', where:'REIA Billing & Settlement › Others › Deviation Settlement (DSM)', flow:[[['M'],'Take the week’s figure from the NRPC statement, or estimate'],[['M'],'Dispatch'],[['M'],'Supplementary bill drafted'],[['C','F','H'],'Usual approval']],
-    rules:['1 LU = 100 MWh.','NRPC prints Paid (+) / Received (−). The platform shows + recoverable / − payable.','An estimate is (actual − scheduled) MWh × rate, and stays labelled as an estimate.'] },
-  { t:'Month-Close Board', where:'REIA Billing & Settlement › Others › Month-Close Board', flow:[[['X'],'One row per live contract'],[['M'],'Raise every ready bill at once']],
-    rules:['Each row answers: energy locked? the seller’s bill in? already billed?'] },
-  { t:'Invoice Verification', where:'REIA Billing & Settlement › Others › Invoice Verification', flow:[[['S'],'Bills arrive'],[['M'],'Verify each bill'],[['C'],'Send back what fails']],
-    rules:['Every developer bill waiting to be verified, and what each one is waiting on: REA, energy, tariff, capacity, CUF, COD, curtailment, change in law.'] },
-  { t:'Developer Release Planner', where:'REIA Billing & Settlement › Others › Developer Release Planner', flow:[[['F'],'See each seller’s realised share'],[['C','F'],'Release to each generator']],
-    rules:['A seller’s share is its energy part of what the buyer paid: no SJVN margin, no credit notes.'] },
-  { t:'Ledgers and TDS', where:'REIA Billing & Settlement › Others › Counterparty Ledgers & TDS', flow:[[['S','B'],'Each company sees its own account'],[['F'],'Files quarterly Form 16A for sellers'],[['B'],'Files its own certificate']],
-    rules:['A statement of account for each seller: bills, notes, payments and TDS.','A buyer’s certificate is filed by its Level 2, 3 or Admin.'] },
-  { t:'Finance posting to SAP', where:'Finance & SAP Integration › REIA › Finance Posting (FI)', flow:[[['M'],'Prepare the month’s posting'],[['C'],'Post it, push it to SAP'],[['C'],'Reverse if wrong']],
-    rules:['The month-end handover to corporate Finance: the desk hands the month over and records the voucher Finance returns.','The platform books the sale; SAP takes the finance (FI) part.','Reading back from SAP: maker or checker.'] },
-  { t:'Generation performance', where:'REIA Billing & Settlement › Others › Generation Performance', flow:[[['X'],'Energy vs what capacity × CUF should give'],[['M'],'Draft the CUF true-up note'],[['C'],'Approve it']],
-    rules:['Energy against what each project’s capacity could make.','A shortfall below the PPA’s minimum CUF is assessed at the year end.'] },
-  { t:'Compliance Desk', where:'REIA Billing & Settlement › Others › Compliance Desk', flow:[[['X'],'Flags tenure, commissioning, security, approvals'],[['M'],'Raise a compliance request on the contract']],
-    rules:['One desk for contract compliance and statutory approvals.'] },
-  { t:'Power diversion', where:'REIA Billing & Settlement › Others › Power Diversion', flow:[[['M'],'Record a diversion'],[['M'],'Record what it recovered'],[['M'],'Bill the deficit']],
-    rules:['Two reasons: the buyer did not pay, or did not take the power.','A surplus beyond the buyer’s dues becomes an advance.'] },
-  { t:'Energy banking', where:'REIA Billing & Settlement › Others › Energy Banking', flow:[[['M'],'Bank energy the buyer could not take'],[['M'],'Draw it back'],[['C'],'Settle what is left']],
-    rules:['The cycle is the financial year, ending 31 March.','Unused energy settles in cash at a discount to tariff.'] },
-  { t:'Advances and unapplied receipts', where:'REIA Billing & Settlement › Others › Advances & Unapplied Receipts', flow:[[['F'],'Money no bill could take'],[['F'],'Apply it to a later bill, or refund it']],
-    rules:['Only Finance applies or refunds it, and only to the same company’s open bills.'] },
-  { t:'Contract changes', where:'REIA Billing & Settlement › Contracts (PPA/PSA)', flow:[[['M'],'Draft the amendment'],[['C'],'Make it live'],[['X'],'Old version AMENDED']],
-    rules:['Hold: maker, checker, HOD or Management. Hold override: HOD or Management.','Terminate, close, renew: the checker.'] },
-  { t:'Security in trouble', where:'REIA Billing & Settlement › Payment Security', flow:[[['M'],'Raise the invocation, issue the letter'],[['C'],'Notice → claim → funds received'],[['S','B'],'Later: ask for release'],[['C','F'],'Release']],
-    rules:['A release needs no dues and no open disputes.','Short cover can be treated as adequate for up to 90 days, with a reason: HOD or Management.'] },
-  { t:'Arrear and supplementary bills', where:'REIA Billing & Settlement › Billing & Invoicing', flow:[[['M'],'Raise, with the reason'],[['C','F','H'],'Approval by amount'],[['M'],'Send']],
-    rules:['They follow exactly the same ladder as a monthly bill.'] },
-  { t:'Cover when someone is away', where:'Platform › Additional Charge & Break-glass', flow:[[['A'],'Give additional charge (up to 90 days)'],[['C'],'Acts as “X for Y” from the top bar']],
-    rules:['Break-glass: emergency access for up to 72 hours, approved by Management or SJVN Admin.','Every change made while acting is its own audit entry.'] },
-  { t:'Project access', where:'Platform › Project Assignments', flow:[[['A'],'Give a user ALL or SELECTED projects'],[['X'],'They see only those']],
-    rules:['A daily alert tells SJVN Admin when a project has nobody to act at a tier.'] },
-  { t:'Audit trail', where:'Platform › Audit Trail', flow:[[['X'],'Every action logged'],[['A'],'SJVN Admin and the compliance auditor read it']],
-    rules:['Who, when, and the value before and after.'] },
+/* ───────────────────────── data: side quests ─────────────────────────
+   The screens beyond the ten missions, each played the same way: lanes, steps,
+   log-out / log-in switches and a details drawer. Labels are the platform's own. */
+const QZONES = [['money','Money in and out'],['close','Closing the month'],['risk','Contracts and risk'],['platform','Platform']];
+const QUESTS = [
+{ zone:'money', short:'Late payment surcharge', name:'Bill the late payment surcharge', screen:'REIA Billing & Settlement › Others › Month-Close Board',
+  goal:'When a buyer pays after the due date, demand the surcharge its overdue bills have earned, once a month, as a bill of its own.',
+  start:'Buyer’s bill {SENT}, past its due date, not fully paid', end:'LPS bill {SENT} to the buyer',
+  steps:[
+    { who:'M', opt:true, noquiz:true, t:'See what is running late', where:'REIA Billing & Settlement › Payment Monitoring',
+      fill:['Side: Owed to SJVN (buyers)','Tick “Overdue only”'],
+      rules:['Each open bill with its delay, “Surcharge billed” and “Surcharge earned, not billed”.','The same screen shows the other side: Owed by SJVN (developers).'] },
+    { who:'M', t:'Raise the surcharge bills', where:'Others › Month-Close Board › Late payment surcharge for the month', press:['Raise LPS bills'],
+      fill:['Billing month: the month just ended'],
+      res:{o:'LPS-PSA/…', t:'DRAFT'},
+      rules:['One LPS bill per buyer contract, for what its overdue bills earned up to the month’s last day and has not been billed.','Electricity (Late Payment Surcharge) Rules, 2022: calendar days past the due date, the base rate rising 0.5% a month, to 3% above it.','The base rate is the contract’s, 15% a year when none is set.','Each bill’s surcharge is billed once. Cancelling an LPS bill gives it back.'],
+      block:'Checker: no `Raise LPS bills` on the board.' },
+    { who:'M', t:'Submit it for approval', where:'Billing & Invoicing › the LPS bill', press:['Submit for SJVN Approval'],
+      res:{o:'LPS bill', f:'DRAFT', t:'UNDER_APPROVAL'},
+      rules:['It climbs the same ladder as a monthly bill: up to ₹1 lakh one level, above ₹1 lakh two, above ₹10 lakh three.'] },
+    { who:'C', t:'Approve Level 1', where:'The LPS bill › Approval Workflow', press:['Approve Level 1'], fill:['Comments'],
+      res:{o:'Level 1', t:'APPROVED'},
+      block:'Maker: no `Approve Level …` button.' },
+    { who:'F', opt:true, t:'Approve Level 2', where:'The LPS bill › Approval Workflow', press:['Approve Level 2'], fill:['Comments'],
+      res:{o:'Level 2', t:'APPROVED'},
+      rules:['Only above ₹1 lakh.'] },
+    { who:'H', opt:true, t:'Approve Level 3', where:'The LPS bill › Approval Workflow', press:['Approve Level 3'], fill:['Comments'],
+      res:{o:'LPS bill', f:'UNDER_APPROVAL', t:'APPROVED'},
+      rules:['Only above ₹10 lakh. Management can sign instead of the HOD.'] },
+    { who:'M', t:'Send it to the buyer', where:'The LPS bill', press:['Send Email to Buyer'],
+      res:{o:'LPS bill', f:'APPROVED', t:'SENT'},
+      rules:['It carries its own due date.'] },
+  ],
+  also:['A payment is applied to the surcharge first, oldest bill first, then to the oldest bill’s principal (PSA Art. 6.3).','Each company’s ledger shows “LPS accrued to date”.'] },
+
+{ zone:'money', short:'Debit & credit notes', name:'Debit and credit notes', screen:'REIA Billing & Settlement › Billing & Invoicing › the bill › Debit / Credit Notes',
+  goal:'Correct a bill already presented without rewriting it: a debit note asks for more, a credit note gives some back. A second person approves before either counts.',
+  start:'Bill presented: {APPROVED}, {SENT} or later', end:'Note {ISSUED}',
+  steps:[
+    { who:'M', t:'Raise the note on the bill', where:'Billing & Invoicing › click the bill’s number › Debit / Credit Notes', press:['+ Raise Note','Save as draft'],
+      fill:['Type: Debit note — the party owes more, or Credit note — the party owes less','Reason code: Revised / amended REA, Change in Law, Transmission / wheeling charges, Late Payment Surcharge, Compensation event, Liquidated damages, Other','Taxable value (₹), tax on the note (₹), tax label (e.g. IGST 18%)','What the note is for (printed on it)'],
+      res:{o:'Note', t:'DRAFT'},
+      rules:['Saved as a draft. It takes effect only when someone else approves it.','Finance can raise notes too.'],
+      refuse:['The invoice is still a draft — correct the draft instead of raising a note'],
+      block:'Checker: no `+ Raise Note`.' },
+    { who:'C', alt:['F'], t:'Approve and issue it', where:'REIA Billing & Settlement › Notes for Approval', press:['Approve & issue'],
+      res:{o:'Note', f:'DRAFT', t:'ISSUED'},
+      rules:['Each note says where it came from: Dispute resolution, Reconciliation exception, CUF true-up, Power diversion, Raised on the desk.','A note a dispute asked for shows the dispute, its evidence and the resolver’s reasoning beside the button.','`Reject` asks why it is not approved.','The bill’s own Debit / Credit Notes table has the same `Approve` and `Reject`.'],
+      refuse:['Segregation of duties: whoever raised this note cannot approve it. It needs a different approver.'],
+      block:'Maker: no `Approve & issue`.' },
+    { who:'X', noquiz:true, t:'The note takes effect', where:'Automatic, on approval',
+      res:{o:'Debit note', text:'Billed as its own supplementary invoice'},
+      rules:['A debit note becomes its own supplementary bill, numbered as the note, with its own due date.','A credit note is set against the bill. What the bill cannot absorb stays on the note for another bill of the same contract.','The bill as issued is never rewritten.'] },
+    { who:'M', opt:true, t:'Apply leftover credit to another bill', where:'The bill › Debit / Credit Notes › the note', press:['Apply credit','Apply'],
+      fill:['Choose an open bill of this contract…'],
+      res:{o:'Credit', text:'Applied to the chosen bill'},
+      rules:['Only another open bill of the same contract and the same side.'] },
+  ],
+  also:['`PDF` downloads an issued note.','`Cancel`, with a reason: the checker or Finance withdraws a draft, or cancels an issued note so its effect is reversed.','Credit notes from disputes come the same way (Mission 7).'] },
+
+{ zone:'money', short:'Arrear & supplementary', name:'Arrear and supplementary bills', screen:'REIA Billing & Settlement › Billing & Invoicing',
+  goal:'Recover charges missed in a past period, or adjust a bill for a tariff order, change in law, energy or surcharge, as a bill of its own.',
+  start:'A past period was under-billed, or an order changes what is due', end:'Bill {SENT}',
+  steps:[
+    { who:'M', t:'Raise an arrear bill', where:'REIA Billing & Settlement › Billing & Invoicing', press:['+ Arrear Bill','Raise Arrear'],
+      fill:['Contract','Arrear Period (recovering for)','Arrear Amount (₹), Taxes / GST (₹)','Reason for arrear'],
+      res:{o:'Arrear bill', t:'DRAFT'},
+      rules:['An arrear bill recovers charges missed or under-billed in a past period, so it is always a positive amount.','For money owed back, raise a credit note or a negative supplementary.'],
+      block:'Checker: no `+ Arrear Bill`, no `+ Supplementary`.' },
+    { who:'M', opt:true, t:'Or raise a supplementary bill', where:'REIA Billing & Settlement › Billing & Invoicing', press:['+ Supplementary','Create Supplementary'],
+      fill:['Contract and billing period','Reason category: Revised / amended REA true-up, Change in Law, Transmission charges, Late Payment Surcharge (LPS), β true-up, Other','Adjustment amount (₹): positive debit, negative credit','Taxes / GST and transmission (₹)','Link to parent invoice (optional)','Reason / reference: the order or clause'],
+      res:{o:'Supplementary bill', t:'DRAFT'},
+      rules:['Creates a SUPPLEMENTARY draft with the billing family reference.'] },
+    { who:'M', t:'Submit it for approval', where:'The new bill', press:['Submit for SJVN Approval'],
+      res:{o:'Bill', f:'DRAFT', t:'UNDER_APPROVAL'},
+      rules:['Exactly the same ladder as a monthly bill, by amount.'] },
+    { who:'C', t:'Approve Level 1', where:'The bill › Approval Workflow', press:['Approve Level 1'], fill:['Comments'],
+      res:{o:'Level 1', t:'APPROVED'} },
+    { who:'F', opt:true, t:'Approve Level 2', where:'The bill › Approval Workflow', press:['Approve Level 2'], fill:['Comments'],
+      res:{o:'Level 2', t:'APPROVED'},
+      rules:['Only above ₹1 lakh.'] },
+    { who:'H', opt:true, t:'Approve Level 3', where:'The bill › Approval Workflow', press:['Approve Level 3'], fill:['Comments'],
+      res:{o:'Bill', f:'UNDER_APPROVAL', t:'APPROVED'},
+      rules:['Only above ₹10 lakh. Management can sign instead of the HOD.'] },
+    { who:'M', t:'Send it to the buyer', where:'The bill', press:['Send Email to Buyer'],
+      res:{o:'Bill', f:'APPROVED', t:'SENT'} },
+  ],
+  also:['Late payment surcharge bills come from the Month-Close Board (Side quest 1).','A week of deviation settlement is billed from its own screen (Side quest 10).'] },
+
+{ zone:'money', short:'Advances', name:'Advances and unapplied receipts', screen:'REIA Billing & Settlement › Others › Advances & Unapplied Receipts',
+  goal:'Hold money a buyer paid that no bill could take, then apply it to a later bill of the same buyer, or refund it.',
+  start:'A buyer pays more than its bill has left', end:'Advance {APPLIED} or {REFUNDED}',
+  steps:[
+    { who:'B', t:'Tell SJVN about the payment', where:'Buyer Portal › Billing & Payments › the bill', press:['Intimate payment to SJVN','Send to SJVN Finance'],
+      fill:['Amount credited to SJVN','Payment date, mode, UTR / reference'],
+      res:{o:'Intimation', t:'SUBMITTED'} },
+    { who:'F', t:'Confirm it, and hold the excess', where:'REIA Billing & Settlement › Payment Monitoring › Payments to confirm', press:['Confirm receipt','Confirm and record the payment'],
+      fill:['Value date in SJVN’s bank','Tick “This is more than the bill has left. Apply what the bill can take and hold the rest as the buyer’s advance”'],
+      res:{o:'Advance', t:'OPEN'},
+      rules:['The bill takes what it can. The rest appears under Advances as “Paid beyond the bill”.'],
+      block:'Maker and checker cannot confirm a receipt.' },
+    { who:'F', t:'Apply it to a later bill', where:'Advances & Unapplied Receipts › the advance', press:['Apply to a bill','Apply'],
+      fill:['Bill','Amount (blank = as much as both allow)'],
+      res:{o:'Advance', f:'OPEN', t:'APPLIED'},
+      rules:['Only to the same company’s open bills.','Applied in part, the advance stays OPEN with what is left.'],
+      refuse:['INV-… is not a bill of …, so this advance cannot settle it'],
+      block:'Maker and checker: no `Apply to a bill`, no `Refund`.' },
+    { who:'F', opt:true, t:'Or refund it', where:'Advances & Unapplied Receipts › the advance', press:['Refund','Record refund'],
+      fill:['Amount (blank = all that is left)','Refund UTR','Why refunded, not applied'],
+      res:{o:'Advance', f:'OPEN', t:'REFUNDED'},
+      refuse:['Say why the advance is refunded rather than applied'] },
+  ],
+  also:['A power diversion that recovers more than the buyer owes lands here too, as “Diversion surplus” (Side quest 16).'] },
+
+{ zone:'money', short:'Release planner', name:'Release buyer receipts to the generators', screen:'REIA Billing & Settlement › Others › Developer Release Planner',
+  goal:'Pass on, in one sitting, what buyers have paid that is each generator’s energy share.',
+  start:'Buyer’s bill {PAID}, the developer’s bill open', end:'Developer’s bill paid from buyer receipts',
+  steps:[
+    { who:'F', noquiz:true, t:'See what each generator can be paid', where:'REIA Billing & Settlement › Others › Developer Release Planner',
+      rules:['Buyer receipts that are the generator’s energy share — no margin, no credit notes — against what each developer bill still has open.','Totals: Open on developer bills, Realised, not released, Releasable now.','A row that cannot be released says why under “Releasable now”.'] },
+    { who:'C', alt:['F'], t:'Release from buyer receipts', where:'Developer Release Planner › the developer’s bill', press:['Release','Release from buyer receipts'],
+      fill:['Amount (₹): up to what is releasable now','Payment date','UTR / reference'],
+      res:{o:'Developer’s bill', text:'Released'},
+      block:'Maker: no `Release` on the planner.' },
+    { who:'S', opt:true, noquiz:true, t:'See the payment', where:'Seller Portal › Payments & Ledger', press:['View payment advice'],
+      rules:['The release shows under the ledger’s Payments.'] },
+  ],
+  also:['A release on one bill, with TDS and the early-payment rebate, is Mission 9.'] },
+
+{ zone:'money', short:'Ledgers & TDS', name:'Ledgers and TDS certificates', screen:'REIA Billing & Settlement › Others › Counterparty Ledgers & TDS',
+  goal:'Keep each company’s statement of account, and file the quarterly TDS certificates (Form 16A) in both directions.',
+  start:'A quarter has ended', end:'Certificates filed and reconciled',
+  steps:[
+    { who:'F', t:'File the seller’s Form 16A', where:'Counterparty Ledgers & TDS › Ledger of one party › Sellers (payable) › the seller › TDS certificates', press:['+ File a certificate','File certificate'],
+      fill:['Financial year, e.g. 2026-27','Quarter: Q1 — Apr–Jun to Q4 — Jan–Mar','Certificate number','TDS on the certificate (₹)','Certificate (PDF)'],
+      res:{o:'Form 16A', text:'Filed'},
+      rules:['The quarterly certificate for the tax SJVN deducted at source from the seller’s payments.'] },
+    { who:'S', noquiz:true, t:'Download the certificate', where:'Seller Portal › Payments & Ledger › TDS certificates', press:['View / download'],
+      rules:['The seller claims the credit in its income-tax return.','Its ledger has four tabs: Outstanding & ageing, Ledger, Payments, TDS certificates.'] },
+    { who:'B', t:'File its own certificate', where:'Buyer Portal › Billing & Payments › Payment Ledger & Receipts › TDS certificates', press:['+ File a certificate','File certificate'],
+      rules:['For the tax the buyer deducted at source from its payments to SJVN, so SJVN can claim the credit.','A checker, approver or the company admin files them.'] },
+    { who:'F', t:'Reconcile TDS against Form 16A', where:'Counterparty Ledgers & TDS › TDS vs Form 16A (all parties)', press:['Mark','Save'],
+      fill:['Reconciliation: Reconciled, or Mismatch — taken up with the party','Note'],
+      res:{o:'Quarter', text:'Reconciled'},
+      block:'Maker and checker: no `Mark`.' },
+  ],
+  also:['`Statement (PDF)` and `Statement (Excel)` give any party’s account for a period.','A buyer’s ledger works the same way, as receivable.'] },
+
+{ zone:'close', short:'Month-Close Board', name:'Close the month on one board', screen:'REIA Billing & Settlement › Others › Month-Close Board',
+  goal:'One month, closed in order: energy locked and billed, statements reconciled, surcharge billed, and the open items Finance should see before it books the month.',
+  start:'The month is over', end:'Every live contract billed and reconciled',
+  steps:[
+    { who:'X', noquiz:true, t:'One row per live contract', where:'Month-Close Board',
+      res:{o:'Row', text:'Ready'},
+      rules:['Each row answers: energy locked? PPA bill in? already billed?','Standing: Ready, Billed, Waiting for energy, Blocked, Month not over.','A month that has not ended cannot be billed; the board names the latest that can.'] },
+    { who:'M', t:'Raise every ready bill', where:'Month-Close Board', press:['Generate all ready (n)'],
+      fill:['Billing month'],
+      res:{o:'Each ready bill', t:'DRAFT'},
+      rules:['Bills are raised as drafts through the same Generate path, one at a time.','Each goes for approval under Billing & Invoicing (Mission 6).','A row that could not be raised says why in the popup.'],
+      block:'Checker: no `Generate all ready`.' },
+    { who:'M', opt:true, t:'Run the month’s reconciliations', where:'Month-Close Board › Reconciliation', press:['Run'],
+      res:{o:'Statement', text:'Raised'},
+      rules:['A month is reconciled once its energy is locked and its bill presented.','The hourly job usually gets there first (Mission 10).'] },
+    { who:'M', opt:true, noquiz:true, t:'Raise the surcharge bills', where:'Month-Close Board › Late payment surcharge', press:['Raise LPS bills'],
+      res:{o:'LPS bill', t:'DRAFT'},
+      rules:['The whole surcharge run is Side quest 1.'] },
+    { who:'F', noquiz:true, t:'Check the posting checklist', where:'Month-Close Board › Posting checklist',
+      res:{o:'Checklist', text:'Nothing open'},
+      rules:['The open items before Finance books the month, each with a count and an amount.','Finance then books the month (Side quest 9).'] },
+  ],
+  also:['Pick another month with the month box. A month still running cannot be picked.'] },
+
+{ zone:'close', short:'Invoice Verification', name:'Verify developer bills', screen:'REIA Billing & Settlement › Others › Invoice Verification',
+  goal:'Run the technical and commercial checks on every developer bill, and send back what fails with exactly what failed.',
+  start:'Seller’s bill {SUBMITTED}', end:'Bill verified, or back with the developer',
+  steps:[
+    { who:'S', t:'Submit its bill', where:'Seller Portal › My Invoices', press:['+ Create Invoice','Submit to SJVN'],
+      res:{o:'Seller’s bill', t:'SUBMITTED'} },
+    { who:'M', t:'Verify the bills that pass', where:'REIA Billing & Settlement › Others › Invoice Verification', press:['Verify selected (n)'],
+      fill:['Filter: Everything, Not started, In progress, Failed a check, Verified','Tick the bills'],
+      res:{o:'Verification', t:'VERIFIED'},
+      rules:['Bulk verification takes only bills whose automatic checks all pass and whose build-up meets the bill.','For each, capacity is confirmed and curtailment and change in law are marked not claimed.','Any other bill: `Open the bill to verify it` › Verification Checklist (Mission 6).'],
+      block:'Checker: no `Verify selected`.' },
+    { who:'C', opt:true, t:'Send back what fails', where:'Invoice Verification › the bill', press:['Send back to the developer'],
+      res:{o:'Seller’s bill', f:'SUBMITTED', t:'REJECTED'},
+      rules:['It goes back with exactly what failed.','Only a bill still with SJVN can be sent back.'],
+      block:'Maker: no `Send back to the developer`.' },
+    { who:'S', opt:true, t:'Correct it and resubmit', where:'Seller Portal › My Invoices › the bill', press:['Revise the bill','Resubmit to SJVN'],
+      res:{o:'Seller’s bill', f:'REJECTED', t:'SUBMITTED'},
+      rules:['A Level 1 maker’s bill goes to its own checker, who sends it to SJVN again.'] },
+  ],
+  also:['“Approved without a completed verification” lists any bill that slipped through.','“Value awaiting verification” totals what is held up.'] },
+
+{ zone:'close', short:'Finance posting (SAP)', name:'Hand the month to Finance and SAP', screen:'Finance & SAP Integration › REIA › Finance Posting (FI)',
+  goal:'The month-end handover of REIA billing to corporate Finance: sales, purchases and credit notes, each booked once.',
+  start:'The month’s bills issued or accepted', end:'Posting {POSTED}',
+  steps:[
+    { who:'M', t:'Prepare the posting', where:'Finance Posting (FI) › Prepare a month', press:['Prepare the posting'],
+      fill:['Month','What Finance is booking: Sale to buyers (receivable), Purchase from developers (payable), or Credit notes issued'],
+      res:{o:'Posting', t:'PREPARED'},
+      rules:['Shows the documents waiting, energy, SJVN margin, pass-through and the total to book.','Open month-close items do not stop it; the Month-Close Board has the detail.'],
+      block:'Checker: no `Prepare the posting`.' },
+    { who:'C', t:'Push the sale to SAP', where:'Postings › the posting › SAP', press:['SAP','Push to SAP'],
+      res:{o:'Each invoice', text:'Sent to SAP'},
+      rules:['Each invoice goes to SAP as one document: the receivable on key 40 and its parts on key 50.','An invoice already in SAP is not sent again.','Pushing books the posting, so it is the checker’s step.'],
+      block:'Maker: no `Push to SAP`.' },
+    { who:'C', alt:['M'], noquiz:true, t:'Read back the FI document', where:'Postings › the posting › SAP', press:['Read back from SAP'],
+      res:{o:'Posting', f:'PREPARED', t:'POSTED'},
+      rules:['Once SAP has posted every invoice, the posting shows as posted, under SAP’s FI documents.'] },
+    { who:'C', opt:true, t:'Or record Finance’s voucher', where:'Postings › the posting', press:['Post','Post it'],
+      fill:['Finance document number, e.g. SAP-JV-2026-08-9901'],
+      res:{o:'Posting', f:'PREPARED', t:'POSTED'},
+      rules:['For a posting not sent to SAP: purchases, credit notes.','Whoever prepared a batch does not also book it.'],
+      refuse:['You prepared this posting, so someone else books it.'] },
+    { who:'C', opt:true, t:'Reverse a wrong posting', where:'Postings › the posting', press:['Reverse','Reverse it'],
+      fill:['Reason (at least 10 characters)'],
+      res:{o:'Posting', f:'POSTED', t:'REVERSED'},
+      rules:['A posting still PREPARED is withdrawn instead: `Withdraw`.','Once in SAP, SAP books it: no reversal from here.'] },
+  ],
+  also:['`Test SAP connection` checks the link before a push.','The platform books the sale; SAP takes the finance (FI) part.'] },
+
+{ zone:'close', short:'Deviation (DSM)', name:'Deviation settlement (DSM)', screen:'REIA Billing & Settlement › Others › Deviation Settlement (DSM)',
+  goal:'Bill each week’s grid deviation charge or credit at the figure NRPC published, as a supplementary bill.',
+  start:'NRPC has issued the week’s Deviation Settlement Account', end:'Week {DISPATCHED}, its bill approved',
+  steps:[
+    { who:'M', t:'Upload the NRPC statement', where:'Deviation Settlement (DSM)', press:['Upload official NRPC DSA','Import statement'],
+      fill:['Statement PDF'],
+      res:{o:'Statement', text:'Held for its week'},
+      rules:['NRPC prints Paid (+) / Received (−). The platform records + recoverable / − payable, the reverse sign.','1 LU = 100 MWh.'],
+      block:'Checker: no `Upload official NRPC DSA`, no `Raise from NRPC statement`.' },
+    { who:'M', t:'Raise the week from it', where:'Deviation Settlement (DSM)', press:['Raise from NRPC statement','Raise this week'],
+      fill:['Contract: the project’s PPA','NRPC statement (week)','The entity, as the statement names it','Notes (optional)'],
+      res:{o:'Week', t:'CALCULATED'},
+      rules:['The week is recorded at the figure NRPC published; nothing is computed here.','Nothing is billed until you generate the supplementary bill.'] },
+    { who:'M', t:'Generate the supplementary bill', where:'Deviation Settlement (DSM) › the week', press:['Generate supplementary bill','Dispatch & Create Invoice'],
+      fill:['Bill / Invoice No. (optional): auto-generated if blank (DSM-PPA / DSM-PSA)','Dispatch Date'],
+      res:{o:'Week', f:'CALCULATED', t:'DISPATCHED'},
+      rules:['Creates a supplementary invoice linked to the week, as a draft. Once raised, the week is frozen.'],
+      refuse:['This row is a manual estimate, not the published settlement, so it cannot be billed.'] },
+    { who:'M', t:'Submit the bill for approval', where:'Billing & Invoicing › the DSM bill', press:['Submit for SJVN Approval'],
+      res:{o:'DSM bill', f:'DRAFT', t:'UNDER_APPROVAL'},
+      rules:['Then the usual ladder by amount: checker, Finance above ₹1 lakh, HOD above ₹10 lakh.'] },
+    { who:'C', t:'Approve Level 1', where:'The DSM bill › Approval Workflow', press:['Approve Level 1'], fill:['Comments'],
+      res:{o:'Level 1', t:'APPROVED'} },
+  ],
+  also:['`Add manual estimate`: (actual − scheduled) MWh × rate, labelled an estimate. Use it to accrue, not to bill.','A reissued statement marks the week superseded: import the current one.','`View source` opens the NRPC statement a figure came from.'] },
+
+{ zone:'risk', short:'Contract changes', name:'Amend a live contract', screen:'REIA Billing & Settlement › Contracts (PPA/PSA)',
+  goal:'Change a signed contract’s terms from a date, as a new version, so the old terms stay on record.',
+  start:'Contract {ACTIVE}; an order or agreement changes its terms', end:'New version {ACTIVE}, old one {AMENDED}',
+  steps:[
+    { who:'M', t:'Draft the amendment', where:'Contracts (PPA/PSA) › the contract', press:['Amend Contract','Submit Amendment (Creates v2)'],
+      fill:['The terms that change','Effective From','Amendment Reason / Reference, e.g. CERC Tariff Order, Mutual Agreement, SCOD Extension'],
+      res:{o:'Version 2', t:'PENDING_REGULATORY_APPROVAL'},
+      rules:['A contract still DRAFT or UNDER_NEGOTIATION is corrected in place instead: `Edit Draft` › `Save Draft Changes`, no new version.','The effective date cannot be before the contract began.'],
+      refuse:['The amendment changes none of the contract terms — nothing to submit.','Give the date the amendment takes effect from — an amendment applies from a date.'],
+      block:'Checker: no `Amend Contract`.' },
+    { who:'C', t:'Make the new version live', where:'Version 2', press:['Update Lifecycle Stage','ACTIVE','Update Status'],
+      res:{o:'Version 2', f:'PENDING_REGULATORY_APPROVAL', t:'ACTIVE'},
+      rules:['Making it live is what retires the version it replaces.'],
+      block:'Maker: no ACTIVE in the list.' },
+    { who:'X', noquiz:true, t:'The old version retires', where:'Automatic, when version 2 goes live',
+      res:{o:'Version 1', f:'ACTIVE', t:'AMENDED'},
+      rules:['The two versions hand over on the effective date: the old one’s mappings end the day before, the new one’s start that day.'] },
+  ],
+  also:['Terminate, close, renew: the checker, through `Update Lifecycle Stage`. Terminating asks for the date, the ground and the notice reference.','Holds: Side quest 12.','Many contracts at once: the maker’s bulk upload.'] },
+
+{ zone:'risk', short:'Compliance & holds', name:'Compliance Desk: flags and holds', screen:'REIA Billing & Settlement › Others › Compliance Desk',
+  goal:'See which contracts fall short on tenure, commissioning, capacity, payment security or statutory approvals, ask for what is missing, and hold a contract when it must stop.',
+  start:'A contract misses something it owes', end:'Back in order, or held with a reason',
+  steps:[
+    { who:'X', noquiz:true, t:'Flag what is out of order', where:'Compliance Desk › Contract Compliance',
+      res:{o:'Contract', text:'Not compliant'},
+      rules:['Tenure, commissioning, capacity, payment security and statutory approvals, per contract.','Counts: Not compliant, Action due, In order.','The notice window (days, 90 to start with) sets how far ahead “Action due” looks.'] },
+    { who:'M', t:'Ask the counterparty', where:'Compliance Desk › the contract › the item', press:['Ask the counterparty'],
+      res:{o:'Request', text:'Sent to the counterparty'},
+      block:'Checker: no `Ask the counterparty`.' },
+    { who:'M', alt:['C'], t:'Put the contract on hold', where:'Compliance Desk › the contract › Hold', press:['Put on hold','Save'],
+      fill:['Reason (at least 15 characters)'],
+      res:{o:'Hold', text:'On hold'},
+      rules:['On hold, no new SJVN bill is generated on the contract: generating one is refused with “… is on hold, so … is stopped”.','Not held, the row reads “New bills and scheduling go ahead.”'] },
+    { who:'H', alt:['G'], opt:true, t:'Lift a breach for a stated time', where:'Compliance Desk › the contract › Hold', press:['Lift for a stated time','Save'],
+      fill:['Reason (at least 15 characters)','Lifted until (30 days at most)'],
+      res:{o:'Hold', text:'Lifted until the date'},
+      rules:['Only the HOD or Management lifts a hold that a breach put on.'],
+      block:'Maker and checker: no `Lift for a stated time`.' },
+    { who:'M', alt:['C','H'], opt:true, noquiz:true, t:'Release a manual hold', where:'Compliance Desk › the contract › Hold', press:['Release hold','Save'],
+      fill:['Reason (at least 15 characters)'],
+      res:{o:'Hold', text:'Not held'} },
+  ],
+  also:['When the automatic hold is switched off, a breach shows as “Flag only”.'] },
+
+{ zone:'risk', short:'CUF true-up', name:'Generation performance and the CUF true-up', screen:'REIA Billing & Settlement › Others › Generation Performance',
+  goal:'Compare energy with what each project’s capacity could make, and settle a contract year’s CUF shortfall with a credit note.',
+  start:'Contract year over, every month of it locked', end:'True-up credit note {ISSUED}',
+  steps:[
+    { who:'X', noquiz:true, t:'Assess the contract year', where:'Generation Performance › Contract-year CUF and the year-end true-up',
+      res:{o:'Assessment', text:'True-up due'},
+      rules:['CUF is assessed over the contract year (from the tenure start, from the COD in the first year), not month by month.','States: Year in progress, Waiting on locked energy, CUF met, True-up due, Note raised.'] },
+    { who:'M', alt:['F'], t:'Raise the true-up note', where:'Generation Performance › the contract year', press:['Raise true-up note'],
+      res:{o:'Credit note', t:'DRAFT'},
+      rules:['Raised on the year’s last bill, for the shortfall’s value.','With no bill presented in the year, there is nothing to set it against.'],
+      block:'Checker: no `Raise true-up note`.' },
+    { who:'C', alt:['F'], t:'Approve it', where:'REIA Billing & Settlement › Notes for Approval', press:['Approve & issue'],
+      res:{o:'Credit note', f:'DRAFT', t:'ISSUED'},
+      rules:['The queue shows it as “CUF true-up”.','Whoever raised it cannot approve it.'] },
+  ],
+  also:['By project: energy accounted, CUF over the period, months below the contract CUF.','Narrow it with From (month) and To (month).'] },
+
+{ zone:'risk', short:'Invoke security', name:'Invoke the payment security', screen:'REIA Billing & Settlement › Payment Security',
+  goal:'When a buyer stops paying, draw on its security in waterfall order and follow the claim until the money arrives.',
+  start:'Buyer’s bills 30 days or more past due', end:'Invocation {FUNDS_RECEIVED}',
+  steps:[
+    { who:'M', t:'Start the invocation', where:'Payment Security › Start waterfall invocation', press:['Invoke waterfall','Confirm invocation'],
+      fill:['Contract: the PSA','Amount (optional): leave it blank for everything 30 days or more past due and not already demanded'],
+      res:{o:'Invocation', t:'NOTICE_ISSUED'},
+      rules:['Waterfall order: the counterparty’s own instrument first, pooled funds last. On a PSA that is the buyer’s letter of credit.','A demand notice is raised and the counterparty is told. It cannot be undone from this screen.','On a PPA it is the seller’s guarantee: enter the amount and what the seller defaulted on.'],
+      block:'Checker: no `Invoke waterfall`.' },
+    { who:'C', t:'Lodge the claim with the bank', where:'Payment Security › Invocations › the row', press:['Claimed','Save'],
+      fill:['Claim submitted to the bank on','Bank / claim reference'],
+      res:{o:'Invocation', f:'NOTICE_ISSUED', t:'CLAIMED'},
+      rules:['The bank has 7 days from the claim to honour or refuse it. After that the claim is flagged as late.'],
+      block:'Maker: no `Claimed`, `Funds in` or `Bank refused`.' },
+    { who:'C', t:'Record the bank’s answer', where:'Payment Security › Invocations › the row', press:['Funds in','Save'],
+      fill:['Bank paid on'],
+      res:{o:'Invocation', f:'CLAIMED', t:'FUNDS_RECEIVED'},
+      rules:['If the bank says no: `Bank refused`, with the date. The invocation ends REJECTED.'] },
+    { who:'M', opt:true, noquiz:true, t:'File the bank’s letter', where:'Payment Security › Invocations › the row', press:['Attach bank letter'],
+      rules:['The demand letter itself: `View` or `PDF` on the row.'] },
+  ],
+  also:['How much cover is required, and the waterfall: Mission 4.'] },
+
+{ zone:'risk', short:'Release security', name:'Release the payment security', screen:'REIA Billing & Settlement › Payment Security › Release queue',
+  goal:'Give a company’s security back once it owes nothing and has no open dispute, on two signatures.',
+  start:'Nothing owed, no open dispute', end:'Instrument {RELEASED}',
+  steps:[
+    { who:'S', t:'Ask for the release', where:'Seller Portal › Payment Security › the instrument', press:['Request release','Send release request'],
+      fill:['Reason / milestone reference, e.g. COD achieved on 12 Aug 2026; EMD to be returned.'],
+      res:{o:'Instrument', t:'RELEASE_PENDING'},
+      rules:['The screen warns first if anything is outstanding or a dispute is open: a request made then is likely to be refused.','The buyer asks the same way. The maker or Finance can ask from the desk.'] },
+    { who:'F', t:'Sign off for Finance', where:'REIA Billing & Settlement › Payment Security › Release queue', press:['Sign off for Finance'],
+      res:{o:'Checklist', text:'Finance signed off'},
+      rules:['Each request shows its checklist, item by item, and its position today: dues and open disputes.'] },
+    { who:'C', t:'Release it', where:'Payment Security › Release queue', press:['Release'],
+      res:{o:'Instrument', f:'RELEASE_PENDING', t:'RELEASED'},
+      rules:['`Release` stays disabled until every item on the checklist is met.','`Refuse` asks why, and the company is told.','Finance can release too, but not one it signed off.'],
+      refuse:['You signed off this release for Finance, so someone else releases it.'],
+      block:'Maker: no `Release` in the queue.' },
+  ],
+  also:['Short cover can be treated as adequate for up to 90 days, with a reason: HOD or Management (Adequacy overrides).'] },
+
+{ zone:'risk', short:'Power diversion', name:'Power diversion on default', screen:'REIA Billing & Settlement › Others › Power Diversion',
+  goal:'When a buyer does not pay or does not take the power, sell it elsewhere and set the proceeds against its dues (PSA Art. 6.6).',
+  start:'Buyer in payment default, or power not requisitioned', end:'Diversion {RECOVERED}',
+  steps:[
+    { who:'M', t:'Record the diversion', where:'REIA Billing & Settlement › Others › Power Diversion', press:['+ Record Diversion','Record'],
+      fill:['PSA Contract (defaulting buyer)','Period','Reason: Payment default, or Power not requisitioned','Quantum Diverted (MWh)','Sale Rate (₹/MWh) and Expenses (₹)'],
+      res:{o:'Diversion', t:'RECORDED'},
+      rules:['Net gain: what the sale fetched, less the expenses.','Payment default needs a bill past its due date.'],
+      refuse:['… has no bill past its due date, so the buyer is not in payment default. If the buyer did not schedule the power, record it as not requisitioned.'],
+      block:'Checker: no `+ Record Diversion`.' },
+    { who:'M', t:'Recover the gain against dues', where:'Power Diversion › the row', press:['Recover against dues','Recover'],
+      res:{o:'Diversion', f:'RECORDED', t:'RECOVERED'},
+      rules:['Set against the buyer’s dues on the PSA, surcharge first and oldest bill first.','Whatever the PSA does not owe is held as the buyer’s advance (Side quest 4).'] },
+    { who:'M', opt:true, t:'Or bill the deficit', where:'Power Diversion › the row', press:['Bill the deficit','Draft debit note'],
+      res:{o:'Debit note', t:'DRAFT'},
+      rules:['A sale below costs leaves the buyer owing the deficit. It is drafted as a debit note on the buyer’s latest bill.'] },
+    { who:'F', alt:['C'], opt:true, t:'Approve the debit note', where:'REIA Billing & Settlement › Notes for Approval', press:['Approve & issue'],
+      res:{o:'Debit note', f:'DRAFT', t:'ISSUED'},
+      rules:['The queue shows it as “Power diversion”.'] },
+  ],
+  also:['`Cancel` takes a RECORDED diversion out of every total.'] },
+
+{ zone:'risk', short:'Energy banking', name:'Energy banking', screen:'REIA Billing & Settlement › Others › Energy Banking',
+  goal:'Credit the seller with energy the buyer could not take, draw it back later in the cycle, and settle what is left in cash once the cycle closes.',
+  start:'A locked month with energy the buyer could not take', end:'Cycle {SETTLED}',
+  steps:[
+    { who:'M', t:'Bank the energy', where:'Energy Banking › the PPA', press:['+ Bank Energy','Bank Energy'],
+      fill:['PPA Contract','Banking Cycle, e.g. FY2026-27, and Cycle Ends On','Month generated (locked)','Energy Banked (MWh)'],
+      res:{o:'Banked energy', t:'OPEN'},
+      rules:['Before you bank, the form shows what the seller would be paid if the energy were never drawn, so the discount is visible.','A cycle is the financial year unless the PPA sets a seasonal one (Apr–Sep / Oct–Mar).'],
+      refuse:['The cycle ended on …; energy cannot be banked into a closed cycle.'],
+      block:'Checker: no `+ Bank Energy`.' },
+    { who:'M', t:'Draw it back', where:'Energy Banking › the cycle', press:['Draw','Draw'],
+      fill:['Cycle','Draw (MWh)'],
+      res:{o:'Still available', text:'Less the draw'},
+      rules:['Only from an open cycle. A closed cycle settles in cash; it is not drawn from.'] },
+    { who:'C', t:'Settle closed cycles', where:'Energy Banking', press:['Settle Closed Cycles','Settle'],
+      res:{o:'Unused energy', t:'SETTLED'},
+      rules:['Unused energy settles in cash at a discount to tariff: 75% of tariff unless SJVN sets another figure.','It is billed, and passed on to the buyers for their share.'],
+      block:'Maker: no `Settle Closed Cycles`.' },
+  ],
+  also:['Totals: Banked, Drawn Back, Still Available, Cash Settled.'] },
+
+{ zone:'platform', short:'Additional charge', name:'Cover an officer who is away', screen:'Platform › Additional Charge & Break-glass',
+  goal:'When an officer is on leave, another officer holds the charge for a stated period and acts in their place, every action under their own name.',
+  start:'An officer goes on leave, tour or training', end:'Charge {IN_FORCE}, the work goes on',
+  steps:[
+    { who:'A', t:'Record the additional charge', where:'Platform › Additional Charge & Break-glass › Additional charges', press:['Record a charge','Record'],
+      fill:['Officer who is away','Officer who holds the charge','From, and To (up to 90 days)','Projects, if the charge covers only some','Reason and office order'],
+      res:{o:'Charge', t:'IN_FORCE'},
+      rules:['An officer cannot hold their own charge.','An administrator does not transact, so cannot hold a desk charge.','A charge runs for at most 90 days; record a new one to extend it.'],
+      block:'Desk officers: no `Record a charge`.' },
+    { who:'C', noquiz:true, t:'Act for the absent officer', where:'Additional Charge & Break-glass › You can act as (or the “Work as” list in the top bar)', press:['Act now'],
+      res:{o:'Top bar', text:'Acting for the absent officer'},
+      rules:['The banner reads “Additional charge: you are acting for … as … until …”.','What you do is recorded under your own name.'] },
+    { who:'C', noquiz:true, t:'Go back to your own role', where:'The banner in the top bar', press:['Work as myself'],
+      res:{o:'Top bar', text:'Your own role'} },
+    { who:'A', opt:true, noquiz:true, t:'End the charge early', where:'Additional charges › the charge', press:['Withdraw'],
+      res:{o:'Charge', text:'Withdrawn'} },
+  ],
+  also:['Management and the compliance auditor can read every charge.','Here the checker holds the charge. Any desk officer can.'] },
+
+{ zone:'platform', short:'Break-glass', name:'Break-glass: emergency access', screen:'Platform › Additional Charge & Break-glass › Break-glass',
+  goal:'When work cannot wait and nobody who holds the role can act, open that role for a few hours, on two approvals.',
+  start:'Urgent work, and nobody holding the role is available', end:'The grant closes by itself',
+  steps:[
+    { who:'M', noquiz:true, t:'Ask for break-glass', where:'Additional Charge & Break-glass › Break-glass', press:['Ask for break-glass'],
+      fill:['Role needed','For: 1 to 72 hours','What cannot wait, and why nobody who holds the role can act (at least 15 characters)'],
+      res:{o:'Request', t:'REQUESTED'},
+      rules:['It opens only after two approvals and closes by itself.','Ask as yourself, not while acting for someone.'],
+      refuse:['You already have a request or an open grant for that role'] },
+    { who:'G', noquiz:true, t:'Give the first approval', where:'Break-glass › the request', press:['Approve'],
+      res:{o:'Request', text:'A second approver is needed'},
+      rules:['Management, SJVN Admin or IT Super Admin approves. One of the two approvals must come from Management.','Nobody approves their own break-glass. `Refuse` asks why.'] },
+    { who:'A', noquiz:true, t:'Give the second approval', where:'Break-glass › the request', press:['Approve'],
+      res:{o:'Grant', t:'ACTIVE'},
+      refuse:['A second, different approver is needed','One of the two approvals must come from Management'] },
+    { who:'M', noquiz:true, t:'Work under the grant', where:'Top bar › Work as › Break-glass — the role',
+      res:{o:'Top bar', text:'Working as the role'},
+      rules:['The banner reads “Break-glass: you are working as … until …”.','Everything you change is flagged in the audit trail.','`End` closes it before the hours run out.'] },
+  ],
+  also:['For a planned absence, use an additional charge instead (Side quest 18).'] },
+
+{ zone:'platform', short:'Project access', name:'Who works on which project', screen:'Platform › Project Assignments',
+  goal:'Give each maker, checker and approver all REIA projects or only some, and make sure every project has someone at every tier.',
+  start:'A new officer, or a project changing hands', end:'Every project fully covered',
+  steps:[
+    { who:'A', t:'Set an officer’s projects', where:'Project Assignments › REIA officers › the officer', press:['Change','Save'],
+      fill:['Works on: All REIA projects, or Only the projects ticked below','Find a project: contract no., seller, buyer or type'],
+      res:{o:'Officer', text:'All projects, or n selected'},
+      rules:['Only SJVN Admin (or IT Super Admin) changes it. Management and the compliance auditor read it.'],
+      block:'Maker, checker and HOD: the page is not on their menu.' },
+    { who:'X', noquiz:true, t:'Check every project is covered', where:'Project Assignments › Who covers each project',
+      res:{o:'Cover', text:'Full'},
+      rules:['“No …” names the tier nobody covers.','A daily alert tells SJVN Admin when a project has nobody to act at a tier.'] },
+    { who:'M', opt:true, noquiz:true, t:'Work on those projects only', where:'Every REIA screen',
+      rules:['An officer on selected projects sees only those projects’ work.'] },
+  ],
+  also:['An additional charge can also be limited to some projects (Side quest 18).'] },
+
+{ zone:'platform', short:'Audit trail', name:'Read the audit trail', screen:'Platform › Audit Trail',
+  goal:'A complete, tamper-proof history of every action taken on the platform: who, when, and the value before and after.',
+  start:'Any question about who did what', end:'The record found, the chain checked',
+  steps:[
+    { who:'X', noquiz:true, t:'Log every action', where:'Automatic, on every change',
+      res:{o:'Event', text:'Recorded'},
+      rules:['Who, when, and the value before and after.','A change made while acting for someone is its own entry.'] },
+    { who:'A', t:'Find the record', where:'Platform › Audit Trail', press:['View full details'],
+      fill:['Search people, actions, record IDs, reasons, details…','Narrow by module, action, user, record type or date'],
+      rules:['The counts at the top: Events, People, Security events, Exports & downloads, Duty conflicts, Record integrity.','Duty conflicts: `Review them`.'] },
+    { who:'A', t:'Check nothing was altered', where:'Audit Trail › Record integrity', press:['Verify full chain'],
+      res:{o:'Record integrity', text:'Checked'},
+      rules:['A broken link is named: `Open the broken record`.'] },
+    { who:'A', opt:true, t:'Export the evidence', where:'Audit Trail', press:['Audit Report (PDF)'],
+      rules:['Also `Activity Report (PDF)` and `Export CSV`.'] },
+  ],
+  also:['The compliance auditor reads the same trail.'] },
 ];
 
 /* ───────────────────────── helpers ───────────────────────── */
@@ -526,9 +954,9 @@ const ICON = {
   moon:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7z" fill="currentColor"/></svg>',
 };
 const KIND = {};
-'APPROVED ACTIVE VERIFIED LOCKED PAID CLOSED ISSUED SETTLED CONFIRMED RELEASED FUNDS_RECEIVED MATCHED ACCEPTED AGREED RECEIVED'.split(' ').forEach((k) => { KIND[k] = 'good'; });
+'APPROVED ACTIVE VERIFIED LOCKED PAID CLOSED ISSUED SETTLED CONFIRMED RELEASED FUNDS_RECEIVED MATCHED ACCEPTED AGREED RECEIVED RECOVERED POSTED APPLIED REFUNDED IN_FORCE DISPATCHED'.split(' ').forEach((k) => { KIND[k] = 'good'; });
 'REJECTED TERMINATED CANCELLED DISPUTED MISMATCH EXPIRED ESCALATED OBJECTED RETURNED_BY_CHECKER'.split(' ').forEach((k) => { KIND[k] = 'bad'; });
-'PENDING PENDING_L2 PENDING_CHECKER SUBMITTED UNDER_APPROVAL UNDER_REVIEW INFO_REQUESTED PENDING_SIGN_OFF NEEDS_REVIEW RELEASE_PENDING NOTICE_ISSUED CLAIMED ACKNOWLEDGED UNDER_NEGOTIATION PENDING_REGULATORY_APPROVAL NEARING_EXPIRY PARTIALLY_PAID PARTIALLY_UTILIZED VALIDATED REOPENED ELIGIBLE UPHELD'.split(' ').forEach((k) => { KIND[k] = 'wait'; });
+'PENDING PENDING_L2 PENDING_CHECKER SUBMITTED UNDER_APPROVAL UNDER_REVIEW INFO_REQUESTED PENDING_SIGN_OFF NEEDS_REVIEW RELEASE_PENDING NOTICE_ISSUED CLAIMED ACKNOWLEDGED UNDER_NEGOTIATION PENDING_REGULATORY_APPROVAL NEARING_EXPIRY PARTIALLY_PAID PARTIALLY_UTILIZED VALIDATED REOPENED ELIGIBLE UPHELD RECORDED PREPARED CALCULATED OPEN REQUESTED'.split(' ').forEach((k) => { KIND[k] = 'wait'; });
 'DRAFT NOT_STARTED'.split(' ').forEach((k) => { KIND[k] = 'start'; });
 
 const st = (s, big) => `<span class="st ${KIND[s] || ''}${big ? ' big' : ''}">${esc(String(s).replace(/_/g, ' '))}</span>`;
@@ -541,6 +969,14 @@ const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
 const crore = (n) => `₹${(n / 1e7).toFixed(2)} Cr`;
 const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
+// Missions and side quests play on one engine: each has an id ("m3", "q7") and
+// its own list. A mission's progress stays under its number, as it always was.
+MISSIONS.forEach((m) => { m.id = 'm' + m.n; m.kind = 'Mission'; m.list = MISSIONS; });
+QUESTS.forEach((q, i) => { q.n = i + 1; q.id = 'q' + q.n; q.kind = 'Quest'; q.list = QUESTS; });
+const BOOK = Object.fromEntries([...MISSIONS, ...QUESTS].map((m) => [m.id, m]));
+const doneKey = (m) => (m.kind === 'Mission' ? m.n : m.id);
+const isDone = (m) => !!P.done[doneKey(m)];
+const zoneName = (m) => (m.kind === 'Mission' ? (m.zone === 'setup' ? 'One-time setup' : 'Every month') : 'Side quest · ' + QZONES.find(([z]) => z === m.zone)[1]);
 const playersOf = (m) => [...new Set(m.steps.map((s) => s.who))];
 const loginsIn = (m) => { let n = 0; let prev = null; m.steps.forEach((s) => { if (s.who !== prev && s.who !== 'X') n++; prev = s.who; }); return n; };
 const loginHint = (k) => k === 'X' ? 'No log-in: the platform does this on its own.'
@@ -560,9 +996,10 @@ function sessions(filter) {
 }
 const TOTAL_STEPS = MISSIONS.reduce((a, m) => a + m.steps.length, 0);
 const LOGINS = sessions('all').filter((s) => s.who !== 'X').length;
-const MAXXP = TOTAL_STEPS * 10 + 100;
+const QUEST_STEPS = QUESTS.reduce((a, q) => a + q.steps.length, 0);
+const MAXXP = (TOTAL_STEPS + QUEST_STEPS) * 10 + 100;
 const RANKS = [[0,'Trainee'],[0.2,'Desk Officer'],[0.45,'Senior Officer'],[0.7,'Desk Lead'],[1,'REIA Pro']];
-const xpNow = () => MISSIONS.reduce((a, m) => a + (P.done[m.n] ? m.steps.length * 10 : 0), 0) + (P.best || 0) * 10;
+const xpNow = () => [...MISSIONS, ...QUESTS].reduce((a, m) => a + (isDone(m) ? m.steps.length * 10 : 0), 0) + (P.best || 0) * 10;
 const rankOf = (x) => { let r = RANKS[0][1]; RANKS.forEach(([t, n]) => { if (x / MAXXP >= t - 1e-9) r = n; }); return r; };
 
 /* ───────────────────────── shell ───────────────────────── */
@@ -580,22 +1017,22 @@ function paintTheme() {
   $('#theme').setAttribute('aria-label', dark ? 'Switch to light' : 'Switch to dark');
 }
 function paintTabs() {
-  const sec = /^m\d+$/.test(current) ? 'missions' : current;
+  const sec = /^m\d+$/.test(current) ? 'missions' : /^q\d+$/.test(current) ? 'quests' : current;
   $('#tabs').innerHTML = TABS.map(([id, label]) => `<button class="tab" type="button" data-go="${id}"${id === sec ? ' aria-current="page"' : ''}>${label}</button>`).join('');
 }
 
 function go(token, push = true) {
-  if (token === 'missions') token = 'm' + (P.lastM || (MISSIONS.find((m) => !P.done[m.n]) || MISSIONS[0]).n);
+  if (token === 'missions') token = 'm' + (P.lastM || (MISSIONS.find((m) => !isDone(m)) || MISSIONS[0]).n);
   const views = { map:viewMap, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
-  const mm = /^m(\d+)$/.exec(token);
-  if (!mm && !views[token]) token = 'map';
-  if (mm && !MISSIONS[Number(mm[1]) - 1]) token = 'm1';
+  const playable = /^[mq]\d+$/.test(token);
+  if (!playable && !views[token]) token = 'map';
+  if (playable && !BOOK[token]) token = token[0] === 'q' ? 'quests' : 'm1';
   exitPlay();
   closeDrawer(true);
   current = token;
-  const m2 = /^m(\d+)$/.exec(token);
-  app.innerHTML = m2 ? viewMission(Number(m2[1])) : views[token]();
-  if (m2) { P.lastM = Number(m2[1]); save(); }
+  const book = BOOK[token];
+  app.innerHTML = book ? viewMission(token) : views[token]();
+  if (book && book.kind === 'Mission') { P.lastM = book.n; save(); }
   after(token);
   paintTabs(); paintXP();
   window.scrollTo(0, 0);
@@ -604,7 +1041,7 @@ function go(token, push = true) {
 function after(token) {
   if (token === 'powers') paintPowers();
   if (token === 'money') paintMoney();
-  if (/^m\d+$/.test(token)) fitLanes();
+  if (/^[mq]\d+$/.test(token)) fitLanes();
 }
 // Side-by-side lanes need about 200px a role; narrower, the cards stack and keep their lane as a stagger.
 function fitLanes() {
@@ -649,7 +1086,8 @@ function mapList() {
 }
 function viewMap() {
   const stats = [[MISSIONS.length,'missions'],[TOTAL_STEPS,'steps'],[8,'players'],[LOGINS,'log-ins, full run']];
-  const x = xpNow(); const doneN = MISSIONS.filter((m) => P.done[m.n]).length; const next = MISSIONS.find((m) => !P.done[m.n]);
+  const x = xpNow(); const doneN = MISSIONS.filter(isDone).length; const next = MISSIONS.find((m) => !isDone(m));
+  const questsN = QUESTS.filter(isDone).length;
   return `
   <section class="intro">
     <div>
@@ -659,7 +1097,7 @@ function viewMap() {
       <div class="me">
         <div><small>Your rank</small><b>${esc(rankOf(x))}</b></div>
         <span class="me-bar" aria-hidden="true"><i style="width:${Math.min(100, x / MAXXP * 100).toFixed(1)}%"></i></span>
-        <div class="me-n"><b>${doneN}</b> of ${MISSIONS.length} missions done · best quiz <b>${P.best || 0}</b>/10 · ${x} XP</div>
+        <div class="me-n"><b>${doneN}</b> of ${MISSIONS.length} missions done · <b>${questsN}</b> of ${QUESTS.length} side quests · best quiz <b>${P.best || 0}</b>/10 · ${x} XP</div>
         <button class="btn primary" type="button" data-go="m${next ? next.n : 1}">${ICON.play} ${next ? `Next: ${esc(next.short)}` : 'Replay mission 1'}</button>
       </div>
     </div>
@@ -692,8 +1130,8 @@ function handLabel(from, to) {
   return { cls:'', html:`${rb(to,'xs')} ${from === 'X' ? 'Log in as' : 'Log out, log in as'} ${esc(R[to].short)}` };
 }
 function stepCard(m, s, i) {
-  return `<button class="step${s.opt ? ' opt' : ''}" type="button" data-step="${m.n}:${i}" style="--c:var(--c-${R[s.who].c})">
-    <span class="sc-top">${rb(s.who,'sm')}<span class="sc-who">${esc(R[s.who].short)}</span><span class="sc-no">${m.n}.${i + 1}</span>${s.opt ? '<span class="tag">If needed</span>' : ''}${s.alt ? `<span class="tag">or ${s.alt.map((k) => esc(R[k].short)).join(', ')}</span>` : ''}${s.block ? `<span class="sc-lock" title="Blocked for the wrong role: open for details">${ICON.lock}</span>` : ''}<span class="sc-go" aria-hidden="true">›</span></span>
+  return `<button class="step${s.opt ? ' opt' : ''}" type="button" data-step="${m.id}:${i}" style="--c:var(--c-${R[s.who].c})">
+    <span class="sc-top">${rb(s.who,'sm')}<span class="sc-who">${esc(R[s.who].short)}</span><span class="sc-no">${m.kind === 'Quest' ? 'Q' : ''}${m.n}.${i + 1}</span>${s.opt ? '<span class="tag">If needed</span>' : ''}${s.alt ? `<span class="tag">or ${s.alt.map((k) => esc(R[k].short)).join(', ')}</span>` : ''}${s.block ? `<span class="sc-lock" title="Blocked for the wrong role: open for details">${ICON.lock}</span>` : ''}<span class="sc-go" aria-hidden="true">›</span></span>
     <span class="sc-t">${fmt(s.t)}</span>
     ${s.press ? `<span class="sc-press">${s.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</span>` : ''}
     ${s.res ? `<span class="sc-res">${resHtml(s.res)}</span>` : ''}
@@ -729,8 +1167,9 @@ function missionExtra(m) {
     <div><span>Penalty<small>CUF below the PPA minimum is assessed at the year end</small></span><span class="v">₹</span></div></div></section>`;
   return '';
 }
-function viewMission(n) {
-  const m = MISSIONS[n - 1];
+function viewMission(id) {
+  const m = BOOK[id]; const n = m.n; const L = m.list;
+  const word = m.kind === 'Quest' ? 'quest' : 'mission';
   const cols = playersOf(m);
   const colOf = (k) => cols.indexOf(k) + 1;
   let row = 2; const cells = [];
@@ -749,17 +1188,18 @@ function viewMission(n) {
   const heads = cols.map((k, i) => `<div class="lhead" style="--col:${i + 1}">${rb(k,'lg')}<b>${esc(R[k].short)}</b><small>${esc(R[k].side === 'Company' ? 'company log-in' : R[k].side === 'System' ? 'no log-in' : 'SJVN log-in')}</small></div>`).join('');
   const rails = cols.map((k, i) => `<span class="rail" style="--col:${i + 1};--i:${i};--end:${row};--c:var(--c-${R[k].c})"></span>`).join('');
   const blocks = m.steps.filter((s) => s.block);
-  const done = !!P.done[n];
+  const done = isDone(m);
   return `
-  <nav class="mnav" aria-label="Missions">
-    ${MISSIONS.map((x) => `<button class="chip${P.done[x.n] ? ' done' : ''}" type="button" data-go="m${x.n}"${x.n === n ? ' aria-current="true"' : ''} title="${esc(x.name)}">${x.n}</button>`).join('')}
+  <nav class="mnav" aria-label="${m.kind === 'Quest' ? 'Side quests' : 'Missions'}">
+    ${m.kind === 'Quest' ? '<button class="lnk" type="button" data-go="quests">← All side quests</button>' : ''}
+    ${L.map((x) => `<button class="chip${isDone(x) ? ' done' : ''}" type="button" data-go="${x.id}"${x.n === n ? ' aria-current="true"' : ''} title="${esc(x.name)}">${x.n}</button>`).join('')}
     <span class="sp"></span>
-    ${n > 1 ? `<button class="lnk" type="button" data-go="m${n - 1}">← ${esc(MISSIONS[n - 2].short)}</button>` : ''}
-    ${n < MISSIONS.length ? `<button class="lnk" type="button" data-go="m${n + 1}">${esc(MISSIONS[n].short)} →</button>` : ''}
+    ${n > 1 ? `<button class="lnk" type="button" data-go="${L[n - 2].id}">← ${esc(L[n - 2].short)}</button>` : ''}
+    ${n < L.length ? `<button class="lnk" type="button" data-go="${L[n].id}">${esc(L[n].short)} →</button>` : ''}
   </nav>
   <section class="mhead">
     <div>
-      <p class="eyebrow">${m.zone === 'setup' ? 'One-time setup' : 'Every month'} · Mission ${n} of ${MISSIONS.length}</p>
+      <p class="eyebrow">${esc(zoneName(m))} · ${m.kind} ${n} of ${L.length}</p>
       <h1>${esc(m.name)}</h1>
       <p class="lede">${fmt(m.goal)}</p>
       <div class="mstats">
@@ -769,8 +1209,8 @@ function viewMission(n) {
         <span class="mplayers">${cols.map((k) => rb(k,'md')).join('')}</span>
       </div>
       <div class="mact">
-        <button class="btn primary" type="button" data-play="${n}">${ICON.play} Play this mission</button>
-        <button class="btn${done ? ' ok' : ''}" type="button" data-done="${n}" aria-pressed="${done}">${ICON.check} ${done ? 'Done' : 'Mark as done'}</button>
+        <button class="btn primary" type="button" data-play="${m.id}">${ICON.play} Play this ${word}</button>
+        <button class="btn${done ? ' ok' : ''}" type="button" data-done="${m.id}" aria-pressed="${done}">${ICON.check} ${done ? 'Done' : 'Mark as done'}</button>
       </div>
     </div>
     <dl class="mmeta">
@@ -793,13 +1233,17 @@ function tierTable(k) {
 
 /* ───────────────────────── drawer ───────────────────────── */
 let lastFocus = null;
-function openDrawer(n, i) {
-  const m = MISSIONS[n - 1]; const s = m.steps[i]; if (!s) return;
+function lastWord(m) {
+  if (m.kind === 'Quest') return m.n < QUESTS.length ? `Quest complete. Next side quest: ${esc(QUESTS[m.n].name)}.` : 'That was the last side quest. The board shows which are still open.';
+  return m.n < MISSIONS.length ? `Mission complete. Next mission: ${esc(MISSIONS[m.n].name)}.` : 'The month is closed. Next month starts again at Energy.';
+}
+function openDrawer(id, i) {
+  const m = BOOK[id]; if (!m) return; const s = m.steps[i]; if (!s) return; const n = m.n;
   const prev = m.steps[i - 1]; const next = m.steps[i + 1];
   const switching = !prev || prev.who !== s.who;
   const lists = s.lists ? Object.entries(s.lists).map(([h, items]) => `<div class="dsec"><h4>${esc(h)}</h4><ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('') : '';
   drawer.innerHTML = `
-    <div class="d-top">${rb(s.who,'lg')}<div><small>Mission ${n} · step ${i + 1} of ${m.steps.length}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="d-top">${rb(s.who,'lg')}<div><small>${m.kind === 'Quest' ? 'Side quest' : 'Mission'} ${n} · step ${i + 1} of ${m.steps.length}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
     <h2>${fmt(s.t)}</h2>
     <div class="dsec"><h4>Log-in</h4><div class="dlog">${s.who === 'X' ? ICON.auto : ICON.login}<span>${switching && prev ? `Log out of ${esc(R[prev.who].short)}. ` : ''}${switching ? esc(loginHint(s.who)) : 'Same log-in as the step before.'}</span></div></div>
     ${s.where ? `<div class="dsec"><h4>Where</h4><p>${esc(s.where)}</p></div>` : ''}
@@ -810,8 +1254,8 @@ function openDrawer(n, i) {
     ${s.rules ? `<div class="dsec"><h4>What the platform applies</h4><ul>${s.rules.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
     ${s.refuse ? `<div class="dsec"><h4>If it refuses, you see</h4>${s.refuse.map((x) => `<p class="quote">“${esc(x)}”</p>`).join('')}</div>` : ''}
     ${s.block ? `<div class="dsec"><h4>Blocked for the wrong role</h4><div class="row" style="color:var(--bad)">${ICON.lock}<span>${fmt(s.block)}</span></div></div>` : ''}
-    <div class="dsec"><h4>Next</h4><p>${next ? `${next.who !== s.who ? (next.who === 'X' ? 'The platform takes over: ' : `Hand over to ${esc(R[next.who].name)}: `) : 'Same person: '}${fmt(next.t)}` : (n < MISSIONS.length ? `Mission complete. Next mission: ${esc(MISSIONS[n].name)}.` : 'The month is closed. Next month starts again at Energy.')}</p></div>
-    <div class="dnav"><button class="btn" type="button" data-open="${n}:${i - 1}"${i === 0 ? ' disabled' : ''}>← Previous step</button><button class="btn" type="button" data-open="${n}:${i + 1}"${!next ? ' disabled' : ''}>Next step →</button></div>`;
+    <div class="dsec"><h4>Next</h4><p>${next ? `${next.who !== s.who ? (next.who === 'X' ? 'The platform takes over: ' : `Hand over to ${esc(R[next.who].name)}: `) : 'Same person: '}${fmt(next.t)}` : lastWord(m)}</p></div>
+    <div class="dnav"><button class="btn" type="button" data-open="${id}:${i - 1}"${i === 0 ? ' disabled' : ''}>← Previous step</button><button class="btn" type="button" data-open="${id}:${i + 1}"${!next ? ' disabled' : ''}>Next step →</button></div>`;
   if (!drawer.classList.contains('open')) lastFocus = document.activeElement;
   drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); scrim.hidden = false;
   drawer.scrollTop = 0;
@@ -825,17 +1269,18 @@ function closeDrawer(silent) {
 
 /* ───────────────────────── play mode ───────────────────────── */
 let play = null; let swTimer = null; let swNext = null;
-function startPlay(n) {
+function startPlay(id) {
+  if (!BOOK[id]) return;
   closeDrawer(true);
-  play = { n, i:0 };
+  play = { id, i:0 };
   document.body.classList.add('playing');
   showStep();
 }
 function showStep() {
   if (!play) return;
-  const m = MISSIONS[play.n - 1]; const s = m.steps[play.i];
-  $$('.step').forEach((el) => el.classList.toggle('cur', el.dataset.step === `${play.n}:${play.i}`));
-  const el = $(`.step[data-step="${play.n}:${play.i}"]`);
+  const m = BOOK[play.id]; const s = m.steps[play.i];
+  $$('.step').forEach((el) => el.classList.toggle('cur', el.dataset.step === `${play.id}:${play.i}`));
+  const el = $(`.step[data-step="${play.id}:${play.i}"]`);
   if (el) el.scrollIntoView({ block:'center', inline:'center', behavior: REDUCE ? 'auto' : 'smooth' });
   hud.hidden = false;
   hud.innerHTML = `<div class="hud-dots">${m.steps.map((x, k) => `<span class="${k === play.i ? 'on' : k < play.i ? 'past' : ''}"></span>`).join('')}</div>
@@ -844,7 +1289,7 @@ function showStep() {
 }
 function stepPlay(d) {
   if (!play) return;
-  const m = MISSIONS[play.n - 1]; const j = play.i + d;
+  const m = BOOK[play.id]; const j = play.i + d;
   if (j < 0) return;
   if (j >= m.steps.length) { finishPlay(); return; }
   const from = m.steps[play.i].who; const to = m.steps[j].who;
@@ -862,13 +1307,14 @@ function showSwitch(from, to) {
   swTimer = setTimeout(() => { if (swNext) swNext(); }, 2200);
 }
 function finishPlay() {
-  const n = play.n; const m = MISSIONS[n - 1];
-  const gain = P.done[n] ? 0 : m.steps.length * 10;
+  const m = BOOK[play.id]; const n = m.n; const done = isDone(m); const more = n < m.list.length;
+  const what = m.kind === 'Quest' ? 'Side quest' : 'Mission';
+  const gain = done ? 0 : m.steps.length * 10;
   clearTimeout(swTimer);
-  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="Mission complete"><p class="eyebrow">Mission ${n} complete</p><h3>${esc(m.name)}</h3>
+  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="${what} complete"><p class="eyebrow">${what} ${n} complete</p><h3>${esc(m.name)}</h3>
     <div class="sw-row"><div class="sw-who">${playersOf(m).map((k) => rb(k,'md')).join('')}</div></div>
     <p class="sw-hint">${m.steps.length} steps, ${loginsIn(m)} log-ins.${gain ? ` Marking it done adds ${gain} XP.` : ' Already marked done.'}</p>
-    <div class="sw-btns">${P.done[n] ? '' : `<button class="btn primary" type="button" data-sw="done">${ICON.check} Mark done${n < MISSIONS.length ? ' and go to the next' : ''}</button>`}${P.done[n] && n < MISSIONS.length ? `<button class="btn primary" type="button" data-sw="next">Next mission →</button>` : ''}<button class="btn" type="button" data-sw="stay">Stay here</button></div></div>`;
+    <div class="sw-btns">${done ? '' : `<button class="btn primary" type="button" data-sw="done">${ICON.check} Mark done${more ? ' and go to the next' : ''}</button>`}${done && more ? `<button class="btn primary" type="button" data-sw="next">Next ${m.kind === 'Quest' ? 'quest' : 'mission'} →</button>` : ''}<button class="btn" type="button" data-sw="stay">Stay here</button></div></div>`;
   sw.hidden = false;
   swNext = null;
   const b = $('.sw-btns .btn', sw); if (b) b.focus({ preventScroll:true });
@@ -890,11 +1336,13 @@ function playerCard(k) {
   const cant = MX.filter((row) => row.cell[k] === 'x');
   const ms = MISSIONS.filter((m) => m.steps.some((s) => s.who === k || (s.alt || []).includes(k)));
   const steps = MISSIONS.reduce((a, m) => a + m.steps.filter((s) => s.who === k).length, 0);
+  const qs = QUESTS.filter((q) => q.steps.some((s) => s.who === k || (s.alt || []).includes(k)));
   return `<article class="pc" id="p-${k}" style="--c:var(--c-${r.c})">
     <header>${rb(k,'xl')}<div><p class="pc-cls">${esc(r.cls)}</p><h3>${esc(r.name)}</h3><p class="pc-lvl">${esc(r.level)}</p></div></header>
     <p class="pc-line">${esc(r.line)}</p>
     <div class="pc-stats"><div><b>${ms.length}</b><span>missions</span></div><div><b>${steps}</b><span>steps</span></div><div><b>${can.length}</b><span>powers</span></div><div><b>${cant.length}</b><span>blocked</span></div></div>
     ${ms.length ? `<div class="pc-ms">${ms.map((m) => `<button class="chip" type="button" data-go="m${m.n}"><span class="chip-n">${m.n}</span>${esc(m.short)}</button>`).join('')}</div>` : ''}
+    ${qs.length ? `<details><summary>Side quests (${qs.length})</summary><div class="pc-ms">${qs.map((q) => `<button class="chip" type="button" data-go="${q.id}"><span class="chip-n">Q${q.n}</span>${esc(q.short)}</button>`).join('')}</div></details>` : ''}
     <details open><summary>Can do (${can.length})</summary><ul class="pc-can">${can.map((row) => `<li>${ICON.check}<span>${fmt(row.a)}${row.cell[k] === 'y' ? ' <em>(shared)</em>' : ''}<span class="mod">${esc(row.mod)}</span></span></li>`).join('')}</ul></details>
     ${cant.length ? `<details><summary>Blocked by the platform (${cant.length})</summary><ul class="pc-cant">${cant.map((row) => `<li>${ICON.lock}<span>${fmt(row.a)}<span class="mod">${esc(row.mod)}</span></span></li>`).join('')}</ul></details>` : ''}
     ${k === 'S' || k === 'B' ? `<details><summary>Inside the company: Levels 1–3</summary>${tierTable(k)}</details>` : ''}
@@ -975,7 +1423,7 @@ function viewRelay() {
       <div class="bars-mini" aria-label="Log-ins per mission">${MISSIONS.map((m) => `<div class="bm"><span>${m.n} · ${esc(m.short)}</span><i style="width:${(loginsIn(m) / max * 100).toFixed(0)}%"></i><b>${loginsIn(m)}</b></div>`).join('')}</div>
     </section>
     <ol class="relay">${ss.map((s, idx) => `<li class="rl" style="--c:var(--c-${R[s.who].c})">${rb(s.who,'lg')}<div class="rl-h"><small>${s.who === 'X' ? 'Automatic' : `Log-in ${++count}`}</small><b>${esc(R[s.who].name)}</b><span>${esc(loginHint(s.who))}</span></div>
-      <ol class="rl-acts">${s.items.map((it) => `<li><button type="button" data-open="${it.m.n}:${it.i}"><span class="mtag">${it.m.n}.${it.i + 1}</span><span>${fmt(it.s.t)}${it.s.opt ? ' <em>(if needed)</em>' : ''}</span></button></li>`).join('')}</ol>
+      <ol class="rl-acts">${s.items.map((it) => `<li><button type="button" data-open="${it.m.id}:${it.i}"><span class="mtag">${it.m.n}.${it.i + 1}</span><span>${fmt(it.s.t)}${it.s.opt ? ' <em>(if needed)</em>' : ''}</span></button></li>`).join('')}</ol>
       ${idx < ss.length - 1 && s.who !== 'X' ? `<div class="rl-out">Log out</div>` : '<div class="rl-out" style="visibility:hidden">·</div>'}</li>`).join('')}</ol>`;
 }
 
@@ -1045,12 +1493,28 @@ function paintMoney() {
 }
 
 /* ───────────────────────── view: side quests ───────────────────────── */
+// The baton for a card: who acts, in turn, with each log-in once.
+function relayOf(m) {
+  const out = [];
+  m.steps.forEach((s) => { if (!out.length || out[out.length - 1] !== s.who) out.push(s.who); });
+  return out;
+}
 function viewSide() {
+  const doneN = QUESTS.filter(isDone).length;
+  const card = (q) => {
+    const done = isDone(q);
+    return `<article class="sqc${done ? ' done' : ''}">
+      <div class="sq-top"><span class="sq-n" aria-hidden="true">${done ? '✓' : q.n}</span><span class="sq-meta">${q.steps.length} steps · ${loginsIn(q)} log-ins${done ? ' · done' : ''}</span></div>
+      <h3><a href="#${q.id}" data-go="${q.id}">${esc(q.name)}</a></h3>
+      <p class="where">${esc(q.screen)}</p>
+      <p class="sq-goal">${fmt(q.goal)}</p>
+      <div class="flow" aria-label="Who acts, in turn">${relayOf(q).map((k) => rb(k,'sm')).join('<span class="farr">→</span>')}</div>
+      <div class="sq-act"><button class="btn primary" type="button" data-play="${q.id}">${ICON.play} Play</button><button class="btn" type="button" data-go="${q.id}">Open the lanes</button></div>
+    </article>`;
+  };
   return `<section><p class="eyebrow">Side quests</p><h1>Everything else on the desk</h1>
-    <p class="lede">The screens under “Others” and the platform pages, each as a mini-flow: who starts it, who decides, and the rule that matters.</p></section>
-    <div class="sq">${SIDE.map((q) => `<article class="sqc"><h3>${esc(q.t)}</h3><p class="where">${esc(q.where)}</p>
-      <div class="flow">${q.flow.map(([ks, l]) => `<span class="fchip"><span class="rbs">${ks.map((k) => rb(k,'xs')).join('')}</span>${fmt(l)}</span>`).join('<span class="farr">→</span>')}</div>
-      <ul>${q.rules.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></article>`).join('')}</div>`;
+    <p class="lede">The screens beyond the ten missions, each played the same way: lanes for each player, the button to press, where to log out and who logs in next. ${doneN} of ${QUESTS.length} done.</p></section>
+    ${QZONES.map(([z, label]) => `<h2 class="side-h">${esc(label)}</h2><div class="sq">${QUESTS.filter((q) => q.zone === z).map(card).join('')}</div>`).join('')}`;
 }
 
 /* ───────────────────────── view: quiz ───────────────────────── */
@@ -1063,6 +1527,11 @@ const POOL = (() => {
     const qx = QX[`${m.n}:${i}`];
     if (s.who === 'X' || s.noquiz || qx === 'skip') return;
     pool.push({ q:`Whose move: “${s.t}”?`, press:s.press || null, ctx:`Mission ${m.n} · ${m.short}`, ans:s.who, not:[s.who, ...(s.alt || []), ...(qx || []), ...(s.who === 'H' ? ['G'] : [])], why:(s.rules && s.rules[0]) || s.block || '' });
+  }));
+  QUESTS.forEach((m) => m.steps.forEach((s, i) => {
+    const qx = QX[`${m.id}:${i}`];
+    if (s.who === 'X' || s.noquiz || qx === 'skip') return;
+    pool.push({ q:`Whose move: “${s.t}”?`, press:s.press || null, ctx:`Side quest ${m.n} · ${m.short}`, ans:s.who, not:[s.who, ...(s.alt || []), ...(qx || []), ...(s.who === 'H' ? ['G'] : [])], why:(s.rules && s.rules[0]) || s.block || '' });
   }));
   MX.forEach((r) => {
     const ys = ROLE_ORDER.filter((k) => r.cell[k] === 'Y'); const yy = ROLE_ORDER.filter((k) => r.cell[k] === 'y');
@@ -1080,7 +1549,7 @@ function newRound() {
   QZ = { qs, i:0, score:0, picked:null, res:[] };
 }
 function viewQuiz() {
-  if (!QZ) return `<section><p class="eyebrow">Quiz</p><h1>Who does it?</h1><p class="lede">Ten questions drawn from the missions and the powers matrix. Pick the role that does each action. Your best score adds to your XP.</p></section>
+  if (!QZ) return `<section><p class="eyebrow">Quiz</p><h1>Who does it?</h1><p class="lede">Ten questions drawn from the missions, the side quests and the powers matrix. Pick the role that does each action. Your best score adds to your XP.</p></section>
     <div class="quiz qend"><div class="big">${P.best || 0}<span style="font-size:24px;color:var(--muted)"> / 10</span></div><p>Your best so far</p><button class="btn primary" type="button" data-quiz="start">${ICON.play} Start a round</button></div>`;
   const q = QZ.qs[QZ.i];
   if (!q) {
@@ -1106,22 +1575,22 @@ document.addEventListener('click', (e) => {
   const goEl = t.closest('[data-go]');
   if (goEl) { e.preventDefault(); go(goEl.dataset.go); return; }
   const stepEl = t.closest('[data-step]');
-  if (stepEl) { const [n, i] = stepEl.dataset.step.split(':').map(Number); if (play && play.n === n) { play.i = i; showStep(); } openDrawer(n, i); return; }
+  if (stepEl) { const [id, k] = stepEl.dataset.step.split(':'); const i = Number(k); if (play && play.id === id) { play.i = i; showStep(); } openDrawer(id, i); return; }
   const openEl = t.closest('[data-open]');
-  if (openEl) { if (openEl.disabled) return; const [n, i] = openEl.dataset.open.split(':').map(Number); openDrawer(n, i); return; }
+  if (openEl) { if (openEl.disabled) return; const [id, k] = openEl.dataset.open.split(':'); openDrawer(id, Number(k)); return; }
   if (t.closest('[data-close]') || t === scrim) { closeDrawer(); return; }
   const playEl = t.closest('[data-play]');
-  if (playEl) { startPlay(Number(playEl.dataset.play)); return; }
+  if (playEl) { const id = playEl.dataset.play; if (current !== id) go(id); startPlay(id); return; }
   const doneEl = t.closest('[data-done]');
-  if (doneEl) { const n = Number(doneEl.dataset.done); P.done[n] = !P.done[n]; save(); go('m' + n, false); return; }
+  if (doneEl) { const m = BOOK[doneEl.dataset.done]; const k = doneKey(m); P.done[k] = !P.done[k]; save(); go(m.id, false); return; }
   const hb = t.closest('[data-hud]');
-  if (hb) { const a = hb.dataset.hud; if (a === 'next') stepPlay(1); else if (a === 'prev') stepPlay(-1); else if (a === 'exit') exitPlay(); else if (a === 'info' && play) openDrawer(play.n, play.i); return; }
+  if (hb) { const a = hb.dataset.hud; if (a === 'next') stepPlay(1); else if (a === 'prev') stepPlay(-1); else if (a === 'exit') exitPlay(); else if (a === 'info' && play) openDrawer(play.id, play.i); return; }
   const swb = t.closest('[data-sw]');
   if (swb) {
     const a = swb.dataset.sw;
     if (a === 'go' && swNext) { swNext(); return; }
-    if (a === 'done' && play) { const n = play.n; P.done[n] = true; save(); go(n < MISSIONS.length ? 'm' + (n + 1) : 'map'); return; }
-    if (a === 'next' && play) { go('m' + (play.n + 1)); return; }
+    if (a === 'done' && play) { const m = BOOK[play.id]; P.done[doneKey(m)] = true; save(); const nx = m.list[m.n]; go(nx ? nx.id : (m.kind === 'Quest' ? 'quests' : 'map')); return; }
+    if (a === 'next' && play) { const nx = BOOK[play.id].list[BOOK[play.id].n]; if (nx) go(nx.id); return; }
     if (a === 'stay') { exitPlay(); return; }
     return;
   }
