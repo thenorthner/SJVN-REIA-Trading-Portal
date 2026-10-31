@@ -1009,7 +1009,7 @@ const QUESTS = [
   goal:'Correct a bill already presented without rewriting it: a debit note asks for more, a credit note gives some back. A second person approves before either counts.',
   start:'Bill presented: {APPROVED}, {SENT} or later', end:'Note {ISSUED}',
   steps:[
-    { who:'M', t:'Raise the note on the bill', where:'Billing & Invoicing › click the bill’s number › Debit / Credit Notes', press:['+ Raise Note','Save as draft'],
+    { who:'M', alt:['F'], t:'Raise the note on the bill', where:'Billing & Invoicing › click the bill’s number › Debit / Credit Notes', press:['+ Raise Note','Save as draft'],
       fill:['Type: Debit note — the party owes more, or Credit note — the party owes less','Reason code: Revised / amended REA, Change in Law, Transmission / wheeling charges, Late Payment Surcharge, Compensation event, Liquidated damages, Other','Taxable value (₹), tax on the note (₹), tax label (e.g. IGST 18%)','What the note is for (printed on it)'],
       res:{o:'Note', t:'DRAFT'},
       rules:['Saved as a draft. It takes effect only when someone else approves it.','Finance can raise notes too.'],
@@ -1023,7 +1023,7 @@ const QUESTS = [
     { who:'X', noquiz:true, t:'The note takes effect', where:'Automatic, on approval',
       res:{o:'Debit note', text:'Billed as its own supplementary invoice'},
       rules:['A debit note becomes its own supplementary bill, numbered as the note, with its own due date.','A credit note is set against the bill. What the bill cannot absorb stays on the note for another bill of the same contract.','The bill as issued is never rewritten.'] },
-    { who:'M', opt:true, t:'Apply leftover credit to another bill', where:'The bill › Debit / Credit Notes › the note', press:['Apply credit','Apply'],
+    { who:'M', alt:['F'], opt:true, t:'Apply leftover credit to another bill', where:'The bill › Debit / Credit Notes › the note', press:['Apply credit','Apply'],
       fill:['Choose an open bill of this contract…'],
       res:{o:'Credit', text:'Applied to the chosen bill'},
       rules:['Only another open bill of the same contract and the same side.'] },
@@ -1159,7 +1159,7 @@ const QUESTS = [
       block:'Maker: no `Send back to the developer`.' },
     { who:'S', opt:true, t:'Correct it and resubmit', where:'Seller Portal › My Invoices › the bill', press:['Revise the bill','Resubmit to SJVN'],
       res:{o:'Seller’s bill', f:'REJECTED', t:'SUBMITTED'},
-      rules:['A Level 1 maker’s bill goes to its own checker, who sends it to SJVN again.'] },
+      rules:['`Revise the bill` reworks the figures from the locked energy; `Resubmit to SJVN` sends it back to SJVN’s desk, where a new bill lands.','Revising clears the verification, so the maker verifies it again and sends it into approval.','A Level 1 maker’s bill goes to its own checker, who sends it to SJVN again.'] },
   ],
   also:['“Approved without a completed verification” lists any bill that slipped through.','“Value awaiting verification” totals what is held up.'] },
 
@@ -1216,32 +1216,6 @@ const QUESTS = [
       res:{o:'Level 1', t:'APPROVED'} },
   ],
   also:['`Add manual estimate`: (actual − scheduled) MWh × rate, labelled an estimate. Use it to accrue, not to bill.','A reissued statement marks the week superseded: import the current one.','`View source` opens the NRPC statement a figure came from.'] },
-
-{ zone:'close', short:'CERC Form-IV', name:'File the CERC Form-IV return', screen:'REIA Billing & Settlement › Others › Compliance Desk › CERC Regulatory Compliance',
-  goal:'Report the month’s PPA/PSA sales to CERC on Form-IV: the maker prepares the return, the checker files it.',
-  start:'The month’s PSA bills issued', end:'Return {SUBMITTED} on CERC’s reference',
-  steps:[
-    { who:'M', t:'Open the month on the calendar', where:'CERC Regulatory Compliance › Calendar', press:['Prepare Form-IV'],
-      res:{o:'Form-IV screen', text:'Opens with the month chosen'},
-      rules:['Every completed month is listed, `Not started` until someone begins its return. A month with nothing billed still owes a NIL return.','`Annexures` shows the month on IV-D and IV-E before the return is started.'] },
-    { who:'M', t:'Create the return from the bills', where:'Form-IV › New Form-IV Filing', press:['Create Filing'],
-      fill:['Period Type: Monthly','Month','Pre-fill transactions from the month’s PPA/PSA bills (ticked)'],
-      res:{o:'Return', t:'DRAFT'},
-      rules:['One line per PSA and the PPA allocated to it: the energy billed to the discom, both prices and the SJVN margin.','A PPA/PSA sale is long-term, so its line is marked EXEMPT from the margin cap.','Power from SJVN’s own projects is left out.'],
-      block:'Checker: no `+ New Filing`, no `Regenerate from bills`.' },
-    { who:'M', opt:true, t:'Rebuild after a bill changes', where:'Form-IV › the return', press:['Regenerate from bills'],
-      res:{o:'Lines', text:'Rebuilt from the bills'},
-      rules:['Lines added with `+ Add transaction` stay, renumbered after the rebuilt ones.','A line missing a price, or over the cap without a reason, stops the filing.'] },
-    { who:'C', t:'File it with CERC', where:'Form-IV › the return', press:['Mark Submitted to CERC','Confirm and submit'],
-      fill:['CERC Filing Reference No.','The statutory declaration (tick)'],
-      res:{o:'Return', f:'DRAFT', t:'SUBMITTED'},
-      rules:['Filed on CERC’s acknowledgement reference. The return is then locked: it is the filed record.','Due by the 15th of the next month.'],
-      block:'Maker: no `Mark Submitted to CERC`; the return says the REIA checker files it.' },
-    { who:'M', opt:true, noquiz:true, t:'Roll up the year', where:'Form-IV › Annual return', press:['Roll up annual'],
-      res:{o:'Annual return', t:'DRAFT'},
-      rules:['Built from the twelve filed monthlies, once all are filed. The checker files it by 30 April.'] },
-  ],
-  also:['`Already filed outside the platform?` records a return filed before the platform held it, on CERC’s acknowledgement.','`Export CSV`, `CERC Excel (annexures)` and `Download PDF` give the return in the filed layouts.'] },
 
 { zone:'risk', short:'Contract changes', name:'Amend a live contract', screen:'REIA Billing & Settlement › Contracts (PPA/PSA)',
   goal:'Change a signed contract’s terms from a date, as a new version, so the old terms stay on record.',
@@ -1341,8 +1315,8 @@ const QUESTS = [
       rules:['Each request shows its checklist, item by item, and its position today: dues and open disputes.'] },
     { who:'C', t:'Release it', where:'Payment Security › Release queue', press:['Release'],
       res:{o:'Instrument', f:'RELEASE_PENDING', t:'RELEASED'},
-      rules:['`Release` stays disabled until every item on the checklist is met.','`Refuse` asks why, and the company is told.','Finance can release too, but not one it signed off.'],
-      refuse:['You signed off this release for Finance, so someone else releases it.'],
+      rules:['`Release` stays disabled until every item on the checklist is met.','`Refuse` asks why, and the company is told.','Finance can release too, but not one it signed off or asked for.'],
+      refuse:['You signed off this release for Finance, so someone else releases it.','You asked for this release; another officer decides it.'],
       block:'Maker: no `Release` in the queue.' },
   ],
   also:['Short cover can be treated as adequate for up to 90 days, with a reason: HOD or Management (Adequacy overrides).'] },
@@ -1374,18 +1348,18 @@ const QUESTS = [
   start:'A locked month with energy the buyer could not take', end:'Cycle {SETTLED}',
   steps:[
     { who:'M', t:'Bank the energy', where:'Energy Banking › the PPA', press:['+ Bank Energy','Bank Energy'],
-      fill:['PPA Contract','Banking Cycle, e.g. FY2026-27, and Cycle Ends On','Month generated (locked)','Energy Banked (MWh)'],
+      fill:['PPA Contract','Month generated (locked)','Energy Banked (MWh)'],
       res:{o:'Banked energy', t:'OPEN'},
-      rules:['Before you bank, the form shows what the seller would be paid if the energy were never drawn, so the discount is visible.','A cycle is the financial year unless the PPA sets a seasonal one (Apr–Sep / Oct–Mar).'],
-      refuse:['The cycle ended on …; energy cannot be banked into a closed cycle.'],
+      rules:['Banking Cycle and Cycle Ends On fill themselves once you pick the month, by the PPA’s banking basis: monthly unless the PPA sets seasonal (Apr–Sep / Oct–Mar) or annual (the financial year).','A month’s energy locks only after the month, so a cycle takes entries until the end of the month after it ends: September’s monthly cycle is banked, and drawn, in October.','Before you bank, the form shows what the seller would be paid if the energy were never drawn, so the discount is visible.'],
+      refuse:['The cycle ended on … and took entries until …; energy cannot be banked into a closed cycle.'],
       block:'Checker: no `+ Bank Energy`.' },
     { who:'M', t:'Draw it back', where:'Energy Banking › the cycle', press:['Draw','Draw'],
       fill:['Cycle','Draw (MWh)'],
       res:{o:'Still available', text:'Less the draw'},
-      rules:['Only from an open cycle. A closed cycle settles in cash; it is not drawn from.'] },
+      rules:['Only while the cycle takes entries: until the end of the month after it ends. After that it settles in cash; it is not drawn from.','The generator bills the draw at the full tariff, and each buyer its share. A draw recorded after the cycle ended is billed in the cycle’s last month.'] },
     { who:'C', t:'Settle closed cycles', where:'Energy Banking', press:['Settle Closed Cycles','Settle'],
       res:{o:'Unused energy', t:'SETTLED'},
-      rules:['Unused energy settles in cash at a discount to tariff: 75% of tariff unless SJVN sets another figure.','It is billed, and passed on to the buyers for their share.'],
+      rules:['Only a cycle whose entries have closed (the month after it ended) is settled. The sweep also runs every night.','Unused energy settles in cash at a discount to tariff: 75% of tariff unless SJVN sets another figure.','It is billed, and passed on to the buyers for their share.'],
       block:'Maker: no `Settle Closed Cycles`.' },
   ],
   also:['Totals: Banked, Drawn Back, Still Available, Cash Settled.'] },
@@ -1465,12 +1439,38 @@ const QUESTS = [
   ],
   also:['The compliance auditor reads the same trail.'] },
 
+{ zone:'close', short:'CERC Form-IV', name:'File the CERC Form-IV return', screen:'REIA Billing & Settlement › Others › Compliance Desk › CERC Regulatory Compliance',
+  goal:'Report the month’s PPA/PSA sales to CERC on Form-IV: the maker prepares the return, the checker files it.',
+  start:'The month’s PSA bills issued', end:'Return {SUBMITTED} on CERC’s reference',
+  steps:[
+    { who:'M', t:'Open the month on the calendar', where:'CERC Regulatory Compliance › Calendar', press:['Prepare Form-IV'],
+      res:{o:'Form-IV screen', text:'Opens with the month chosen'},
+      rules:['Every completed month is listed, `Not started` until someone begins its return. A month with nothing billed still owes a NIL return.','`Annexures` shows the month on IV-D and IV-E before the return is started.'] },
+    { who:'M', t:'Create the return from the bills', where:'Form-IV › New Form-IV Filing', press:['Create Filing'],
+      fill:['Period Type: Monthly','Month','Pre-fill transactions from the month’s PPA/PSA bills (ticked)'],
+      res:{o:'Return', t:'DRAFT'},
+      rules:['One line per PSA and the PPA allocated to it: the energy billed to the discom, both prices and the SJVN margin.','A PPA/PSA sale is long-term, so its line is marked EXEMPT from the margin cap.','Power from SJVN’s own projects is left out.'],
+      block:'Checker: no `+ New Filing`, no `Regenerate from bills`.' },
+    { who:'M', opt:true, t:'Rebuild after a bill changes', where:'Form-IV › the return', press:['Regenerate from bills'],
+      res:{o:'Lines', text:'Rebuilt from the bills'},
+      rules:['Lines added with `+ Add transaction` stay, renumbered after the rebuilt ones.','A line missing a price, or over the cap without a reason, stops the filing.'] },
+    { who:'C', t:'File it with CERC', where:'Form-IV › the return', press:['Mark Submitted to CERC','Confirm and submit'],
+      fill:['CERC Filing Reference No.','The statutory declaration (tick)'],
+      res:{o:'Return', f:'DRAFT', t:'SUBMITTED'},
+      rules:['Filed on CERC’s acknowledgement reference. The return is then locked: it is the filed record.','Due by the 15th of the next month.'],
+      block:'Maker: no `Mark Submitted to CERC`; the return says the REIA checker files it.' },
+    { who:'M', opt:true, noquiz:true, t:'Roll up the year', where:'Form-IV › Annual return', press:['Roll up annual'],
+      res:{o:'Annual return', t:'DRAFT'},
+      rules:['Built from the twelve filed monthlies, once all are filed. The checker files it by 30 April.'] },
+  ],
+  also:['`Already filed outside the platform?` records a return filed before the platform held it, on CERC’s acknowledgement.','`Export CSV`, `CERC Excel (annexures)` and `Download PDF` give the return in the filed layouts.'] },
+
 { zone:'reports', short:'Reports', name:'Pull a report, and share it', screen:'REIA Billing & Settlement › REIA Dashboard › Reports',
   goal:'Any figure the desk holds, as a report on screen and as CSV, Excel or PDF: a ready-made one in a click, or one built to your own columns, filters and grouping, saved and shared with the desk.',
   start:'Someone needs the desk’s figures', end:'The report on screen, downloaded, saved for next time',
   steps:[
     { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Open a ready-made report', where:'REIA Dashboard › Reports › Predefined reports', press:['View report'],
-      lists:{ 'Every SJVN officer of the desk: 20 reports':['Billing: the bills registers (PSA, PPA) and monthly billing','Money: payments, outstanding and ageing on both sides, LPS, rebates','Disputes and notes: disputes register, open disputes by reason, debit and credit notes','Energy and contracts: energy accounts, energy allocated by beneficiary, contracts register','Security and reconciliation: payment security and expiry, reconciliation statements','Governance: approvals and maker–checker activity, SAP posting status'] },
+      lists:{ 'Every SJVN officer of the desk: 20 reports (Management and SJVN Admin also “Audit trail by user”)':['Billing: the bills registers (PSA, PPA) and monthly billing','Money: payments, outstanding and ageing on both sides, LPS, rebates','Disputes and notes: disputes register, open disputes by reason, debit and credit notes','Energy and contracts: energy accounts, energy allocated by beneficiary, contracts register','Security and reconciliation: payment security and expiry, reconciliation statements','Governance: approvals and maker–checker activity, SAP posting status'] },
       res:{o:'Report', text:'On screen'},
       rules:['It reads the desk’s live records: rows, subtotals and the grand total, with the filters applied listed under the title.','An officer on selected projects sees only those: “Your assigned projects only.”','The tab is in the address (?tab=reports), so it can be bookmarked and sent.'] },
     { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Download it', where:'The report on screen', press:['Download CSV','Download Excel','Download PDF'],
@@ -1522,9 +1522,9 @@ const ICON = {
   moon:'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7z" fill="currentColor"/></svg>',
 };
 const KIND = {};
-'APPROVED ACTIVE VERIFIED LOCKED PAID CLOSED ISSUED SETTLED CONFIRMED RELEASED FUNDS_RECEIVED MATCHED ACCEPTED AGREED RECEIVED RECOVERED POSTED APPLIED REFUNDED IN_FORCE DISPATCHED'.split(' ').forEach((k) => { KIND[k] = 'good'; });
-'REJECTED TERMINATED CANCELLED DISPUTED MISMATCH EXPIRED ESCALATED OBJECTED RETURNED_BY_CHECKER'.split(' ').forEach((k) => { KIND[k] = 'bad'; });
-'PENDING PENDING_L2 PENDING_CHECKER SUBMITTED UNDER_APPROVAL UNDER_REVIEW INFO_REQUESTED PENDING_SIGN_OFF NEEDS_REVIEW RELEASE_PENDING NOTICE_ISSUED CLAIMED ACKNOWLEDGED UNDER_NEGOTIATION PENDING_REGULATORY_APPROVAL NEARING_EXPIRY PARTIALLY_PAID PARTIALLY_UTILIZED VALIDATED REOPENED ELIGIBLE UPHELD RECORDED PREPARED CALCULATED OPEN REQUESTED'.split(' ').forEach((k) => { KIND[k] = 'wait'; });
+'APPROVED ACTIVE VERIFIED LOCKED PAID CLOSED ISSUED SETTLED CONFIRMED RELEASED FUNDS_RECEIVED MATCHED ACCEPTED AGREED RECEIVED RECOVERED POSTED APPLIED REFUNDED IN_FORCE DISPATCHED SENT SIGNED RENEWED RESOLVED_ACCEPTED'.split(' ').forEach((k) => { KIND[k] = 'good'; });
+'REJECTED TERMINATED CANCELLED DISPUTED MISMATCH EXPIRED ESCALATED OBJECTED RETURNED_BY_CHECKER REVERSED RESOLVED_REJECTED WITHDRAWN'.split(' ').forEach((k) => { KIND[k] = 'bad'; });
+'PENDING PENDING_L2 PENDING_CHECKER SUBMITTED UNDER_APPROVAL UNDER_REVIEW INFO_REQUESTED PENDING_SIGN_OFF NEEDS_REVIEW RELEASE_PENDING NOTICE_ISSUED CLAIMED ACKNOWLEDGED UNDER_NEGOTIATION PENDING_REGULATORY_APPROVAL NEARING_EXPIRY PARTIALLY_PAID PARTIALLY_UTILIZED VALIDATED REOPENED ELIGIBLE UPHELD RECORDED PREPARED CALCULATED OPEN REQUESTED RAISED'.split(' ').forEach((k) => { KIND[k] = 'wait'; });
 'DRAFT NOT_STARTED'.split(' ').forEach((k) => { KIND[k] = 'start'; });
 
 const st = (s, big) => `<span class="st ${KIND[s] || ''}${big ? ' big' : ''}">${esc(String(s).replace(/_/g, ' '))}</span>`;
@@ -1546,7 +1546,10 @@ const doneKey = (m) => (m.kind === 'Mission' ? m.n : m.id);
 const isDone = (m) => !!P.done[doneKey(m)];
 const zoneName = (m) => (m.kind === 'Mission' ? (m.zone === 'setup' ? 'One-time setup' : 'Every month') : 'Side quest · ' + QZONES.find(([z]) => z === m.zone)[1]);
 const playersOf = (m) => [...new Set(m.steps.map((s) => s.who))];
-const loginsIn = (m) => { let n = 0; let prev = null; m.steps.forEach((s) => { if (s.who !== prev && s.who !== 'X') n++; prev = s.who; }); return n; };
+// Who is logged in when step i starts: the last person to act. An automatic step
+// needs nobody, so whoever was logged in before it still is.
+const humanBefore = (m, i) => { for (let k = i - 1; k >= 0; k--) if (m.steps[k].who !== 'X') return m.steps[k].who; return null; };
+const loginsIn = (m) => m.steps.filter((s, i) => s.who !== 'X' && humanBefore(m, i) !== s.who).length;
 const loginHint = (k) => k === 'X' ? 'No log-in: the platform does this on its own.'
   : R[k].side === 'SJVN' ? `Sign-in page › Quick Demo Login › “${R[k].demo}”.`
   : `Sign in with the ${R[k].short.toLowerCase()} company’s own email and password.`;
@@ -1693,9 +1696,10 @@ function resHtml(r) {
   if (!r) return '';
   return `<span>${esc(r.o)}:</span> ${r.text ? `<strong>${esc(r.text)}</strong>` : `${r.f ? st(r.f) + '<span class="arw">→</span>' : ''}${st(r.t)}`}`;
 }
+// from: who is logged in before the hand-off (null: nobody yet).
 function handLabel(from, to) {
   if (to === 'X') return { cls:'auto', html:`${ICON.auto} Automatic` };
-  return { cls:'', html:`${rb(to,'xs')} ${from === 'X' ? 'Log in as' : 'Log out, log in as'} ${esc(R[to].short)}` };
+  return { cls:'', html:`${rb(to,'xs')} ${!from ? 'Log in as' : from === to ? 'Back to' : 'Log out, log in as'} ${esc(R[to].short)}` };
 }
 function stepCard(m, s, i) {
   return `<button class="step${s.opt ? ' opt' : ''}" type="button" data-step="${m.id}:${i}" style="--c:var(--c-${R[s.who].c})">
@@ -1746,7 +1750,7 @@ function viewMission(id) {
     if (prev && prev.who !== s.who) {
       const a = colOf(prev.who); const b = colOf(s.who);
       const lo = Math.min(a, b); const hi = Math.max(a, b);
-      const h = handLabel(prev.who, s.who);
+      const h = handLabel(humanBefore(m, i), s.who);
       cells.push(`<div class="hand ${b > a ? 'fwd' : 'back'}" style="--a:${lo};--b:${hi + 1};--k:${hi - lo + 1};--l0:${lo - 1};--h0:${hi - 1};--row:${row}"><span class="ln"></span><span class="pill ${h.cls}" title="${esc(loginHint(s.who))}">${h.html}</span></div>`);
       row++;
     }
@@ -1807,13 +1811,14 @@ function lastWord(m) {
 }
 function openDrawer(id, i) {
   const m = BOOK[id]; if (!m) return; const s = m.steps[i]; if (!s) return; const n = m.n;
-  const prev = m.steps[i - 1]; const next = m.steps[i + 1];
-  const switching = !prev || prev.who !== s.who;
+  const next = m.steps[i + 1];
+  const before = humanBefore(m, i);
+  const login = s.who === 'X' ? loginHint('X') : before === s.who ? 'Same log-in as the step before.' : `${before ? `Log out of ${R[before].short}. ` : ''}${loginHint(s.who)}`;
   const lists = s.lists ? Object.entries(s.lists).map(([h, items]) => `<div class="dsec"><h4>${esc(h)}</h4><ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('') : '';
   drawer.innerHTML = `
     <div class="d-top">${rb(s.who,'lg')}<div><small>${m.kind === 'Quest' ? 'Side quest' : 'Mission'} ${n} · step ${i + 1} of ${m.steps.length}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
     <h2>${fmt(s.t)}</h2>
-    <div class="dsec"><h4>Log-in</h4><div class="dlog">${s.who === 'X' ? ICON.auto : ICON.login}<span>${switching && prev ? `Log out of ${esc(R[prev.who].short)}. ` : ''}${switching ? esc(loginHint(s.who)) : 'Same log-in as the step before.'}</span></div></div>
+    <div class="dsec"><h4>Log-in</h4><div class="dlog">${s.who === 'X' ? ICON.auto : ICON.login}<span>${esc(login)}</span></div></div>
     ${s.where ? `<div class="dsec"><h4>Where</h4><p>${esc(s.where)}</p></div>` : ''}
     ${s.press ? `<div class="dsec"><h4>Press</h4><div class="row">${s.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</div></div>` : ''}
     ${s.fill ? `<div class="dsec"><h4>Fill in</h4><ul>${s.fill.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
@@ -1860,14 +1865,14 @@ function stepPlay(d) {
   const m = BOOK[play.id]; const j = play.i + d;
   if (j < 0) return;
   if (j >= m.steps.length) { finishPlay(); return; }
-  const from = m.steps[play.i].who; const to = m.steps[j].who;
+  const from = humanBefore(m, j); const to = m.steps[j].who;
   play.i = j;
   if (d > 0 && from !== to && to !== 'X') showSwitch(from, to); else showStep();
 }
 function showSwitch(from, to) {
   clearTimeout(swTimer);
-  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="Switch player"><p class="eyebrow">Switch player</p><h3>Log out, then log in as ${esc(R[to].name)}</h3>
-    <div class="sw-row"><div class="sw-who sw-from">${rb(from,'xl')}${esc(R[from].short)}</div><div class="sw-arrow">→</div><div class="sw-who">${rb(to,'xl')}${esc(R[to].short)}</div></div>
+  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="Switch player"><p class="eyebrow">${from ? 'Switch player' : 'First log-in'}</p><h3>${from ? 'Log out, then log in' : 'Log in'} as ${esc(R[to].name)}</h3>
+    <div class="sw-row">${from ? `<div class="sw-who sw-from">${rb(from,'xl')}${esc(R[from].short)}</div><div class="sw-arrow">→</div>` : ''}<div class="sw-who">${rb(to,'xl')}${esc(R[to].short)}</div></div>
     <p class="sw-hint">${esc(loginHint(to))}</p><div class="sw-btns"><button class="btn primary" type="button" data-sw="go">Continue</button></div></div>`;
   sw.hidden = false;
   swNext = () => { sw.hidden = true; swNext = null; showStep(); };
@@ -2088,7 +2093,7 @@ function viewSide() {
 /* ───────────────────────── view: quiz ───────────────────────── */
 // Roles that could also fairly answer a step's question, kept out of its options.
 // 'skip' leaves the step out (both companies do it the same way).
-const QX = { '1:0':['A'], '1:1':['A','S','B'], '1:2':['A'], '1:3':['A'], '2:1':'skip', '2:2':'skip', '4:0':['S','B'], '6:3':['C'], '7:0':['S','M'], '7:3':['S'], '7:5':['F'], '7:6':['S'], '10:5':['S'], '10:6':['B'] };
+const QX = { 'q15:0':['B','M','F'], 'q15:2':['F'], '1:0':['A'], '1:1':['A','S','B'], '1:2':['A'], '1:3':['A'], '2:1':'skip', '2:2':'skip', '4:0':['S','B'], '6:3':['C'], '7:0':['S','M'], '7:3':['S'], '7:5':['F'], '7:6':['S'], '10:5':['S'], '10:6':['B'] };
 const POOL = (() => {
   const pool = [];
   MISSIONS.forEach((m) => m.steps.forEach((s, i) => {
