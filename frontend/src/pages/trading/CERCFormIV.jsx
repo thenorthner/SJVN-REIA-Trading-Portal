@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { actsAs } from '../../lib/rolePages.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { showAlert, askConfirm } from '../../lib/dialogs.js';
 
@@ -63,9 +64,17 @@ function AnnualRollUp({ canWrite, onDone }) {
   );
 }
 
+// The submit gate's own reminder that CERC's reference is missing: whoever
+// files is asked for it beside the button instead.
+const REFERENCE_BLOCKER = /reference number is required/i;
+
 export default function CERCFormIV() {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.TRADING_WRITE.includes(user?.role);
+  // The REIA workflow has the REIA team prepare and submit Form-IV: its maker
+  // prepares the return and its checker files it. The trading desk does both.
+  const canPrepare = actsAs(user, [...ROLE_GROUPS.TRADING_WRITE, ...ROLE_GROUPS.REIA_MAKE]);
+  const canFile = actsAs(user, [...ROLE_GROUPS.TRADING_WRITE, ...ROLE_GROUPS.REIA_CHECK]);
+  const [reference, setReference] = useState('');
 
   const [rows, setRows] = useState([]);
   const [reportBusy, setReportBusy] = useState(false);
@@ -127,7 +136,7 @@ export default function CERCFormIV() {
     const existing = rows.find((r) => r.period_type === periodType && r.period === period);
     if (existing) {
       openDetail(existing);
-    } else if (canWrite) {
+    } else if (canPrepare) {
       setForm({ ...EMPTY_FORM, period_type: periodType, period });
       setFormError('');
       setShowNew(true);
@@ -148,7 +157,9 @@ export default function CERCFormIV() {
   async function openDetail(row) {
     setDetailError('');
     try {
-      setDetail(await api.formIv.get(row.id));
+      const opened = await api.formIv.get(row.id);
+      setReference(opened.reference_no || '');
+      setDetail(opened);
     } catch (err) {
       setError(err.response?.data?.error || 'Could not open this filing.');
     }
@@ -174,6 +185,7 @@ export default function CERCFormIV() {
       setShowNew(false);
       setForm(EMPTY_FORM);
       load();
+      setReference(created.reference_no || '');
       setDetail(created);
     } catch (err) {
       setFormError(err.response?.data?.error || 'Failed to create the filing.');
@@ -216,8 +228,12 @@ export default function CERCFormIV() {
     runOnDetail(() => api.formIv.deleteLine(line.id), 'Failed to remove the line.');
   }
 
-  const editable = detail && detail.status !== 'SUBMITTED' && canWrite;
+  const open = detail && detail.status !== 'SUBMITTED';
+  const editable = open && canPrepare;
+  const filable = open && canFile;
   const blockers = detail?.blockers || [];
+  // What stands between the return and filing, besides the reference the filer types in.
+  const filingBlockers = blockers.filter((b) => !REFERENCE_BLOCKER.test(b));
 
   const columns = [
     { key: 'form_no', header: 'Form No.' },
@@ -246,7 +262,16 @@ export default function CERCFormIV() {
 
   const lineColumns = [
     { key: 'line_no', header: '#' },
-    { key: 'seller_name', header: 'Seller' },
+    {
+      key: 'seller_name',
+      header: 'Seller',
+      render: (l) => (
+        <>
+          {l.seller_name}
+          {l.contract_ref && <div className="audit-muted">{l.source === 'REIA' ? 'REIA · ' : ''}{l.contract_ref}</div>}
+        </>
+      ),
+    },
     { key: 'buyer_name', header: 'Buyer' },
     { key: 'period', header: 'Period', render: (l) => <span style={{ fontSize: 14.5 }}>{l.period_from} → {l.period_to}</span> },
     { key: 'quantum_mu', header: 'MU', render: (l) => fmtNumber(l.quantum_mu, 2) },
@@ -285,14 +310,14 @@ export default function CERCFormIV() {
             <button className="btn btn-outline" disabled={reportBusy} onClick={downloadRegulatoryReport}>
               {reportBusy ? 'Preparing…' : 'Regulatory Report (PDF)'}
             </button>
-            {canWrite && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_FORM); setFormError(''); setShowNew(true); }}>+ New Filing</button>}
+            {canPrepare && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_FORM); setFormError(''); setShowNew(true); }}>+ New Filing</button>}
           </div>
         }
       />
 
       {error && <div className="form-error">{error}</div>}
 
-      <AnnualRollUp canWrite={canWrite} onDone={() => load()} />
+      <AnnualRollUp canWrite={canPrepare} onDone={() => load()} />
 
       <div className="kpi-grid">
         <StatCard label="Total Filings" value={summary.total ?? 0} hint={`${summary.submitted ?? 0} submitted · ${summary.pending ?? 0} open`} />
@@ -381,12 +406,17 @@ export default function CERCFormIV() {
               <StatCard label="Trading Margin" value={fmtCurrency(detail.trading_margin)} hint={`Weighted avg ${paise(detail.avg_margin_per_unit)}/kWh`} />
             </div>
 
-            {detail.status !== 'SUBMITTED' && blockers.length > 0 && (
+            {open && filingBlockers.length > 0 && (
               <div className="audit-alert audit-alert-warn" style={{ marginBottom: 12 }}>
                 <strong>Cannot file yet.</strong>
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                  {blockers.map((b) => <li key={b}>{b}</li>)}
+                  {filingBlockers.map((b) => <li key={b}>{b}</li>)}
                 </ul>
+              </div>
+            )}
+            {open && filingBlockers.length === 0 && !canFile && (
+              <div className="audit-alert" style={{ marginBottom: 12 }}>
+                Ready to file. The REIA checker files it with CERC and records CERC&apos;s reference.
               </div>
             )}
 
@@ -400,7 +430,7 @@ export default function CERCFormIV() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {editable && (
                 <button className="btn btn-outline" disabled={busy} onClick={() => runOnDetail(() => api.formIv.generate(detail.id), 'Failed to regenerate from trade data.')}>
-                  Regenerate from trades
+                  Regenerate from bills and trades
                 </button>
               )}
               {editable && <button className="btn btn-outline" onClick={() => openLine(null)}>+ Add transaction</button>}
@@ -413,21 +443,16 @@ export default function CERCFormIV() {
                 CERC Excel (annexures)
               </button>
               <button className="btn btn-outline" onClick={() => api.formIv.downloadPdf(detail.id, detail.form_no).catch((err) => showAlert(err.message || 'Could not generate the Form-IV PDF.'))}>Download PDF</button>
-              {editable && blockers.length === 0 && (
-                <button className="btn btn-primary" disabled={busy} onClick={() => runOnDetail(() => api.formIv.submit(detail.id, {}), 'Failed to submit the filing.')}>
-                  Mark Submitted to CERC
-                </button>
-              )}
             </div>
 
             {/* A return filed with CERC before the platform held it (17-Oct-2026):
                 recorded on CERC's acknowledgement, with no lines rebuilt behind it. */}
-            {editable && !outside && (
+            {filable && !outside && (
               <button type="button" className="btn btn-ghost btn-sm" style={{ marginBottom: 12 }} onClick={() => setOutside({ reference_no: detail.reference_no || '', submission_date: '', note: '' })}>
                 Already filed outside the platform?
               </button>
             )}
-            {editable && outside && (
+            {filable && outside && (
               <form className="cw-form" style={{ marginBottom: 12 }} onSubmit={(e) => { e.preventDefault(); runOnDetail(async () => { const r = await api.formIv.markFiledOutside({ id: detail.id, ...outside }); setOutside(null); load(); return r; }, 'Could not record the filing.'); }}>
                 <div className="form-grid">
                   <Field label="CERC acknowledgement / reference" required><input required value={outside.reference_no} onChange={(e) => setOutside({ ...outside, reference_no: e.target.value })} /></Field>
@@ -438,20 +463,22 @@ export default function CERCFormIV() {
               </form>
             )}
 
-            {editable && !detail.reference_no && (
-              <Field label="CERC Filing Reference No.">
+            {/* Filed on CERC's acknowledgement: the reference is typed in by
+                whoever files, with the button that files it. */}
+            {filable && filingBlockers.length === 0 && (
+              <Field label="CERC Filing Reference No." required>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
-                    value={detail.reference_no || ''}
+                    value={reference}
                     placeholder="Enter the CERC acknowledgement reference"
-                    onChange={(e) => setDetail({ ...detail, reference_no: e.target.value })}
+                    onChange={(e) => setReference(e.target.value)}
                   />
                   <button
-                    className="btn btn-outline"
-                    disabled={busy}
-                    onClick={() => runOnDetail(() => api.formIv.update(detail.id, { reference_no: detail.reference_no }), 'Failed to save the reference.')}
+                    className="btn btn-primary"
+                    disabled={busy || reference.trim().length < 3}
+                    onClick={() => runOnDetail(() => api.formIv.submit(detail.id, { reference_no: reference.trim() }), 'Failed to submit the filing.')}
                   >
-                    Save
+                    Mark Submitted to CERC
                   </button>
                 </div>
               </Field>

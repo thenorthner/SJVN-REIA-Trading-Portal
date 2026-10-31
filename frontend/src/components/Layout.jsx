@@ -460,6 +460,7 @@ function getPageContext(pathname, branded, entity, portalKind) {
     '/reia/contracts': { desk: 'REIA Contracts', page: 'PPA & PSA Mapping' },
     '/reia/contract-compliance': { desk: 'REIA Contracts', page: 'Contract Compliance' },
     '/reia/cerc-compliance': { desk: 'REIA Statutory', page: 'CERC Form-IV & Compliance' },
+    '/reia/form-iv': { desk: 'REIA Statutory', page: 'CERC Form-IV' },
     '/reia/energy-data': { desk: 'REIA Energy Desk', page: 'Accounting & Validation' },
     '/reia/invoices': { desk: 'REIA Invoicing', page: 'Billing & Surcharge' },
     '/reia/billing-readiness': { desk: 'REIA Invoicing', page: 'Month-Close Board' },

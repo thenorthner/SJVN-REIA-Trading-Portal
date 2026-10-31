@@ -1647,8 +1647,10 @@ function migrateFormIvSchema() {
       id TEXT PRIMARY KEY,
       form_id TEXT NOT NULL REFERENCES cerc_form_iv(id) ON DELETE CASCADE,
       line_no INTEGER NOT NULL,
-      source TEXT NOT NULL DEFAULT 'BILATERAL' CHECK (source IN ('BILATERAL','EXCHANGE','MANUAL')),
+      source TEXT NOT NULL DEFAULT 'BILATERAL' CHECK (source IN ('BILATERAL','EXCHANGE','MANUAL','REIA')),
       bilateral_id TEXT,
+      contract_id TEXT,
+      ppa_id TEXT,
       seller_name TEXT NOT NULL,
       buyer_name TEXT NOT NULL,
       contract_ref TEXT,
@@ -1682,6 +1684,32 @@ try {
   migrateFormIvSchema();
 } catch (e) {
   console.error('Form-IV migration failed:', e.message);
+}
+
+/**
+ * The REIA desk's PPA/PSA trades go on Form-IV as lines of their own (31-Oct-2026,
+ * per the REIA workflow: the REIA team prepares and submits the return). The
+ * line table admits source REIA and records the PSA and PPA behind the line;
+ * SQLite cannot alter a CHECK, so the table is rebuilt from schema.sql.
+ */
+function migrateFormIvReiaLines() {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='cerc_form_iv_lines'").get();
+  if (!t || t.sql.includes("'REIA'")) return;
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON'); // keep RENAME from touching other tables' FKs
+  try {
+    rebuildTableFromSchema('cerc_form_iv_lines');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_form_iv_lines_form ON cerc_form_iv_lines (form_id, line_no)');
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateFormIvReiaLines();
+} catch (e) {
+  console.error('Form-IV REIA lines migration failed:', e.message);
 }
 
 /** REC: per-tranche disposals + issuance provenance on the lot. */

@@ -54,7 +54,7 @@ const TRADING_PREFIXES = [
   '/api/trading', '/api/bids', '/api/billing', '/api/bilateral', '/api/bilateral-applications', '/api/bilateral-bidding',
   '/api/billing-settlement', '/api/cerc-market', '/api/client-bid-requests', '/api/client-portfolios', '/api/csv-uploads',
   '/api/deviations', '/api/escert-orders', '/api/exchange-applications', '/api/exchange-bidding', '/api/exchange-bidding-latest',
-  '/api/exchange-contracts', '/api/exchange-update-charges', '/api/form-iv', '/api/iex', '/api/iex-bid-book', '/api/import',
+  '/api/exchange-contracts', '/api/exchange-update-charges', '/api/iex', '/api/iex-bid-book', '/api/import',
   '/api/iset-reports', '/api/margin', '/api/market-analytics', '/api/market-forecast', '/api/noar', '/api/noar-api',
   '/api/noc-updation', '/api/oa-charges', '/api/payment-cycle', '/api/pnl', '/api/pre-trade', '/api/pxil', '/api/pxil-orders',
   '/api/rec', '/api/rec-obligations', '/api/rec-trading', '/api/tds', '/api/trading-client', '/api/trading-clients',
@@ -154,6 +154,20 @@ export const POWERS = [
   { key: 'reia.recon.check', area: 'Reconciliation', kind: 'check', sod: 'REIA', label: 'Override or withdraw a reconciliation',
     does: 'Accept a difference against the figures, or withdraw a statement.',
     routes: ['POST /api/reconciliation/:id/override', 'POST /api/reconciliation/:id/withdraw'] },
+
+  // ── CERC Form-IV ──────────────────────────────────────────────────────────
+  // The REIA workflow has the REIA team prepare and submit it (31-Oct-2026); the
+  // trading desk, whose trades go on the same return, keeps both.
+  { key: 'cerc.formiv.view', area: 'CERC Form-IV', kind: 'view', label: 'See the CERC Form-IV returns',
+    does: 'The monthly and annual returns, their lines and annexures, as prepared and as filed.',
+    routes: under('GET', ['/api/form-iv']), pages: ['/reia/form-iv', '/trading/form-iv'] },
+  { key: 'cerc.formiv.prepare', area: 'CERC Form-IV', kind: 'prepare', sod: 'REIA', label: 'Prepare the CERC Form-IV return',
+    does: 'Start a month\'s or a year\'s return, rebuild it from the bills and trades, and correct its lines.',
+    routes: ['POST /api/form-iv/', 'POST /api/form-iv/:id/generate', 'PUT /api/form-iv/:id', 'POST /api/form-iv/annual/:fy/roll-up',
+      'POST /api/form-iv/:id/lines', 'PUT /api/form-iv/lines/:lineId', 'DELETE /api/form-iv/lines/:lineId'] },
+  { key: 'cerc.formiv.file', area: 'CERC Form-IV', kind: 'check', sod: 'REIA', label: 'File the Form-IV return with CERC',
+    does: 'Mark a prepared return filed on CERC\'s reference, or record one filed outside the platform.',
+    routes: ['POST /api/form-iv/:id/submit', 'POST /api/form-iv/mark-filed-outside'] },
 
   // ── Finance ───────────────────────────────────────────────────────────────
   { key: 'fin.payments.record', area: 'Finance & SAP', kind: 'finance', label: 'Record payments and balance confirmations',
@@ -280,6 +294,7 @@ const SCREENS = {
   'reia.security.prepare': ['/reia/payment-security'], 'reia.security.check': ['/reia/payment-security'],
   'reia.security.override': ['/reia/payment-security'],
   'reia.recon.prepare': ['/reia/reconciliation'], 'reia.recon.check': ['/reia/reconciliation'],
+  'cerc.formiv.prepare': ['/reia/form-iv'], 'cerc.formiv.file': ['/reia/form-iv'],
 };
 const VIEW_OWNER = { 'reia.view': 'REIA_CHECKER', 'masters.view': 'MANAGEMENT', 'audit.trail': 'COMPLIANCE_AUDITOR', 'exec.consolidated': 'MANAGEMENT', 'reports.view': 'MANAGEMENT' };
 export function ownerOf(p) {

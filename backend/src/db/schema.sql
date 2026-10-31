@@ -1990,8 +1990,10 @@ CREATE TABLE IF NOT EXISTS cerc_form_iv_lines (
   id TEXT PRIMARY KEY,
   form_id TEXT NOT NULL REFERENCES cerc_form_iv(id) ON DELETE CASCADE,
   line_no INTEGER NOT NULL,
-  source TEXT NOT NULL DEFAULT 'BILATERAL' CHECK (source IN ('BILATERAL','EXCHANGE','MANUAL')),
+  source TEXT NOT NULL DEFAULT 'BILATERAL' CHECK (source IN ('BILATERAL','EXCHANGE','MANUAL','REIA')),
   bilateral_id TEXT,                   -- provenance when auto-derived
+  contract_id TEXT,                    -- REIA: the PSA the energy was sold on
+  ppa_id TEXT,                         -- REIA: the PPA it was bought on
   seller_name TEXT NOT NULL,           -- party SJVN purchased from
   buyer_name TEXT NOT NULL,            -- party SJVN sold to
   contract_ref TEXT,

@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 // Which CERC returns are owed — including the periods nobody has started, which a
 // register of prepared filings cannot show.
@@ -62,7 +62,12 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const render = async () => { await act(async () => { root.render(<MemoryRouter initialEntries={[state.path]}><CercCompliance /></MemoryRouter>); }); };
+// Where a click took the screen.
+function Where() {
+  state.at = useLocation();
+  return null;
+}
+const render = async () => { await act(async () => { root.render(<MemoryRouter initialEntries={[state.path]}><CercCompliance /><Where /></MemoryRouter>); }); };
 
 describe('CERC filing calendar', () => {
   it('counts what has not been started and what is past its deadline', async () => {
@@ -118,18 +123,23 @@ describe('CERC filing calendar', () => {
     expect(host.textContent).toMatch(/Nothing has been traded yet/);
     expect(host.querySelector('.report-table')).toBeNull();
   });
-  it('offers the Form-IV shortcut only to roles the Form-IV screen admits', async () => {
-    await render();
-    expect(host.textContent).not.toContain('Prepare Form-IV');
-
-    act(() => root.unmount());
-    root = createRoot(host);
-    state.role = 'SJVN_ADMIN';
+  // The REIA workflow has the REIA team prepare and submit Form-IV (31-Oct-2026):
+  // its shortcut opens the REIA desk's own Form-IV screen, the trading desk's its own.
+  it('offers the Form-IV shortcut to the desk that files it, on that desk\'s own screen', async () => {
     await render();
     const labels = [...host.querySelectorAll('button')].map((b) => b.textContent);
     // Not started → prepare; filed → view.
     expect(labels.filter((l) => l === 'Prepare Form-IV')).toHaveLength(3);
     expect(labels).toContain('View filing');
+    await act(async () => { [...host.querySelectorAll('button')].find((b) => b.textContent === 'Prepare Form-IV').click(); });
+    expect(state.at.pathname).toBe('/reia/form-iv');
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    state.role = 'TRADING_USER';
+    await render();
+    await act(async () => { [...host.querySelectorAll('button')].find((b) => b.textContent === 'Prepare Form-IV').click(); });
+    expect(state.at.pathname).toBe('/trading/form-iv');
   });
 
   it('opens a period into its annexures, NIL where a form has nothing', async () => {

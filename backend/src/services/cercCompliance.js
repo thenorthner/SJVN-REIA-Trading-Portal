@@ -71,6 +71,11 @@ function earliestReportableMonth() {
   const candidates = [
     db.prepare("SELECT MIN(substr(delivery_date, 1, 7)) AS m FROM bids WHERE delivery_date IS NOT NULL").get()?.m,
     db.prepare("SELECT MIN(substr(start_date, 1, 7)) AS m FROM bilateral_transactions WHERE start_date IS NOT NULL").get()?.m,
+    // The REIA desk's sales to discoms go on the return too.
+    db.prepare(`
+      SELECT MIN(billing_period) AS m FROM invoices WHERE direction = 'SJVN_TO_BUYER'
+        AND invoice_type IN ('FINAL', 'PROVISIONAL') AND status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED','PAID')
+    `).get()?.m,
     db.prepare('SELECT MIN(period) AS m FROM cerc_form_iv').get()?.m,
   ].filter(Boolean).map((m) => String(m).slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m));
   return candidates.length ? candidates.sort()[0] : null;

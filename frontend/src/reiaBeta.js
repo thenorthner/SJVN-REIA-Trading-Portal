@@ -18,9 +18,9 @@ const BETA_PREFIXES = [
   '/admin/users', '/admin/role-powers', '/admin/project-assignments', '/audit-logs', '/masters',
 ];
 
-// REIA paths that are still another desk's work: the CERC trading-licence
-// returns (Form-IV and the filing calendar) belong to the trading licence.
-const BETA_EXCLUDED = ['/reia/cerc-compliance'];
+// REIA paths the beta does not show: the CERC returns (the filing calendar and
+// Form-IV) are filed under SJVN's trading licence and name its other trades.
+const BETA_EXCLUDED = ['/reia/cerc-compliance', '/reia/form-iv'];
 
 export function inReiaBeta(pathname) {
   if (BETA_EXCLUDED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return false;

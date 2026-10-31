@@ -253,8 +253,30 @@ function bilateralRows(lines) {
     WHERE bt.id = ?
   `);
   const buyerStmt = db.prepare('SELECT client_type, sldc_name, state FROM trading_clients WHERE name = ? COLLATE NOCASE LIMIT 1');
+  const partyStmt = db.prepare(`
+    SELECT e.state FROM contracts c JOIN entities e ON e.id = CASE WHEN c.contract_type = 'PPA' THEN c.seller_id ELSE c.buyer_id END
+    WHERE c.id = ?
+  `);
 
   return lines.map((l) => {
+    // A REIA line is a PPA bought from a developer and sold on a PSA to a
+    // discom: a long-term contract, filed on IV-D, or on IV-E when the
+    // developer and the discom are in the same state.
+    if (l.source === 'REIA') {
+      const sellerState = (l.ppa_id && partyStmt.get(l.ppa_id)?.state) || '';
+      const buyerState = (l.contract_id && partyStmt.get(l.contract_id)?.state) || '';
+      const { code, section } = classifyBilateral({ oa_type: 'LTOA', supplier_sldc: sellerState, procurer_sldc: buyerState });
+      return {
+        code, section,
+        start_date: l.period_from, end_date: l.period_to, start_time: '', end_time: '',
+        volume_mu: round(l.quantum_mu),
+        seller: l.seller_name, seller_category: CATEGORY_LABEL.GENERATOR, seller_state: sellerState,
+        buyer: l.buyer_name, buyer_category: CATEGORY_LABEL.DISCOM, buyer_state: buyerState,
+        purchase_price: l.purchase_rate, sale_price: l.sale_rate, margin: l.trading_margin_per_unit,
+        note: l.remarks || null,
+        source_ref: l.contract_ref || null,
+      };
+    }
     // Lines typed in as exchange trades have no product on them; day-ahead is
     // the commonest case, and the note says where the row came from.
     if (l.source === 'EXCHANGE') {

@@ -126,7 +126,7 @@ function AnnexurePanel({ row }) {
   );
 }
 
-function PeriodTable({ title, rows, emptyText, canOpenForm }) {
+function PeriodTable({ title, rows, emptyText, formPath }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -195,11 +195,11 @@ function PeriodTable({ title, rows, emptyText, canOpenForm }) {
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {canOpenForm && (
+                    {formPath && (
                       <button
                         type="button"
                         className={`btn btn-xs ${r.status === 'MISSING' ? 'btn-primary' : 'btn-outline'}`}
-                        onClick={() => navigate(`/trading/form-iv?period_type=${r.period_type}&period=${r.period}`)}
+                        onClick={() => navigate(`${formPath}?period_type=${r.period_type}&period=${r.period}`)}
                       >
                         {ACTION_LABEL[r.status] || 'Open'}
                       </button>
@@ -438,9 +438,10 @@ export default function CercCompliance({ embedded = false }) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [view, setView] = useState(['licence', 'next90'].includes(searchParams.get('view')) ? searchParams.get('view') : 'calendar');
-  // The Form-IV screen belongs to the trading module, so the shortcut into it
-  // is only offered to roles that screen will actually let in.
-  const canOpenForm = actsAs(user, ROLE_GROUPS.TRADING_ALL);
+  // The REIA team prepares and files Form-IV on its own screen; the trading
+  // desk keeps its own. The shortcut goes to the one the role can open.
+  const formPath = actsAs(user, [...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR']) ? '/reia/form-iv'
+    : actsAs(user, ROLE_GROUPS.TRADING_ALL) ? '/trading/form-iv' : null;
   const canWriteLicence = actsAs(user, [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRADING_WRITE]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -548,13 +549,13 @@ export default function CercCompliance({ embedded = false }) {
           <PeriodTable
             title="Monthly returns"
             rows={data.monthly}
-            canOpenForm={canOpenForm}
+            formPath={formPath}
             emptyText="No completed month owes a return yet."
           />
           <PeriodTable
             title="Annual returns"
             rows={data.annual}
-            canOpenForm={canOpenForm}
+            formPath={formPath}
             emptyText="No financial year has ended yet."
           />
 

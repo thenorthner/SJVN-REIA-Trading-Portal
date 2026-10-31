@@ -13,6 +13,12 @@
  * Trades cleared through a power exchange fall outside the cap; those lines are
  * marked EXEMPT with a reason rather than silently skipped, so the filed form
  * still reconciles to the traded volume.
+ *
+ * The REIA desk's back-to-back contracts are trades under the same licence: SJVN
+ * buys from the developer on the PPA and sells to the discom on the PSA. The
+ * REIA workflow has the REIA team prepare and submit this return, so its billed
+ * months come in as lines of their own (source REIA), long-term and therefore
+ * outside the short-term cap.
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
@@ -127,6 +133,10 @@ export function evaluateLine(line) {
  * straddles a period boundary.
  */
 export function deriveLines(from, to) {
+  return [...deriveBilateralLines(from, to), ...deriveReiaLines(from, to)].map((l, i) => ({ ...l, line_no: i + 1 }));
+}
+
+function deriveBilateralLines(from, to) {
   const trades = db.prepare(`
     SELECT bt.*, tc.name AS client_name
     FROM bilateral_transactions bt
@@ -163,6 +173,98 @@ export function deriveLines(from, to) {
     };
     return { ...line, ...evaluateLine(line) };
   });
+}
+
+// A REIA bill counts once it has gone to the discom (the same states the
+// outstanding position reads); a draft or a cancelled bill traded nothing.
+const BILLED = "('APPROVED','SENT','PARTIALLY_PAID','DISPUTED','PAID')";
+const REIA_EXEMPT_REASON = 'Long-term PPA/PSA: margin as agreed in the contract (the CERC trading margin cap applies to short-term trades)';
+
+/**
+ * Energy and the billed rate of one contract's bills for the months in the
+ * window. A month with a final bill is read from its final bills, otherwise
+ * from its provisional one, so a month is never counted twice.
+ */
+function billedOf(contractId, direction, fromMonth, toMonth) {
+  const bills = db.prepare(`
+    SELECT billing_period, invoice_type, energy_mwh, tariff_per_unit FROM invoices
+    WHERE contract_id = ? AND direction = ? AND invoice_type IN ('FINAL', 'PROVISIONAL')
+      AND status IN ${BILLED} AND billing_period BETWEEN ? AND ?
+  `).all(contractId, direction, fromMonth, toMonth);
+  const finalMonths = new Set(bills.filter((b) => b.invoice_type === 'FINAL').map((b) => b.billing_period));
+  let mwh = 0;
+  let value = 0;
+  for (const b of bills) {
+    if (b.invoice_type === 'PROVISIONAL' && finalMonths.has(b.billing_period)) continue;
+    mwh += Number(b.energy_mwh) || 0;
+    value += (Number(b.energy_mwh) || 0) * (Number(b.tariff_per_unit) || 0);
+  }
+  return { mwh, rate: mwh > 0 ? value / mwh : 0 };
+}
+
+/**
+ * Form-IV lines from the REIA desk: one per PSA and the PPA it is allocated
+ * from, for the energy billed to the discom in the window. The sale price is
+ * the PSA's billed rate; the purchase price is the developer's billed rate for
+ * the same months, or the PPA tariff before the developer has billed. SJVN's
+ * own stations sell their own power, which is not trading, and are left out.
+ */
+export function deriveReiaLines(from, to) {
+  const fromMonth = from.slice(0, 7);
+  const toMonth = to.slice(0, 7);
+  const psas = db.prepare(`
+    SELECT c.id, c.contract_no, c.tenure_start, c.tenure_end, b.name AS buyer_name
+    FROM contracts c LEFT JOIN entities b ON b.id = c.buyer_id
+    WHERE c.contract_type = 'PSA' AND EXISTS (
+      SELECT 1 FROM invoices i WHERE i.contract_id = c.id AND i.direction = 'SJVN_TO_BUYER'
+        AND i.invoice_type IN ('FINAL', 'PROVISIONAL') AND i.status IN ${BILLED}
+        AND i.billing_period BETWEEN ? AND ?)
+    ORDER BY c.contract_no
+  `).all(fromMonth, toMonth);
+  const allocations = db.prepare(`
+    SELECT a.allocation_percent, p.id AS ppa_id, p.contract_no AS ppa_no, p.tariff_per_unit,
+      s.name AS seller_name, s.is_sjvn_own
+    FROM contract_allocations a
+    JOIN contracts p ON p.id = a.ppa_id
+    LEFT JOIN entities s ON s.id = p.seller_id
+    WHERE a.psa_id = ? AND a.effective_from <= ? AND (a.effective_to IS NULL OR a.effective_to >= ?)
+    ORDER BY p.contract_no
+  `);
+
+  const lines = [];
+  for (const psa of psas) {
+    const sale = billedOf(psa.id, 'SJVN_TO_BUYER', fromMonth, toMonth);
+    if (!(sale.mwh > 0)) continue;
+    const periodFrom = psa.tenure_start && psa.tenure_start > from ? psa.tenure_start : from;
+    const periodTo = psa.tenure_end && psa.tenure_end < to ? psa.tenure_end : to;
+    const legs = allocations.all(psa.id, to, from);
+    // Unallocated, the seller and the purchase price are unknown: the line
+    // stays, with no purchase price, so the submit gate asks for it.
+    const sources = legs.length ? legs : [{ allocation_percent: 100, ppa_id: null, ppa_no: null, seller_name: 'No PPA allocated', is_sjvn_own: 0 }];
+    for (const leg of sources) {
+      if (leg.is_sjvn_own) continue;
+      const purchase = leg.ppa_id ? billedOf(leg.ppa_id, 'SELLER_TO_SJVN', fromMonth, toMonth) : { rate: 0 };
+      const purchaseRate = purchase.rate > 0 ? purchase.rate : Number(leg.tariff_per_unit) || 0;
+      const line = {
+        source: 'REIA',
+        contract_id: psa.id,
+        ppa_id: leg.ppa_id,
+        seller_name: leg.seller_name || 'Unknown seller',
+        buyer_name: psa.buyer_name || 'Unknown buyer',
+        contract_ref: leg.ppa_no ? `${psa.contract_no} / ${leg.ppa_no}` : psa.contract_no,
+        period_from: periodFrom,
+        period_to: periodTo,
+        quantum_mu: round((sale.mwh * (Number(leg.allocation_percent) || 0)) / 100 / 1000, 4),
+        purchase_rate: round(purchaseRate, 4),
+        sale_rate: round(sale.rate, 4),
+        trading_margin_per_unit: round(purchaseRate > 0 ? sale.rate - purchaseRate : 0, 4),
+        exempt_reason: REIA_EXEMPT_REASON,
+        remarks: purchaseRate > 0 ? null : 'No PPA allocated against this PSA',
+      };
+      lines.push({ ...line, ...evaluateLine(line) });
+    }
+  }
+  return lines;
 }
 
 /** Period totals as they appear on the filed form. */
@@ -213,10 +315,10 @@ export function insertLine(formId, line) {
   const normalized = normalizeLine(line);
   const evaluated = { ...normalized, ...evaluateLine(normalized) };
   db.prepare(`
-    INSERT INTO cerc_form_iv_lines (id, form_id, line_no, source, bilateral_id, seller_name, buyer_name,
+    INSERT INTO cerc_form_iv_lines (id, form_id, line_no, source, bilateral_id, contract_id, ppa_id, seller_name, buyer_name,
       contract_ref, period_from, period_to, quantum_mu, purchase_rate, sale_rate, trading_margin_per_unit,
       margin_cap, compliance_status, exempt_reason, remarks)
-    VALUES (@id, @form_id, @line_no, @source, @bilateral_id, @seller_name, @buyer_name,
+    VALUES (@id, @form_id, @line_no, @source, @bilateral_id, @contract_id, @ppa_id, @seller_name, @buyer_name,
       @contract_ref, @period_from, @period_to, @quantum_mu, @purchase_rate, @sale_rate, @trading_margin_per_unit,
       @margin_cap, @compliance_status, @exempt_reason, @remarks)
   `).run({
@@ -225,6 +327,8 @@ export function insertLine(formId, line) {
     line_no: evaluated.line_no,
     source: evaluated.source || 'MANUAL',
     bilateral_id: evaluated.bilateral_id || null,
+    contract_id: evaluated.contract_id || null,
+    ppa_id: evaluated.ppa_id || null,
     seller_name: evaluated.seller_name,
     buyer_name: evaluated.buyer_name,
     contract_ref: evaluated.contract_ref || null,

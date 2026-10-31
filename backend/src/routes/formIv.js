@@ -12,8 +12,14 @@ import { generateFormIvPdf } from '../scripts/governanceReportsPdf.js';
 const router = Router();
 router.use(requireAuth);
 
-const READ = [...new Set([...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR'])];
-const WRITE = ROLE_GROUPS.TRADING_WRITE;
+// The REIA workflow has the REIA team prepare and submit this return (31-Oct-2026);
+// the trading desk keeps what it had. On the REIA side the maker prepares it and
+// the checker files it with CERC (Target #2 Phase B.2), so no one does both.
+const READ = [...new Set([...ROLE_GROUPS.TRADING_ALL, ...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
+const WRITE = [...ROLE_GROUPS.TRADING_WRITE, ...ROLE_GROUPS.REIA_MAKE];
+const FILE = [...ROLE_GROUPS.TRADING_WRITE, ...ROLE_GROUPS.REIA_CHECK];
+// Whose register the audit trail files an action under.
+const moduleOf = (req) => (ROLE_GROUPS.TRADING_WRITE.includes(req.user?.role) ? 'TRADING' : 'REIA');
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -143,16 +149,17 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     }
   })();
 
-  logAudit({ req, user: req.user, action: 'CREATE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: id, details: b });
+  logAudit({ req, user: req.user, action: 'CREATE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: id, details: b });
   const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(id);
   const lines = getLines(id);
   res.status(201).json({ ...withDerived(form), lines, blockers: submissionBlockers(form, lines) });
 });
 
 /**
- * Rebuild the lines from current trade data. Manually added lines and recorded
- * exemptions survive — only the auto-derived bilateral rows are replaced, so a
- * regenerate after a rate correction doesn't discard the preparer's work.
+ * Rebuild the lines from current trade data and REIA bills. Manually added
+ * lines and recorded exemptions survive — only the auto-derived rows are
+ * replaced, so a regenerate after a rate correction doesn't discard the
+ * preparer's work.
  */
 router.post('/:id/generate', requireRole(...WRITE), (req, res) => {
   const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(req.params.id);
@@ -171,10 +178,10 @@ router.post('/:id/generate', requireRole(...WRITE), (req, res) => {
       .filter((l) => l.bilateral_id && l.exempt_reason)
       .map((l) => [l.bilateral_id, l.exempt_reason]),
   );
-  const kept = getLines(form.id).filter((l) => l.source !== 'BILATERAL');
+  const kept = getLines(form.id).filter((l) => !['BILATERAL', 'REIA'].includes(l.source));
 
   db.transaction(() => {
-    db.prepare("DELETE FROM cerc_form_iv_lines WHERE form_id = ? AND source = 'BILATERAL'").run(form.id);
+    db.prepare("DELETE FROM cerc_form_iv_lines WHERE form_id = ? AND source IN ('BILATERAL', 'REIA')").run(form.id);
 
     const derived = deriveLines(window.from, window.to).map((l) => {
       const reason = exemptions.get(l.bilateral_id);
@@ -191,7 +198,7 @@ router.post('/:id/generate', requireRole(...WRITE), (req, res) => {
     refreshTotals(form.id);
   })();
 
-  logAudit({ req, user: req.user, action: 'GENERATE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: window });
+  logAudit({ req, user: req.user, action: 'GENERATE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, details: window });
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });
@@ -210,13 +217,13 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
     UPDATE cerc_form_iv SET status=?, reference_no=?, notes=?, updated_at=datetime('now') WHERE id=?
   `).run(status, b.reference_no ?? form.reference_no, b.notes ?? form.notes, form.id);
 
-  logAudit({ req, user: req.user, action: 'UPDATE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: b });
+  logAudit({ req, user: req.user, action: 'UPDATE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, details: b });
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });
 });
 
-router.post('/:id/submit', requireRole(...WRITE), (req, res) => {
+router.post('/:id/submit', requireRole(...FILE), (req, res) => {
   const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(req.params.id);
   if (!form) return res.status(404).json({ error: 'Form-IV record not found' });
   if (form.status === 'SUBMITTED') return res.status(409).json({ error: 'This Form-IV is already submitted.' });
@@ -232,7 +239,7 @@ router.post('/:id/submit', requireRole(...WRITE), (req, res) => {
     WHERE id=?
   `).run(req.body.submission_date || today(), reference_no, req.user.name, form.id);
 
-  logAudit({ req, user: req.user, action: 'SUBMIT', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: { reference_no } });
+  logAudit({ req, user: req.user, action: 'SUBMIT', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, details: { reference_no } });
   try { alertCategoryWatch(); } catch (e) { console.error('[CERC] category watch', e.message); }
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
@@ -255,7 +262,7 @@ router.post('/annual/:fy/roll-up', requireRole(...WRITE), (req, res) => {
   try { res.json(rollUpAnnual(req.params.fy, { user: req.user, req })); } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.extra || {}) }); }
 });
 
-router.post('/mark-filed-outside', requireRole(...WRITE), (req, res) => {
+router.post('/mark-filed-outside', requireRole(...FILE), (req, res) => {
   const b = req.body || {};
   const reference = String(b.reference_no || '').trim();
   const filedOn = String(b.submission_date || '').trim();
@@ -283,7 +290,7 @@ router.post('/mark-filed-outside', requireRole(...WRITE), (req, res) => {
     UPDATE cerc_form_iv SET status = 'SUBMITTED', submission_date = ?, reference_no = ?, submitted_by = ?, filed_outside = 1,
       notes = COALESCE(notes || ' · ', '') || ?, updated_at = datetime('now') WHERE id = ?
   `).run(filedOn, reference, req.user.name, `Filed outside the platform${note ? ` — ${note}` : ''}`, form.id);
-  logAudit({ req, user: req.user, action: 'FORM_IV_FILED_OUTSIDE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: { period: form.period, reference_no: reference, submission_date: filedOn } });
+  logAudit({ req, user: req.user, action: 'FORM_IV_FILED_OUTSIDE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, details: { period: form.period, reference_no: reference, submission_date: filedOn } });
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   res.json({ ...withDerived(updated), lines: getLines(form.id) });
 });
@@ -319,7 +326,7 @@ router.post('/:id/lines', requireRole(...WRITE), (req, res) => {
   });
   refreshTotals(form.id);
 
-  logAudit({ req, user: req.user, action: 'ADD_LINE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: b });
+  logAudit({ req, user: req.user, action: 'ADD_LINE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, details: b });
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.status(201).json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });
@@ -356,7 +363,7 @@ router.put('/lines/:lineId', requireRole(...WRITE), (req, res) => {
   );
   refreshTotals(form.id);
 
-  logAudit({ req, user: req.user, action: 'UPDATE_LINE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, beforeValue: line, afterValue: evaluated });
+  logAudit({ req, user: req.user, action: 'UPDATE_LINE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, beforeValue: line, afterValue: evaluated });
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });
@@ -376,7 +383,7 @@ router.delete('/lines/:lineId', requireRole(...WRITE), (req, res) => {
     refreshTotals(form.id);
   })();
 
-  logAudit({ req, user: req.user, action: 'DELETE_LINE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, beforeValue: line });
+  logAudit({ req, user: req.user, action: 'DELETE_LINE', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, beforeValue: line });
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });

@@ -474,6 +474,8 @@ export default function App() {
         <Route path="reia/verification" element={<ProtectedRoute roles={REIA_ROLES}><VerificationQueue /></ProtectedRoute>} />
         {/* The trading desk files Form-IV and pays the licence fee, so it reads this calendar too. */}
         <Route path="reia/cerc-compliance" element={<ProtectedRoute roles={[...new Set([...REIA_ROLES, ...TRADING_INTERNAL_ROLES, 'COMPLIANCE_AUDITOR'])]}><ComplianceHub defaultTab="cerc" /></ProtectedRoute>} />
+        {/* The REIA team prepares and files Form-IV (REIA workflow, section F): the same screen as the trading desk's. */}
+        <Route path="reia/form-iv" element={<ProtectedRoute roles={[...REIA_ROLES, 'COMPLIANCE_AUDITOR']}><CERCFormIV /></ProtectedRoute>} />
 
         {/* Seller Portal */}
         <Route path="seller" element={<ProtectedRoute roles={SELLER_ROLES}><GuidedPage guide="dashboard"><SellerDashboard /></GuidedPage></ProtectedRoute>} />
