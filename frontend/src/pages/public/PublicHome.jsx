@@ -548,12 +548,12 @@ export default function PublicHome({ beta = false }) {
                   <BookOpen size={26} color="currentColor" />
                 </div>
                 <div>
-                  <span className="gigw-desk-badge">Guide · Look it up</span>
+                  <span className="gigw-desk-badge">User Manual · Learn</span>
                   <h3 className="gigw-desk-title">REIA Playbook</h3>
-                  <p className="gigw-desk-sub">Stuck? See how the step should go</p>
+                  <p className="gigw-desk-sub">Learn the portal, step by step</p>
                 </div>
               </div>
-              <p className="gigw-desk-desc">The whole REIA cycle, step by step: who signs in, which button to press, and what the screen should show next. Check it before you report something as wrong.</p>
+              <p className="gigw-desk-desc">The beta’s manual: every REIA step — who signs in, which button to press, what comes next. Stuck? Look here first.</p>
               <div className="gigw-desk-features">
                 <div className="gigw-desk-features-header">
                   <div className="gigw-features-title-wrap">
