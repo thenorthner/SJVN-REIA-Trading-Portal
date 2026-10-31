@@ -133,6 +133,7 @@ export const STRINGS = {
   'pub.shell.searchPortal': { en: 'Search Portal (Ctrl+K)', hi: 'खोजें (Ctrl+K)', gu: 'પોર્ટલમાં શોધો (Ctrl+K)', mr: 'पोर्टलमध्ये शोधा (Ctrl+K)' },
   'pub.shell.dashboard': { en: 'Go to Dashboard →', hi: 'कार्यक्षेत्र →', gu: 'કાર્યક્ષેત્ર →', mr: 'कार्यक्षेत्र →' },
   'pub.shell.signIn': { en: 'Sign In →', hi: 'साइन इन करें →', gu: 'સાઇન ઇન કરો →', mr: 'साइन इन करा →' },
+  'pub.shell.playbook': { en: 'Access Playbook', hi: 'प्लेबुक खोलें', gu: 'પ્લેબુક ખોલો', mr: 'प्लेबुक उघडा' },
   'pub.signInTo': { en: 'Sign In to {desk}', hi: '{desk} प्रवेश', gu: '{desk} માં પ્રવેશ', mr: '{desk} मध्ये प्रवेश' },
 
   // Public home: desk and asset cards

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Search, UserRound, Target } from 'lucide-react';
+import { Search, UserRound, Target, BookOpen } from 'lucide-react';
 import { NAV_LINKS } from '../../gigw/policyContent.js';
 import ExternalLinkNotice from '../../gigw/ExternalLinkNotice.jsx';
 import GovStrip, { focusMain } from '../../gigw/GovStrip.jsx';
@@ -14,7 +14,7 @@ import { openPortalSearch } from '../../components/PortalSearchModal.jsx';
 import AudioSpeechWidget, { AUDIO_SPEECH_TOGGLE_EVENT } from '../../components/AudioSpeechWidget.jsx';
 import { openKeyboardShortcuts } from '../../components/KeyboardShortcutsModal.jsx';
 import BackToTopProgress from '../../components/BackToTopProgress.jsx';
-import { REIA_BETA, REIA_BETA_TITLE } from '../../reiaBeta.js';
+import { REIA_BETA, REIA_BETA_TITLE, REIA_PLAYBOOK_URL } from '../../reiaBeta.js';
 
 /**
  * PublicShell — frame for the public portal pages, laid out as DBIM v3 s.5.4.3
@@ -149,10 +149,20 @@ export default function PublicShell({ title, children, beta = REIA_BETA }) {
               <span>{t('pub.shell.vision')}</span>
             </button>}
             <ThemeToggle />
-            <Link to={getDashboardPath()} className="btn btn-primary gigw-header-signin-btn">
-              <UserRound size={16} aria-hidden="true" />
-              <span>{user ? t('pub.shell.dashboard') : t('pub.shell.signIn')}</span>
-            </Link>
+            {/* The beta offers its manual here, not a way into whatever session
+                this browser still holds: testers sign in from the home page. */}
+            {beta ? (
+              <a href={REIA_PLAYBOOK_URL} target="_blank" rel="noopener" className="btn btn-primary gigw-header-signin-btn">
+                <BookOpen size={16} aria-hidden="true" />
+                <span>{t('pub.shell.playbook')}</span>
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            ) : (
+              <Link to={getDashboardPath()} className="btn btn-primary gigw-header-signin-btn">
+                <UserRound size={16} aria-hidden="true" />
+                <span>{user ? t('pub.shell.dashboard') : t('pub.shell.signIn')}</span>
+              </Link>
+            )}
           </div>
         </div>
         <nav className="gigw-global-nav" aria-label={t('nav.global')}>

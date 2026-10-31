@@ -5,6 +5,10 @@
 export const REIA_BETA = import.meta.env.VITE_REIA_BETA === '1';
 export const REIA_BETA_HOME = '/reia-beta';
 export const REIA_BETA_TITLE = 'SJVN Limited | REIA Commercial Portal';
+// The REIA Playbook (tools/reia-playbook, served from public/reia-playbook):
+// testers look up how a step works there before they report it. The file is
+// named because the dev server answers a bare folder with the app.
+export const REIA_PLAYBOOK_URL = '/reia-playbook/index.html';
 
 // The signed-in screens the beta shows. The rest of the platform keeps its
 // routes, roles and permissions; the beta build neither lists nor opens it, so

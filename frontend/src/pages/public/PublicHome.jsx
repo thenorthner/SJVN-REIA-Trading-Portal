@@ -17,7 +17,7 @@ import { useGigw } from '../../gigw/GigwContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { landingFor } from '../Login.jsx';
 import { openVisionModal } from '../../components/VisionModal.jsx';
-import { REIA_BETA_TITLE } from '../../reiaBeta.js';
+import { REIA_BETA_TITLE, REIA_PLAYBOOK_URL as PLAYBOOK_URL } from '../../reiaBeta.js';
 
 /**
  * SJVN Integrated Energy Commerce & REIA Public Portal
@@ -69,10 +69,6 @@ const BETA_NOTES = [
   'Send it through the Feedback page',
 ];
 
-// The REIA Playbook (tools/reia-playbook, served from public/reia-playbook):
-// testers look up how a step works there before they report it. The file is
-// named because the dev server answers a bare folder with the app.
-const PLAYBOOK_URL = '/reia-playbook/index.html';
 const PLAYBOOK_POINTS = [
   'Ten missions, from onboarding a company to the month’s reconciliation',
   'Who signs in for each step, and who it goes to next',
@@ -374,9 +370,11 @@ export default function PublicHome({ beta = false }) {
             </h1>
 
             <div className="gigw-hero-btn-row">
-              <Link to={user ? getDashboardPath() : '/login'} className="btn-access-portal">
+              {/* The beta always asks who is signing in: a tester on a shared
+                  machine must not walk into the last person's session. */}
+              <Link to={beta ? '/login?desk=REIA' : user ? getDashboardPath() : '/login'} className="btn-access-portal">
                 <Lock size={15} />
-                <span>{user ? (lang === 'hi' ? 'कार्यक्षेत्र खोलें →' : lang === 'gu' ? 'કાર્યક્ષેત્ર ખોલો →' : lang === 'mr' ? 'कार्यक्षेत्र उघडा →' : 'Access Portal →') : (lang === 'hi' ? 'पोर्टल में प्रवेश करें →' : lang === 'gu' ? 'પોર્ટલમાં પ્રવેશો →' : lang === 'mr' ? 'पोर्टलवर प्रवेश करा →' : 'Access Portal →')}</span>
+                <span>{user && !beta ? (lang === 'hi' ? 'कार्यक्षेत्र खोलें →' : lang === 'gu' ? 'કાર્યક્ષેત્ર ખોલો →' : lang === 'mr' ? 'कार्यक्षेत्र उघडा →' : 'Access Portal →') : (lang === 'hi' ? 'पोर्टल में प्रवेश करें →' : lang === 'gu' ? 'પોર્ટલમાં પ્રવેશો →' : lang === 'mr' ? 'पोर्टलवर प्रवेश करा →' : 'Access Portal →')}</span>
               </Link>
               {beta && (
                 <a href={PLAYBOOK_URL} target="_blank" rel="noopener" className="btn-our-vision">

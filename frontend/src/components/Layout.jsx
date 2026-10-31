@@ -10,7 +10,7 @@ import ChangePasswordModal from './ChangePasswordModal.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import { Lock, Search } from 'lucide-react';
 import { openPortalSearch } from './PortalSearchModal.jsx';
-import { betaNav } from '../reiaBeta.js';
+import { betaNav, inReiaBeta, REIA_PLAYBOOK_URL } from '../reiaBeta.js';
 import GovStrip, { SkipLink } from '../gigw/GovStrip.jsx';
 import { useGigw } from '../gigw/GigwContext.jsx';
 import GigwFooter from '../gigw/GigwFooter.jsx';
@@ -604,9 +604,12 @@ export default function Layout() {
   // "Manage Portfolio" went to the trading desk's client list for everyone, and
   // for a REIA user, a seller or a buyer that screen answers "Access restricted".
   // It now leads where the role's portfolio actually lives, or is not offered.
-  const portfolioPath = ROLE_GROUPS.TRADING_ALL.includes(user?.role)
+  const portfolioHome = ROLE_GROUPS.TRADING_ALL.includes(user?.role)
     ? '/trading/clients'
     : isTradingClientRole(user?.role) ? '/trading/my-profile' : null;
+  // The beta opens no other desk's screen: offered there, the item sent SJVN
+  // Admin straight back to the REIA dashboard.
+  const portfolioPath = portfolioHome && (!REIA_BETA || inReiaBeta(portfolioHome)) ? portfolioHome : null;
   const entity = user?.entity;
   const branded = isCounterparty && entity;
   const portalKind = isSellerRole(user?.role) 
@@ -951,6 +954,11 @@ export default function Layout() {
                   {portfolioPath && (
                     <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate(portfolioPath); setShowProfile(false); }}>
                       {tUI('Manage Portfolio')}
+                    </button>
+                  )}
+                  {REIA_BETA && (
+                    <button type="button" role="menuitem" className="notif-item" onClick={() => { window.open(REIA_PLAYBOOK_URL, '_blank', 'noopener'); setShowProfile(false); }}>
+                      {tUI('REIA Playbook')} ↗
                     </button>
                   )}
                   <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/home'); setShowProfile(false); }}>
