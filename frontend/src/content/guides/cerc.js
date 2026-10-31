@@ -5,6 +5,8 @@
  * makes a period owed, and what stops a return being filed.
  */
 
+import { REIA_BETA } from '../../reiaBeta.js';
+
 const cercGuide = {
   eyebrow: 'Module reference',
   title: 'CERC Compliance',
@@ -304,4 +306,133 @@ const cercGuide = {
     + 'Where this page quotes a figure, the value actually applied is the one in masters.',
 };
 
-export default cercGuide;
+// The REIA beta's guide: the return as the REIA desk prepares and files it,
+// holding the desk's own PPA/PSA sales (the API leaves the other trades out).
+const reiaCercGuide = {
+  eyebrow: 'Module reference',
+  title: 'CERC Compliance',
+  summary:
+    'The REIA desk reports its PPA/PSA sales to CERC on Form-IV, a return filed monthly '
+    + 'and again for each financial year. The REIA maker prepares each return and the REIA '
+    + 'checker files it. This page is the filing calendar — every period that owes a return '
+    + 'and where it stands.',
+
+  facts: [
+    { label: 'Return', value: 'Form-IV', hint: 'One line per PSA and the PPA behind it' },
+    { label: 'Periods owed', value: 'Monthly + annual', hint: 'A period is owed once it has ended' },
+    { label: 'Deadline', value: 'Monthly: 15th of the next month · Annual: 30 April', hint: 'As the filed format states' },
+    { label: 'Who', value: 'Maker prepares · Checker files', hint: 'Neither does the other’s part' },
+  ],
+
+  quickRef: {
+    title: 'Quick reference',
+    items: [
+      { k: 'Energy', v: 'From the month’s final PSA bill, else its provisional one' },
+      { k: 'Sale price', v: 'The billed PSA rate' },
+      { k: 'Purchase price', v: 'The developer’s billed rate, else the PPA tariff' },
+      { k: 'Filed on', v: 'IV-D (inter-State) · IV-E (within one state)' },
+      { k: 'Monthly period', v: 'YYYY-MM' },
+      { k: 'Annual period', v: 'Financial year, 2026-27' },
+    ],
+  },
+
+  sections: [
+    {
+      id: 'cerc-what',
+      heading: 'What this page answers',
+      blocks: [
+        { type: 'p', text:
+          '“What have we prepared?” is answered by the Form-IV register — the returns someone '
+          + 'has started. “What do we owe the Commission?” is answered here: every month from '
+          + 'the first one with PPA/PSA bills, up to the last completed month, marked Not started '
+          + 'where nobody has begun its return.' },
+        { type: 'table',
+          columns: ['Status', 'Means'],
+          rows: [
+            ['Not started', 'No Form-IV exists for this period at all'],
+            ['Draft', 'A form exists; lines may be incomplete'],
+            ['Prepared', 'Reviewed and ready, but not yet filed with the Commission'],
+            ['Filed', 'Submitted, with a CERC reference number recorded'],
+          ] },
+        { type: 'p', text:
+          'Any period not Filed once its deadline has passed is flagged overdue, with the days '
+          + 'past due. The current month is not listed, because it is not late until it ends; an '
+          + 'annual return appears once its financial year has finished.' },
+      ],
+    },
+
+    {
+      id: 'cerc-lines',
+      heading: 'What goes on the return',
+      blocks: [
+        { type: 'p', text:
+          'Each PSA billed in the month is a line, with the PPA allocated to it: the developer '
+          + 'as seller, the discom as buyer, the energy billed to the discom, both prices and the '
+          + 'SJVN margin between them. Power from SJVN’s own projects is left out.' },
+        { type: 'table',
+          columns: ['Form', 'Covers'],
+          rows: [
+            ['IV-D', 'Long-term inter-State: the developer and the discom are in different states'],
+            ['IV-E', 'Intra-State, as a volume per state: both ends are in the same state'],
+          ],
+          caption: 'The Annexures button on a calendar row sorts the period into these forms, even before its return is started. A form with nothing on it is filed as NIL.' },
+        { type: 'note', tone: 'info', title: 'The margin cap does not bite on these lines', text:
+          'CERC caps the margin on short-term sales. A PPA/PSA sale is long-term, so its line is '
+          + 'marked exempt with the reason. A line added by hand is tested against the cap unless '
+          + 'its exemption reason is recorded.' },
+      ],
+    },
+
+    {
+      id: 'cerc-workflow',
+      heading: 'Preparing and filing a return',
+      blocks: [
+        { type: 'steps', items: [
+          { title: 'The maker opens the period',
+            detail: 'Prepare Form-IV on the calendar row opens the Form-IV screen with the period '
+              + 'chosen. Create Filing builds the lines from the month’s bills.' },
+          { title: 'The maker checks the lines',
+            detail: 'A line missing a purchase price is flagged. When a bill changes, Regenerate '
+              + 'from bills rebuilds the lines; a sale the platform does not hold goes in with '
+              + '+ Add transaction.' },
+          { title: 'The checker files it',
+            detail: 'The checker opens the return, enters the CERC Filing Reference No. and presses '
+              + 'Mark Submitted to CERC, affirming the statutory declaration. The return is then '
+              + 'locked: it is the filed record.' },
+          { title: 'The year rolls up',
+            detail: 'Once all twelve monthlies are filed, Roll up annual builds the annual return '
+              + 'from them.' },
+        ] },
+        { type: 'table',
+          columns: ['Cannot file yet because', 'What to do'],
+          rows: [
+            ['No transactions on the form', 'Generate from the bills, or add a line by hand'],
+            ['A transaction exceeds the margin cap', 'Correct its rates, or record why it is exempt'],
+            ['A transaction is missing quantum, purchase price or sale price', 'Fill it in, or correct the bill and regenerate'],
+            ['No CERC filing reference number', 'The checker enters the reference the Commission issued'],
+          ] },
+      ],
+    },
+
+    {
+      id: 'cerc-glossary',
+      heading: 'Glossary',
+      blocks: [
+        { type: 'terms', items: [
+          { term: 'Form-IV',
+            def: 'The return to CERC listing each sale in the period: seller, buyer, quantum, purchase price, sale price and margin.' },
+          { term: 'SJVN margin',
+            def: 'Sale price less purchase price, per unit: what SJVN earns between the PSA and the PPA.' },
+          { term: 'Exempt',
+            def: 'A line outside the margin cap, with the reason recorded. A long-term PPA/PSA sale is exempt.' },
+          { term: 'MU', also: 'Million Units',
+            def: 'A thousand MWh. The unit volumes are reported in.' },
+          { term: 'Overdue',
+            def: 'Not filed once the deadline has passed. A prepared-but-unfiled return is overdue too.' },
+        ] },
+      ],
+    },
+  ],
+};
+
+export default REIA_BETA ? reiaCercGuide : cercGuide;

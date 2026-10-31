@@ -23,6 +23,12 @@
 import db from '../db/index.js';
 import { newId } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
+import { REIA_BETA } from './reiaBeta.js';
+
+// The REIA beta files the REIA desk's own lines (31-Oct-2026): no bilateral trade
+// or cleared bid is read, and a return the trading desk started shows its REIA
+// and hand-entered lines alone, with totals to match.
+const BETA_HIDDEN_SOURCES = ['BILATERAL', 'EXCHANGE'];
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const FY_RE = /^(\d{4})-(\d{2})$/;
@@ -133,7 +139,8 @@ export function evaluateLine(line) {
  * straddles a period boundary.
  */
 export function deriveLines(from, to) {
-  return [...deriveBilateralLines(from, to), ...deriveReiaLines(from, to)].map((l, i) => ({ ...l, line_no: i + 1 }));
+  const bilateral = REIA_BETA ? [] : deriveBilateralLines(from, to);
+  return [...bilateral, ...deriveReiaLines(from, to)].map((l, i) => ({ ...l, line_no: i + 1 }));
 }
 
 function deriveBilateralLines(from, to) {
@@ -178,7 +185,7 @@ function deriveBilateralLines(from, to) {
 // A REIA bill counts once it has gone to the discom (the same states the
 // outstanding position reads); a draft or a cancelled bill traded nothing.
 const BILLED = "('APPROVED','SENT','PARTIALLY_PAID','DISPUTED','PAID')";
-const REIA_EXEMPT_REASON = 'Long-term PPA/PSA: margin as agreed in the contract (the CERC trading margin cap applies to short-term trades)';
+const REIA_EXEMPT_REASON = 'Long-term PPA/PSA: margin as agreed in the contract (the CERC margin cap applies to short-term sales)';
 
 /**
  * Energy and the billed rate of one contract's bills for the months in the
@@ -295,7 +302,13 @@ export function rollUp(lines) {
 }
 
 export function getLines(formId) {
-  return db.prepare('SELECT * FROM cerc_form_iv_lines WHERE form_id = ? ORDER BY line_no ASC').all(formId);
+  const lines = db.prepare('SELECT * FROM cerc_form_iv_lines WHERE form_id = ? ORDER BY line_no ASC').all(formId);
+  return REIA_BETA ? lines.filter((l) => !BETA_HIDDEN_SOURCES.includes(l.source)) : lines;
+}
+
+/** A return's header as the reader is shown it: in the beta, totalled from the lines it shows. */
+export function shownForm(form) {
+  return REIA_BETA && form ? { ...form, ...rollUp(getLines(form.id)) } : form;
 }
 
 /** Recompute and persist the header totals from whatever lines currently exist. */
@@ -352,12 +365,12 @@ export function insertLine(formId, line) {
  */
 export function submissionBlockers(form, lines) {
   const blockers = [];
-  if (!lines.length) blockers.push('No transactions on the form — generate from trade data or add a line.');
+  if (!lines.length) blockers.push(`No transactions on the form — generate from ${REIA_BETA ? 'the bills' : 'trade data'} or add a line.`);
 
   const breaches = lines.filter((l) => l.compliance_status === 'BREACH');
   if (breaches.length) {
     blockers.push(
-      `${breaches.length} transaction(s) exceed the CERC trading margin cap `
+      `${breaches.length} transaction(s) exceed the CERC ${REIA_BETA ? '' : 'trading '}margin cap `
       + `(line ${breaches.map((l) => l.line_no).join(', ')}). Correct the rates or record an exemption reason.`,
     );
   }
@@ -374,9 +387,12 @@ export function submissionBlockers(form, lines) {
   return blockers;
 }
 
+// The beta calls the REIA margin the SJVN margin, as its screens do.
+const MARGIN = REIA_BETA ? 'SJVN Margin' : 'Trading Margin';
+
 const CSV_HEADERS = [
   'Sl. No.', 'Name of Seller', 'Name of Buyer', 'Contract Reference', 'Period From', 'Period To',
-  'Quantum (MU)', 'Purchase Price (Rs/kWh)', 'Sale Price (Rs/kWh)', 'Trading Margin (Rs/kWh)',
+  'Quantum (MU)', 'Purchase Price (Rs/kWh)', 'Sale Price (Rs/kWh)', `${MARGIN} (Rs/kWh)`,
   'Applicable Cap (Rs/kWh)', 'Compliance', 'Remarks',
 ];
 
@@ -388,7 +404,7 @@ const csvCell = (v) => {
 /** Form-IV as CSV, with the period totals as a trailing summary block. */
 export function toCsv(form, lines) {
   const rows = [
-    [`CERC Form-IV — ${form.period_type === 'ANNUAL' ? 'Annual' : 'Monthly'} Return of Inter-State Trading Transactions`],
+    [`CERC Form-IV — ${form.period_type === 'ANNUAL' ? 'Annual' : 'Monthly'} Return of ${REIA_BETA ? 'Transactions of Electricity' : 'Inter-State Trading Transactions'}`],
     [`Form No.`, form.form_no],
     [`Period`, form.period],
     [`Status`, form.status],
@@ -405,7 +421,7 @@ export function toCsv(form, lines) {
     ['Total Volume (MU)', form.total_volume_mu],
     ['Total Purchase Cost (Rs)', form.total_purchase_cost],
     ['Total Sale Revenue (Rs)', form.total_revenue],
-    ['Total Trading Margin (Rs)', form.trading_margin],
+    [`Total ${MARGIN} (Rs)`, form.trading_margin],
     ['Weighted Avg Margin (Rs/kWh)', form.avg_margin_per_unit],
   ];
   return rows.map((r) => r.map(csvCell).join(',')).join('\n');

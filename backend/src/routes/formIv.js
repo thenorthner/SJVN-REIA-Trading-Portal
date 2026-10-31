@@ -5,8 +5,9 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
 import {
   resolvePeriod, dueDateFor, deriveLines, evaluateLine, normalizeLine, getLines, refreshTotals,
-  insertLine, submissionBlockers, toCsv,
+  insertLine, submissionBlockers, toCsv, shownForm,
 } from '../services/cercFormIv.js';
+import { REIA_BETA } from '../services/reiaBeta.js';
 import { generateFormIvPdf } from '../scripts/governanceReportsPdf.js';
 
 const router = Router();
@@ -32,8 +33,9 @@ function assertEditable(form, res) {
   return true;
 }
 
-function withDerived(form) {
-  if (!form) return form;
+function withDerived(stored) {
+  if (!stored) return stored;
+  const form = shownForm(stored);
   const overdue = form.status !== 'SUBMITTED' && !!form.due_date && form.due_date < today();
   let window = {};
   try {
@@ -55,8 +57,22 @@ router.get('/', requireRole(...READ), (req, res) => {
   res.json(db.prepare(sql).all(...params).map(withDerived));
 });
 
+/** The register's totals in the beta, from each return's REIA and hand-entered lines. */
+function betaSummaryRow() {
+  const forms = db.prepare('SELECT * FROM cerc_form_iv').all().map(shownForm);
+  const sum = (k) => forms.reduce((a, f) => a + (Number(f[k]) || 0), 0);
+  return {
+    total: forms.length,
+    submitted: forms.filter((f) => f.status === 'SUBMITTED').length,
+    pending: forms.filter((f) => f.status !== 'SUBMITTED').length,
+    open_breaches: sum('breach_count'),
+    total_volume_mu: Math.round(sum('total_volume_mu') * 1e4) / 1e4,
+    total_margin: Math.round(sum('trading_margin') * 100) / 100,
+  };
+}
+
 router.get('/summary', requireRole(...READ), (req, res) => {
-  const row = db.prepare(`SELECT COUNT(*) total,
+  const row = REIA_BETA ? betaSummaryRow() : db.prepare(`SELECT COUNT(*) total,
     COALESCE(SUM(CASE WHEN status='SUBMITTED' THEN 1 ELSE 0 END),0) submitted,
     COALESCE(SUM(CASE WHEN status!='SUBMITTED' THEN 1 ELSE 0 END),0) pending,
     COALESCE(SUM(breach_count),0) open_breaches,
@@ -90,7 +106,7 @@ router.get('/:id', requireRole(...READ), (req, res) => {
 router.get('/:id/export', requireRole(...READ), (req, res) => {
   const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(req.params.id);
   if (!form) return res.status(404).json({ error: 'Form-IV record not found' });
-  const csv = toCsv(form, getLines(form.id));
+  const csv = toCsv(shownForm(form), getLines(form.id));
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${form.form_no.replaceAll('/', '-')}.csv"`);
   res.send(csv);
@@ -102,7 +118,7 @@ router.get('/:id/pdf', requireRole(...READ), (req, res) => {
   const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(req.params.id);
   if (!form) return res.status(404).json({ error: 'Form-IV record not found' });
   try {
-    generateFormIvPdf(form, getLines(form.id), { generatedBy: req.user?.name || req.user?.email }, res);
+    generateFormIvPdf(shownForm(form), getLines(form.id), { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Form-IV PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
@@ -178,10 +194,12 @@ router.post('/:id/generate', requireRole(...WRITE), (req, res) => {
       .filter((l) => l.bilateral_id && l.exempt_reason)
       .map((l) => [l.bilateral_id, l.exempt_reason]),
   );
-  const kept = getLines(form.id).filter((l) => !['BILATERAL', 'REIA'].includes(l.source));
+  // The beta derives REIA lines alone, so it leaves the bilateral ones where they are.
+  const derivedSources = REIA_BETA ? ['REIA'] : ['BILATERAL', 'REIA'];
+  const kept = getLines(form.id).filter((l) => !derivedSources.includes(l.source));
 
   db.transaction(() => {
-    db.prepare("DELETE FROM cerc_form_iv_lines WHERE form_id = ? AND source IN ('BILATERAL', 'REIA')").run(form.id);
+    db.prepare(`DELETE FROM cerc_form_iv_lines WHERE form_id = ? AND source IN (${derivedSources.map(() => '?').join(', ')})`).run(form.id, ...derivedSources);
 
     const derived = deriveLines(window.from, window.to).map((l) => {
       const reason = exemptions.get(l.bilateral_id);
@@ -240,7 +258,10 @@ router.post('/:id/submit', requireRole(...FILE), (req, res) => {
   `).run(req.body.submission_date || today(), reference_no, req.user.name, form.id);
 
   logAudit({ req, user: req.user, action: 'SUBMIT', module: moduleOf(req), entityType: 'cerc_form_iv', entityId: form.id, details: { reference_no } });
-  try { alertCategoryWatch(); } catch (e) { console.error('[CERC] category watch', e.message); }
+  // The licence category watch is the trading desk's; the beta does not raise it.
+  if (!REIA_BETA) {
+    try { alertCategoryWatch(); } catch (e) { console.error('[CERC] category watch', e.message); }
+  }
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });

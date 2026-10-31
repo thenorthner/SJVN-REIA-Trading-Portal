@@ -39,6 +39,8 @@ const OTHER_PARAM_RE = /(^|_)(hydro|thermal)(_|$)|^freq_response_|^cerc_(licen|c
 // screens, and diverted power was sold to a third party (notices sent before
 // 31-Oct-2026 named the exchange).
 const BETA_PROSE = [
+  // A REIA Form-IV line's exemption as it was worded before 31-Oct-2026.
+  [/the CERC trading margin cap applies to short-term trades/g, 'the CERC margin cap applies to short-term sales'],
   [/(?<!Fixation of )\b([Tt])rading ([Mm])argin/g, (_, t, m) => `SJVN ${m}argin`],
   [/,? (and|or) trading clients/g, ''],
   [/trading and banking screens/g, 'financial screens'],

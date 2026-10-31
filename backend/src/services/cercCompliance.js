@@ -1,5 +1,6 @@
 import db from '../db/index.js';
-import { resolvePeriod, dueDateFor, deriveLines } from './cercFormIv.js';
+import { resolvePeriod, dueDateFor, deriveLines, shownForm } from './cercFormIv.js';
+import { REIA_BETA } from './reiaBeta.js';
 
 /**
  * The CERC filing calendar: every period that should have a return, and where
@@ -34,7 +35,8 @@ export function calendarRangeProblem(from, to) {
  */
 function tradeBook(from, to) {
   const lines = deriveLines(from, to);
-  const cleared = db.prepare(`
+  // The beta reports the REIA desk's PPA/PSA sales alone; no cleared bid is read.
+  const cleared = REIA_BETA ? 0 : db.prepare(`
     SELECT COUNT(*) n FROM bids WHERE status IN ('CLEARED', 'PARTIALLY_CLEARED') AND delivery_date BETWEEN ? AND ?
   `).get(from, to).n;
   return {
@@ -69,8 +71,9 @@ function monthsBetween(first, last) {
 /** The earliest month the platform has anything to report on. */
 function earliestReportableMonth() {
   const candidates = [
-    db.prepare("SELECT MIN(substr(delivery_date, 1, 7)) AS m FROM bids WHERE delivery_date IS NOT NULL").get()?.m,
-    db.prepare("SELECT MIN(substr(start_date, 1, 7)) AS m FROM bilateral_transactions WHERE start_date IS NOT NULL").get()?.m,
+    // The beta starts from the REIA desk's own bills.
+    REIA_BETA ? null : db.prepare("SELECT MIN(substr(delivery_date, 1, 7)) AS m FROM bids WHERE delivery_date IS NOT NULL").get()?.m,
+    REIA_BETA ? null : db.prepare("SELECT MIN(substr(start_date, 1, 7)) AS m FROM bilateral_transactions WHERE start_date IS NOT NULL").get()?.m,
     // The REIA desk's sales to discoms go on the return too.
     db.prepare(`
       SELECT MIN(billing_period) AS m FROM invoices WHERE direction = 'SJVN_TO_BUYER'
@@ -92,11 +95,11 @@ export function cercCompliance({ from = null, to = null, asOf = new Date() } = {
       from: null, to: lastComplete, today: iso(asOf),
       totals: { expected: 0, submitted: 0, prepared: 0, draft: 0, missing: 0, overdue: 0, open_breaches: 0 },
       monthly: [], annual: [],
-      note: 'Nothing has been traded yet, so no return is owed.',
+      note: REIA_BETA ? 'Nothing has been billed yet, so no return is owed.' : 'Nothing has been traded yet, so no return is owed.',
     };
   }
 
-  const filings = db.prepare('SELECT * FROM cerc_form_iv').all();
+  const filings = db.prepare('SELECT * FROM cerc_form_iv').all().map(shownForm);
   const byPeriod = new Map(filings.map((f) => [`${f.period_type}|${f.period}`, f]));
   const todayIso = iso(asOf);
 

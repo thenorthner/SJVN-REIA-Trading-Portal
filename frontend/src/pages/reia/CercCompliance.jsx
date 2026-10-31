@@ -9,6 +9,7 @@ import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
 import { actsAs } from '../../lib/rolePages.js';
+import { REIA_BETA } from '../../reiaBeta.js';
 
 // The CERC filing calendar: every period that owes a return, and where it stands.
 //
@@ -59,9 +60,14 @@ function AnnexurePanel({ row }) {
   return (
     <div>
       <p className="inline-note" style={{ marginTop: 0 }}>
-        {data.basis === 'FORM_IV'
-          ? `Bilateral rows are the lines on ${data.form_no}; exchange rows are the bids that cleared in the period.`
-          : 'No return has been started for this period, so this is read straight from the trade book and the cleared bids.'}
+        {/* The beta's return holds the REIA desk's PPA/PSA sales alone, on IV-D and IV-E. */}
+        {REIA_BETA
+          ? (data.basis === 'FORM_IV'
+            ? `The rows are the lines on ${data.form_no}.`
+            : 'No return has been started for this period, so this is read straight from the month’s PPA/PSA bills.')
+          : (data.basis === 'FORM_IV'
+            ? `Bilateral rows are the lines on ${data.form_no}; exchange rows are the bids that cleared in the period.`
+            : 'No return has been started for this period, so this is read straight from the trade book and the cleared bids.')}
         {' '}Forms with nothing on them are filed as NIL.
       </p>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -190,7 +196,9 @@ function PeriodTable({ title, rows, emptyText, formPath }) {
                 <td className="num">
                   {r.breach_count ? <Badge type="danger">{r.breach_count}</Badge> : '—'}
                   {r.breaches_from === 'TRADE_BOOK' && (
-                    <div className="audit-muted">{r.nil_return ? 'No trades: a NIL return is owed' : `${r.trade_count} trade${r.trade_count === 1 ? '' : 's'} in the book`}</div>
+                    <div className="audit-muted">{REIA_BETA
+                      ? (r.nil_return ? 'Nothing billed: a NIL return is owed' : `${r.trade_count} line${r.trade_count === 1 ? '' : 's'} from the bills`)
+                      : (r.nil_return ? 'No trades: a NIL return is owed' : `${r.trade_count} trade${r.trade_count === 1 ? '' : 's'} in the book`)}</div>
                   )}
                 </td>
                 <td>
@@ -437,7 +445,9 @@ function LicenceTracker({ canWrite }) {
 export default function CercCompliance({ embedded = false }) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const [view, setView] = useState(['licence', 'next90'].includes(searchParams.get('view')) ? searchParams.get('view') : 'calendar');
+  // The licence fee and net worth are the trading licence's; the beta has no such tab.
+  const views = REIA_BETA ? ['next90'] : ['licence', 'next90'];
+  const [view, setView] = useState(views.includes(searchParams.get('view')) ? searchParams.get('view') : 'calendar');
   // The REIA team prepares and files Form-IV on its own screen; the trading
   // desk keeps its own. The shortcut goes to the one the role can open.
   const formPath = actsAs(user, [...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR']) ? '/reia/form-iv'
@@ -481,7 +491,7 @@ export default function CercCompliance({ embedded = false }) {
       <Tabs style={{ marginBottom: 18 }}>
         <Tab active={view === 'next90'} onClick={() => setView('next90')}>Next 90 days</Tab>
         <Tab active={view === 'calendar'} onClick={() => setView('calendar')}>Calendar</Tab>
-        <Tab active={view === 'licence'} onClick={() => setView('licence')}>Licence fee &amp; net worth</Tab>
+        {!REIA_BETA && <Tab active={view === 'licence'} onClick={() => setView('licence')}>Licence fee &amp; net worth</Tab>}
         <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
       </Tabs>
 
@@ -560,7 +570,7 @@ export default function CercCompliance({ embedded = false }) {
           />
 
           <p className="report-count">
-            A period is listed because the platform has trading data for it, whether or not anybody has started its
+            A period is listed because the platform has {REIA_BETA ? 'PPA/PSA bills' : 'trading data'} for it, whether or not anybody has started its
             return — which is the part a register of prepared filings cannot show. The current month is not listed
             until it ends. Deadlines are the period end plus the filing window in Masters.
           </p>

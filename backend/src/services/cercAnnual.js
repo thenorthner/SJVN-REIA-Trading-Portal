@@ -12,7 +12,7 @@
 import db from '../db/index.js';
 import { newId, logAudit, pushNotification } from '../util.js';
 import { getParam, getParamNumber } from '../mastersService.js';
-import { getLines, insertLine, refreshTotals, resolvePeriod, dueDateFor } from './cercFormIv.js';
+import { getLines, insertLine, refreshTotals, resolvePeriod, dueDateFor, shownForm } from './cercFormIv.js';
 
 const err = (status, message, extra = {}) => Object.assign(new Error(message), { status, extra });
 const r2 = (v, d = 4) => Math.round((Number(v) || 0) * 10 ** d) / 10 ** d;
@@ -27,11 +27,11 @@ function monthsOf(fy) {
 export function annualPosition(fy) {
   if (!/^\d{4}-\d{2}$/.test(String(fy))) throw err(400, 'The financial year is written 2026-27');
   const months = monthsOf(fy).map((period) => {
-    const f = db.prepare("SELECT * FROM cerc_form_iv WHERE period_type = 'MONTHLY' AND period = ?").get(period);
+    const f = shownForm(db.prepare("SELECT * FROM cerc_form_iv WHERE period_type = 'MONTHLY' AND period = ?").get(period));
     return { period, id: f?.id || null, form_no: f?.form_no || null, status: f?.status || 'MISSING', reference_no: f?.reference_no || null, filed_outside: !!f?.filed_outside, ...Object.fromEntries(FIELDS.map((k) => [k, f ? Number(f[k]) || 0 : 0])) };
   });
   const sum = Object.fromEntries(FIELDS.map((k) => [k, r2(months.reduce((t, m) => t + m[k], 0), k === 'total_volume_mu' ? 4 : 2)]));
-  const annual = db.prepare("SELECT * FROM cerc_form_iv WHERE period_type = 'ANNUAL' AND period = ?").get(fy);
+  const annual = shownForm(db.prepare("SELECT * FROM cerc_form_iv WHERE period_type = 'ANNUAL' AND period = ?").get(fy));
   const differences = annual ? FIELDS.filter((k) => Math.abs((Number(annual[k]) || 0) - sum[k]) > (k === 'total_volume_mu' ? 0.0001 : 1))
     .map((k) => ({ field: k, annual: Number(annual[k]) || 0, monthlies: sum[k] })) : [];
   const notFiled = months.filter((m) => m.status !== 'SUBMITTED').map((m) => m.period);

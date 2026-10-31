@@ -33,6 +33,13 @@ import XLSX from 'xlsx';
 import db from '../db/index.js';
 import { getParam } from '../mastersService.js';
 import { resolvePeriod, deriveLines, getLines } from './cercFormIv.js';
+import { REIA_BETA } from './reiaBeta.js';
+
+// The REIA beta files the REIA desk's PPA/PSA sales: long-term, so IV-D, or IV-E
+// within one state. Its forms leave the licensee wording out of their titles and
+// call the margin the SJVN margin, as its screens do.
+const BETA_CODES = ['IV-D', 'IV-E'];
+const betaWords = (s) => (REIA_BETA && s ? String(s).replace(/ by Trading Licensees/g, '').replace(/Trading Margin/g, 'SJVN Margin') : s);
 
 const round = (v, dp = 4) => {
   const f = 10 ** dp;
@@ -462,10 +469,10 @@ export function buildAnnexures(periodType, period) {
   const lines = form ? getLines(form.id) : deriveLines(window.from, window.to);
 
   const bilateral = bilateralRows(lines);
-  const exchange = exchangeRows(window.from, window.to);
+  const exchange = REIA_BETA ? { rows: [], margins: [] } : exchangeRows(window.from, window.to);
   const all = [...bilateral, ...exchange.rows];
 
-  const annexures = ANNEXURES.map((a) => {
+  const annexures = ANNEXURES.filter((a) => !REIA_BETA || BETA_CODES.includes(a.code)).map((a) => {
     let rows = all.filter((r) => r.code === a.code);
 
     // Intra-State is filed as a volume per state, not transaction by transaction.
@@ -483,10 +490,10 @@ export function buildAnnexures(periodType, period) {
     const margins = a.marginTitle ? marginTable(exchange.margins.filter((m) => m.code === a.code)) : null;
     return {
       code: a.code,
-      title: a.title,
+      title: betaWords(a.title),
       layout: a.layout,
       unverified: !!a.unverified,
-      columns: COLS[a.layout].map((c) => ({ key: c.key, label: c.h, group: c.g || null })),
+      columns: COLS[a.layout].map((c) => ({ key: c.key, label: betaWords(c.h), group: betaWords(c.g) || null })),
       sections: (a.sections || []).map(([key, label]) => ({ key, label })),
       rows,
       row_count: rows.length,
@@ -537,8 +544,8 @@ function sheetFor(annexure, built, licensee) {
   const cols = COLS[def.layout];
   const aoa = [
     [`Form ${def.code.replace('-', ' ')}`],
-    [def.title],
-    [`Name of the Trading Licensee : ${licensee.name}`],
+    [betaWords(def.title)],
+    [`Name of the ${REIA_BETA ? '' : 'Trading '}Licensee : ${licensee.name}`],
     [`Licence Details (No & Date): ${licensee.licence}`],
     [periodLabel(built)],
     [],
@@ -546,8 +553,8 @@ function sheetFor(annexure, built, licensee) {
   const merges = [];
   const top = aoa.length;
 
-  aoa.push(cols.map((c) => c.g || c.h));
-  aoa.push(cols.map((c) => (c.g ? c.h : '')));
+  aoa.push(cols.map((c) => betaWords(c.g || c.h)));
+  aoa.push(cols.map((c) => (c.g ? betaWords(c.h) : '')));
   for (let i = 0; i < cols.length; i += 1) {
     if (!cols[i].g) {
       merges.push({ s: { r: top, c: i }, e: { r: top + 1, c: i } });

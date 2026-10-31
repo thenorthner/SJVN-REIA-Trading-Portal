@@ -6,6 +6,31 @@ import { ROLE_GROUPS } from '../../roles.js';
 import { actsAs } from '../../lib/rolePages.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { showAlert, askConfirm } from '../../lib/dialogs.js';
+import { REIA_BETA, reiaTerm } from '../../reiaBeta.js';
+
+// The REIA beta's return holds the REIA desk's PPA/PSA sales (the API leaves the
+// other trades out), so it is worded for them.
+const WORDS = REIA_BETA
+  ? {
+    subtitle: 'Monthly and annual return to CERC of the REIA desk’s PPA/PSA sales, with the SJVN margin on each',
+    prefill: 'Pre-fill transactions from the month’s PPA/PSA bills',
+    regenerate: 'Regenerate from bills',
+    manual: 'Manual entry',
+    exemptHint: 'e.g. Long-term PPA/PSA sale — outside the margin cap',
+    capNote: 'CERC caps the margin on a short-term sale at 4 paise/kWh where the sale price is at or below ₹3/kWh, '
+      + 'and 7 paise/kWh above it. PPA/PSA sales are long-term, so they fall outside the cap and are marked exempt; '
+      + 'a line added by hand is tested against it unless its exemption reason is recorded.',
+  }
+  : {
+    subtitle: 'Transaction-wise return of inter-state trading, with the CERC trading margin cap enforced per trade',
+    prefill: 'Pre-fill transactions from bilateral trade data',
+    regenerate: 'Regenerate from bills and trades',
+    manual: 'Bilateral (manual entry)',
+    exemptHint: 'e.g. Cleared on IEX — outside the trading margin cap',
+    capNote: 'CERC (Fixation of Trading Margin) Regulations: margin is capped at 4 paise/kWh where the sale price '
+      + 'is at or below ₹3/kWh, and 7 paise/kWh above it. Exchange-cleared and long-term trades fall outside '
+      + 'the cap — record the reason on the line to mark it exempt.',
+  };
 
 const EMPTY_FORM = { period_type: 'MONTHLY', period: '', auto_generate: true, reference_no: '', notes: '' };
 const EMPTY_LINE = {
@@ -304,12 +329,15 @@ export default function CERCFormIV() {
     <div>
       <PageHeader
         title="CERC Form-IV Compliance"
-        subtitle="Transaction-wise return of inter-state trading, with the CERC trading margin cap enforced per trade"
+        subtitle={WORDS.subtitle}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-outline" disabled={reportBusy} onClick={downloadRegulatoryReport}>
-              {reportBusy ? 'Preparing…' : 'Regulatory Report (PDF)'}
-            </button>
+            {/* The regulatory report covers every desk's trades; the beta leaves it out. */}
+            {!REIA_BETA && (
+              <button className="btn btn-outline" disabled={reportBusy} onClick={downloadRegulatoryReport}>
+                {reportBusy ? 'Preparing…' : 'Regulatory Report (PDF)'}
+              </button>
+            )}
             {canPrepare && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_FORM); setFormError(''); setShowNew(true); }}>+ New Filing</button>}
           </div>
         }
@@ -379,7 +407,7 @@ export default function CERCFormIV() {
               checked={form.auto_generate}
               onChange={(e) => setForm({ ...form, auto_generate: e.target.checked })}
             />
-            <span>Pre-fill transactions from bilateral trade data</span>
+            <span>{WORDS.prefill}</span>
           </label>
 
           <div className="form-actions">
@@ -403,7 +431,7 @@ export default function CERCFormIV() {
               <StatCard label="Status" value={detail.status} tone={detail.status === 'SUBMITTED' ? 'green' : 'amber'} hint={detail.submission_date ? `Filed ${detail.submission_date}` : `Due ${detail.due_date || '—'}`} />
               <StatCard label="Volume" value={`${fmtNumber(detail.total_volume_mu, 3)} MU`} hint={`${detail.line_count} transactions`} />
               <StatCard label="Sale Revenue" value={fmtCurrency(detail.total_revenue)} hint={`Purchase ${fmtCurrency(detail.total_purchase_cost)}`} />
-              <StatCard label="Trading Margin" value={fmtCurrency(detail.trading_margin)} hint={`Weighted avg ${paise(detail.avg_margin_per_unit)}/kWh`} />
+              <StatCard label={reiaTerm('Trading Margin')} value={fmtCurrency(detail.trading_margin)} hint={`Weighted avg ${paise(detail.avg_margin_per_unit)}/kWh`} />
             </div>
 
             {open && filingBlockers.length > 0 && (
@@ -429,8 +457,8 @@ export default function CERCFormIV() {
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {editable && (
-                <button className="btn btn-outline" disabled={busy} onClick={() => runOnDetail(() => api.formIv.generate(detail.id), 'Failed to regenerate from trade data.')}>
-                  Regenerate from bills and trades
+                <button className="btn btn-outline" disabled={busy} onClick={() => runOnDetail(() => api.formIv.generate(detail.id), 'Failed to regenerate the lines.')}>
+                  {WORDS.regenerate}
                 </button>
               )}
               {editable && <button className="btn btn-outline" onClick={() => openLine(null)}>+ Add transaction</button>}
@@ -489,11 +517,7 @@ export default function CERCFormIV() {
               actions={detail.generated_at && <span className="inline-note" style={{ marginTop: 0 }}>Last generated {detail.generated_at}</span>}
             >
               <Table columns={lineColumns} rows={detail.lines || []} emptyMessage="No transactions on this return yet." />
-              <p className="inline-note">
-                CERC (Fixation of Trading Margin) Regulations: margin is capped at 4 paise/kWh where the sale price
-                is at or below ₹3/kWh, and 7 paise/kWh above it. Exchange-cleared and long-term trades fall outside
-                the cap — record the reason on the line to mark it exempt.
-              </p>
+              <p className="inline-note">{WORDS.capNote}</p>
             </Card>
           </>
         )}
@@ -523,8 +547,8 @@ export default function CERCFormIV() {
               </Field>
               <Field label="Source">
                 <select value={lineForm.source} onChange={(e) => setLineForm({ ...lineForm, source: e.target.value })}>
-                  <option value="MANUAL">Bilateral (manual entry)</option>
-                  <option value="EXCHANGE">Power exchange</option>
+                  <option value="MANUAL">{WORDS.manual}</option>
+                  {!REIA_BETA && <option value="EXCHANGE">Power exchange</option>}
                 </select>
               </Field>
             </div>
@@ -562,7 +586,7 @@ export default function CERCFormIV() {
           <Field label="Exemption Reason (leave blank to apply the CERC cap)">
             <input
               value={lineForm.exempt_reason}
-              placeholder="e.g. Cleared on IEX — outside the trading margin cap"
+              placeholder={WORDS.exemptHint}
               onChange={(e) => setLineForm({ ...lineForm, exempt_reason: e.target.value })}
             />
           </Field>

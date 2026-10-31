@@ -7,6 +7,7 @@ import {
   M, CONTENT_W, MUTED, RED, AMBER, GREEN, INK,
   rs, stamp, nowLabel, newDoc, header, kpiBand, sectionTitle, table, notes, ensureSpace, pageNumbers,
 } from './reportPdfKit.js';
+import { REIA_BETA } from '../services/reiaBeta.js';
 
 // ─── Activity report ──────────────────────────────────────────────────────
 export function generateActivityReportPdf(r, meta, res) {
@@ -385,6 +386,22 @@ export function generateMisReportPdf(r, meta, res) {
 }
 
 // ─── CERC Form-IV filing ──────────────────────────────────────────────────
+// The REIA beta files the REIA desk's PPA/PSA sales and calls their margin the
+// SJVN margin, as its screens do.
+const FORM_IV_WORDS = REIA_BETA
+  ? {
+    volume: 'Volume', margin: 'SJVN margin',
+    lines: 'The PPA/PSA sales in the period, each tested against the CERC margin cap.',
+    basis: 'CERC caps the margin between sale and purchase price on each short-term sale; long-term PPA/PSA sales are outside the cap and marked exempt.',
+    within: 'within the margin cap or exempt from it',
+  }
+  : {
+    volume: 'Volume traded', margin: 'Trading margin',
+    lines: 'Inter-state trades in the period, with the CERC trading margin cap applied per trade.',
+    basis: 'CERC (Fixation of Trading Margin) Regulations: the margin between sale and purchase price may not exceed the notified cap for each inter-state trade.',
+    within: 'within the trading margin cap',
+  };
+
 export function generateFormIvPdf(form, lines, meta, res) {
   const generatedAt = nowLabel();
   const ctx = {
@@ -399,8 +416,8 @@ export function generateFormIvPdf(form, lines, meta, res) {
   let y = 84;
 
   y = kpiBand(doc, y, [
-    { label: 'Volume traded', value: `${form.total_volume_mu} MU` },
-    { label: 'Trading margin', value: rs(form.trading_margin) },
+    { label: FORM_IV_WORDS.volume, value: `${form.total_volume_mu} MU` },
+    { label: FORM_IV_WORDS.margin, value: rs(form.trading_margin) },
     { label: 'Avg margin', value: `Rs ${form.avg_margin_per_unit}/kWh` },
     { label: 'Margin cap breaches', value: String(form.breach_count || 0), tone: form.breach_count ? RED : GREEN },
   ]);
@@ -423,8 +440,7 @@ export function generateFormIvPdf(form, lines, meta, res) {
 
   // The transaction-wise return itself.
   y = ensureSpace(doc, y, 160, ctx);
-  y = sectionTitle(doc, y, 'Transaction-wise details',
-    'Inter-state trades in the period, with the CERC trading margin cap applied per trade.');
+  y = sectionTitle(doc, y, 'Transaction-wise details', FORM_IV_WORDS.lines);
   y = table(doc, y, [
     { label: '#', w: 24, align: 'right', value: (x) => x.line_no },
     { label: 'Seller', w: 105, value: (x) => x.seller_name },
@@ -444,10 +460,10 @@ export function generateFormIvPdf(form, lines, meta, res) {
   y = sectionTitle(doc, y, 'Compliance');
   const breaches = lines.filter((l) => l.compliance_status === 'BREACH');
   y = notes(doc, y, [
-    'CERC (Fixation of Trading Margin) Regulations: the margin between sale and purchase price may not exceed the notified cap for each inter-state trade.',
+    FORM_IV_WORDS.basis,
     breaches.length
       ? `${breaches.length} of ${lines.length} line(s) breach the cap — margin exceeds the permitted ceiling and must be addressed before filing.`
-      : `All ${lines.length} line(s) are within the trading margin cap.`,
+      : `All ${lines.length} line(s) are ${FORM_IV_WORDS.within}.`,
     ...breaches.map((l) => `Line ${l.line_no}: ${l.seller_name} to ${l.buyer_name}, margin Rs ${l.trading_margin_per_unit}/kWh against a cap of Rs ${l.margin_cap}/kWh.`),
   ]);
 

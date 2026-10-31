@@ -2,7 +2,6 @@ import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ContractCompliance from './ContractCompliance.jsx';
 import CercCompliance from './CercCompliance.jsx';
-import { REIA_BETA } from '../../reiaBeta.js';
 
 /**
  * Consolidated Compliance Hub
@@ -16,10 +15,6 @@ export default function ComplianceHub({ defaultTab = 'contract' }) {
   const setTab = (key) => {
     setSearchParams(key === 'cerc' ? { tab: 'cerc' } : { tab: 'contract' }, { replace: true });
   };
-
-  // The beta shows the contract checks alone: the CERC returns are filed under
-  // SJVN's trading licence and name its other trades (see BETA_EXCLUDED).
-  if (REIA_BETA) return <ContractCompliance />;
 
   return (
     <div>

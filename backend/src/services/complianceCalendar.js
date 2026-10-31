@@ -11,6 +11,11 @@ import db from '../db/index.js';
 import { cercCompliance } from './cercCompliance.js';
 import { licenceCompliance } from './cercLicence.js';
 import { dueDateFor } from './cercFormIv.js';
+import { REIA_BETA } from './reiaBeta.js';
+
+// The REIA beta opens its returns from the REIA filing calendar, and the licence
+// fee (the trading licence's) is not on its timeline.
+const FORM_IV_LINK = REIA_BETA ? '/reia/cerc-compliance' : '/trading/form-iv';
 
 const LIVE = ['ACTIVE', 'NEARING_EXPIRY', 'RENEWED', 'AMENDED'];
 const istToday = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
@@ -56,7 +61,7 @@ export function complianceCalendar({ days = 90, today = istToday() } = {}) {
       seen.add(`${r.period_type}|${r.period}`);
       if (r.status === 'SUBMITTED' || !r.due_date || r.due_date > horizon) continue;
       push(r.due_date, 'CERC_FILING', `Form-IV ${r.period_type === 'ANNUAL' ? 'annual' : 'monthly'} return — ${r.period}`,
-        r.status === 'MISSING' ? 'Not started' : `Return is ${r.status.toLowerCase()}`, { ref: r.period, status: r.status, link: '/trading/form-iv' });
+        r.status === 'MISSING' ? 'Not started' : `Return is ${r.status.toLowerCase()}`, { ref: r.period, status: r.status, link: FORM_IV_LINK });
     }
     const filed = new Map(db.prepare(`SELECT period, status FROM cerc_form_iv WHERE period_type = 'MONTHLY'`).all().map((f) => [f.period, f.status]));
     for (let i = 0; i < 4; i += 1) {
@@ -67,12 +72,12 @@ export function complianceCalendar({ days = 90, today = istToday() } = {}) {
       const due = dueDateFor(monthEnd(ym), 'MONTHLY');
       if (!inWindow(due)) continue;
       push(due, 'CERC_FILING', `Form-IV monthly return — ${ym}`, filed.has(ym) ? `Return is ${filed.get(ym).toLowerCase()}` : 'Month still running or not started',
-        { ref: ym, status: filed.get(ym) || 'UPCOMING', link: '/trading/form-iv' });
+        { ref: ym, status: filed.get(ym) || 'UPCOMING', link: FORM_IV_LINK });
     }
   } catch { /* a calendar without the CERC rows is still worth showing */ }
 
   try {
-    for (const y of licenceCompliance().years || []) {
+    for (const y of REIA_BETA ? [] : licenceCompliance().years || []) {
       if (['PAID', 'PAID_LATE'].includes(y.fee_status) || !y.fee_due_date || y.fee_due_date > horizon) continue;
       push(y.fee_due_date, 'LICENCE_FEE', `CERC licence fee — FY ${y.fy}`, `₹${Number(y.fee_amount_due || 0).toLocaleString('en-IN')} payable`, { ref: y.fy, status: y.fee_status, link: '/reia/cerc-compliance?view=licence' });
     }
