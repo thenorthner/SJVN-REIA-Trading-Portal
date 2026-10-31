@@ -5167,5 +5167,9 @@ html[data-contrast="high"] :is(.gigw-pm-quote-badge, .gigw-initiatives-eyebrow, 
 }
 :root[data-contrast="high"] .gigw-beta-pill::before,
 :root[data-contrast="high"] .gigw-beta-tag::before { background: #ffff00; box-shadow: none; animation: none; }
-.gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 860px; margin-left: auto; margin-right: auto; }
+.gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 1240px; margin-left: auto; margin-right: auto; }
+@media (max-width: 1100px) {
+  .gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 860px; }
+  .gigw-desks-grid-beta .gigw-playbook-card { grid-column: 1 / -1; }
+}
 @media (max-width: 720px) { .gigw-desks-grid.gigw-desks-grid-beta { grid-template-columns: 1fr; } }

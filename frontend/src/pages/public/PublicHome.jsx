@@ -6,7 +6,7 @@ import {
   Users, FileText, BarChart3, Scale, Award, Globe, 
   ExternalLink, HelpCircle, AlertCircle, FileCheck, Landmark, Check,
   Layers, TrendingUp, Sparkles, Leaf, Bell, Target,
-  Map, LayoutGrid, Quote
+  Map, LayoutGrid, Quote, BookOpen
 } from 'lucide-react';
 import PublicShell from './PublicShell.jsx';
 import IndiaAssetMap from '../../components/IndiaAssetMap.jsx';
@@ -67,6 +67,18 @@ const BETA_NOTES = [
   'Data on the beta is for testing only',
   'Note anything wrong, unclear or slow',
   'Send it through the Feedback page',
+];
+
+// The REIA Playbook (tools/reia-playbook, served from public/reia-playbook):
+// testers look up how a step works there before they report it. The file is
+// named because the dev server answers a bare folder with the app.
+const PLAYBOOK_URL = '/reia-playbook/index.html';
+const PLAYBOOK_POINTS = [
+  'Ten missions, from onboarding a company to the month’s reconciliation',
+  'Who signs in for each step, and who it goes to next',
+  'What each role can and cannot do',
+  'How contracts, bills and disputes move from status to status',
+  'How one month’s bill, rebate and TDS add up',
 ];
 
 const NATIONAL_INITIATIVES = [
@@ -366,6 +378,13 @@ export default function PublicHome({ beta = false }) {
                 <Lock size={15} />
                 <span>{user ? (lang === 'hi' ? 'कार्यक्षेत्र खोलें →' : lang === 'gu' ? 'કાર્યક્ષેત્ર ખોલો →' : lang === 'mr' ? 'कार्यक्षेत्र उघडा →' : 'Access Portal →') : (lang === 'hi' ? 'पोर्टल में प्रवेश करें →' : lang === 'gu' ? 'પોર્ટલમાં પ્રવેશો →' : lang === 'mr' ? 'पोर्टलवर प्रवेश करा →' : 'Access Portal →')}</span>
               </Link>
+              {beta && (
+                <a href={PLAYBOOK_URL} target="_blank" rel="noopener" className="btn-our-vision">
+                  <BookOpen size={16} />
+                  <span>{lang === 'hi' ? 'REIA प्लेबुक' : lang === 'gu' ? 'REIA પ્લેબુક' : lang === 'mr' ? 'REIA प्लेबुक' : 'REIA Playbook'}</span>
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
               {beta ? (
                 <Link to="/feedback" className="btn-our-vision">
                   <Bell size={16} />
@@ -518,6 +537,48 @@ export default function PublicHome({ beta = false }) {
                   <span>Share Beta Feedback</span>
                   <ArrowRight size={16} />
                 </Link>
+              </div>
+            </div>
+          )}
+
+          {beta && (
+            <div className="gigw-desk-card gigw-playbook-card reveal-fade-up reveal-stagger-3" style={{ '--card-accent': 'var(--primary)' }}>
+              <div className="gigw-desk-header">
+                <div className="gigw-desk-icon-wrap" style={{ color: 'var(--primary)' }}>
+                  <BookOpen size={26} color="currentColor" />
+                </div>
+                <div>
+                  <span className="gigw-desk-badge">Guide · Look it up</span>
+                  <h3 className="gigw-desk-title">REIA Playbook</h3>
+                  <p className="gigw-desk-sub">Stuck? See how the step should go</p>
+                </div>
+              </div>
+              <p className="gigw-desk-desc">The whole REIA cycle, step by step: who signs in, which button to press, and what the screen should show next. Check it before you report something as wrong.</p>
+              <div className="gigw-desk-features">
+                <div className="gigw-desk-features-header">
+                  <div className="gigw-features-title-wrap">
+                    <span className="gigw-features-status-dot" style={{ backgroundColor: 'var(--primary)' }} aria-hidden="true" />
+                    <strong className="gigw-features-title">What it covers:</strong>
+                  </div>
+                  <span className="gigw-features-count-badge" aria-label={`${PLAYBOOK_POINTS.length} topics`}>{PLAYBOOK_POINTS.length}</span>
+                </div>
+                <ul className="gigw-features-list">
+                  {PLAYBOOK_POINTS.map((n) => (
+                    <li key={n} className="gigw-feature-item">
+                      <span className="feature-check-badge" aria-hidden="true">
+                        <Check size={11} strokeWidth={2.8} />
+                      </span>
+                      <span className="feature-text">{n}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="gigw-desk-actions">
+                <a href={PLAYBOOK_URL} target="_blank" rel="noopener" className="btn btn-primary gigw-desk-primary-btn">
+                  <span>Open the Playbook</span>
+                  <ExternalLink size={16} aria-hidden="true" />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
               </div>
             </div>
           )}
