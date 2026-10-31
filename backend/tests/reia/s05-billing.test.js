@@ -109,8 +109,10 @@ describe('S5 Billing engine', () => {
       contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04',
       banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     }).then((r) => expect(r.status, JSON.stringify(r.body)).toBe(201));
-    // The cycle closes on 31 March; the sweep runs on 1 April.
-    expect(settleExpiredBanking('2027-04-01').settled).toBe(1);
+    // The cycle closes on 31 March and takes entries through April, when March's
+    // energy is accounted (31-Oct-2026); the sweep settles it on 1 May.
+    expect(settleExpiredBanking('2027-04-30').settled).toBe(0);
+    expect(settleExpiredBanking('2027-05-01').settled).toBe(1);
 
     const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
     expect(row.status).toBe('SETTLED');
@@ -127,7 +129,7 @@ describe('S5 Billing engine', () => {
     });
     await request(app).post('/api/energy-banking/draw').set(auth(reia))
       .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 60 });
-    settleExpiredBanking('2027-04-01');
+    settleExpiredBanking('2027-05-01');
     const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
     expect(row.settled_mwh).toBe(40);
     expect(row.settlement_amount).toBe(90000);   // 40,000 kWh x 2.25
@@ -160,7 +162,7 @@ describe('S5 Billing engine', () => {
     });
     await request(app).post('/api/energy-banking/draw').set(auth(reia))
       .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 100 });
-    settleExpiredBanking('2027-04-01');
+    settleExpiredBanking('2027-05-01');
     const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
     expect(row.status).toBe('EXPIRED');
     expect(row.settlement_amount).toBe(0);
@@ -174,7 +176,7 @@ describe('S5 Billing engine', () => {
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
       contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     });
-    settleExpiredBanking('2027-04-01');
+    settleExpiredBanking('2027-05-01');
 
     const pos = await request(app).get(`/api/energy-banking/${contract.id}`).set(auth(reia));
     const cycle = pos.body.find((c) => c.cycle === 'FY2026-27');

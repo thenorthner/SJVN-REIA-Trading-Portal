@@ -10,7 +10,8 @@ import { allocationsInForce } from './allocations.js';
 // running cycle could be cashed out by naming 2099. Banking is now a PPA's
 // generation of a month that is locked, up to that month's energy, at the
 // contract's tariff, into a cycle still open; drawing stops when the cycle
-// closes; and only a cycle that has actually closed is settled.
+// closes; and only a cycle that has actually closed is settled. (A cycle takes
+// entries until the end of the month after it: see entriesCloseOn.)
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -57,6 +58,19 @@ const addMonths = (iso, n) => {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1 + n, d)).toISOString().slice(0, 10);
 };
+
+/**
+ * The last day a cycle takes entries: the end of the month after it ends
+ * (decided 31-Oct-2026). A month's energy locks only once its energy account
+ * is in, after the month; so a monthly cycle had closed before anything could
+ * be banked into it, and the last month of a seasonal or annual cycle could
+ * never be banked at all. Banking and draws are recorded from the energy
+ * account, after the fact, until then; what is unused settles after it.
+ */
+export function entriesCloseOn(ends) {
+  const [y, m] = String(ends).split('-').map(Number);
+  return new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+}
 
 // Energy banking under a PPA.
 //
@@ -118,7 +132,7 @@ export function bankEnergy({ contract_id, cycle, period_month, banked_mwh, tarif
     throw new Error(`${contract.contract_no} banks on a ${derived.basis.toLowerCase()} basis: ${period} falls in cycle ${derived.cycle}, ending ${derived.ends}${cycle ? ` (not ${label}${cycle_ends_on ? ` ending ${ends}` : ''})` : ''}.`);
   }
   if (!DATE.test(ends)) throw new Error('cycle_ends_on must be YYYY-MM-DD');
-  if (ends < asOf) throw new Error(`The cycle ended on ${ends}; energy cannot be banked into a closed cycle.`);
+  if (entriesCloseOn(ends) < asOf) throw new Error(`The cycle ended on ${ends} and took entries until ${entriesCloseOn(ends)}; energy cannot be banked into a closed cycle.`);
   if (ends < lastDayOf(period)) throw new Error(`The cycle ends on ${ends}, before ${period} does.`);
   if (ends > addMonths(lastDayOf(period), 12)) throw new Error(`A banking cycle runs at most a year: ${ends} is more than twelve months after ${period}.`);
   const sameCycle = db.prepare('SELECT DISTINCT cycle_ends_on e FROM energy_banking WHERE contract_id = ? AND cycle = ?').all(contract.id, label);
@@ -167,7 +181,9 @@ export function drawBanked({ contract_id, cycle, draw_mwh, asOf = istToday(), cr
   if (!Number.isFinite(remaining) || remaining <= 0) throw new Error('draw_mwh must be a positive number');
   // A closed cycle settles in cash; drawing after it ended took the same energy twice.
   const closed = db.prepare(`SELECT MIN(cycle_ends_on) e FROM energy_banking WHERE contract_id = ? AND cycle = ? AND status IN ('OPEN','DRAWN')`).get(contract_id, cycle)?.e;
-  if (closed && closed < asOf) throw new Error(`Cycle ${cycle} closed on ${closed}; what is left in it is settled in cash, not drawn.`);
+  if (closed && entriesCloseOn(closed) < asOf) throw new Error(`Cycle ${cycle} closed on ${closed} and took entries until ${entriesCloseOn(closed)}; what is left in it is settled in cash, not drawn.`);
+  // A draw recorded after the cycle ended was taken within it: it is billed in the cycle's last month.
+  const billingPeriod = (closed && closed < asOf ? closed : asOf).slice(0, 7);
 
   const open = db.prepare(`
     SELECT * FROM energy_banking
@@ -201,7 +217,7 @@ export function drawBanked({ contract_id, cycle, draw_mwh, asOf = istToday(), cr
       const mwh = drawn.reduce((a, d) => a + d.drawn_mwh, 0);
       const amount = drawn.reduce((a, d) => a + Math.round(d.drawn_mwh * 1000 * d.tariff_per_unit), 0);
       bill = raiseBankingBill({
-        contract, billingPeriod: asOf.slice(0, 7), mwh, amount,
+        contract, billingPeriod, mwh, amount,
         rate: Number((amount / (mwh * 1000)).toFixed(4)),
         lines: drawn.map((d) => ({ code: 'BNKD', label: `Banked energy drawn back, cycle ${cycle} (banked from ${d.period_month || '—'}): ${d.drawn_mwh} MWh × ₹${d.tariff_per_unit}/unit`, value: Math.round(d.drawn_mwh * 1000 * d.tariff_per_unit) })),
         title: `Banked energy drawn — ${Math.round(mwh * 1000) / 1000} MWh`,
@@ -229,7 +245,7 @@ export function drawBanked({ contract_id, cycle, draw_mwh, asOf = istToday(), cr
       }
       for (const g of perPsa.values()) {
         buyerBills.push(raiseBankingBill({
-          contract: g.psa, direction: 'SJVN_TO_BUYER', billingPeriod: asOf.slice(0, 7), mwh: g.mwh, amount: g.amount,
+          contract: g.psa, direction: 'SJVN_TO_BUYER', billingPeriod, mwh: g.mwh, amount: g.amount,
           rate: Number((g.amount / (g.mwh * 1000)).toFixed(4)), lines: g.lines,
           title: `Banked energy delivered — ${Math.round(g.mwh * 1000) / 1000} MWh`, createdBy,
         }));
@@ -240,17 +256,19 @@ export function drawBanked({ contract_id, cycle, draw_mwh, asOf = istToday(), cr
 }
 
 /**
- * Settle every cycle that has closed with energy still unused.
+ * Settle every cycle that has closed with energy still unused, once its entries
+ * have closed too (the month after it ends).
  *
  * Runs on a schedule rather than waiting to be asked: a cycle that ends with
  * unused energy has to settle whether or not anyone remembers to press a button.
  */
 export function settleExpiredBanking(asOf) {
-  const today = asOf || new Date().toISOString().slice(0, 10);
+  const today = asOf || istToday();
+  // Only once the cycle's entries have closed: until then its last month can still be banked and drawn.
   const expired = db.prepare(`
     SELECT * FROM energy_banking
     WHERE status IN ('OPEN','DRAWN') AND cycle_ends_on < ?
-  `).all(today);
+  `).all(today).filter((r) => entriesCloseOn(r.cycle_ends_on) < today);
 
   const settled = [];
   const buyerBills = [];
@@ -338,7 +356,7 @@ export function settleExpiredBanking(asOf) {
  * available would offer a draw that drawBanked will always refuse.
  */
 export function bankedPosition(contractId) {
-  return db.prepare(`
+  const rows = db.prepare(`
     SELECT cycle, cycle_ends_on,
            (SELECT GROUP_CONCAT(DISTINCT i.invoice_no) FROM energy_banking b2 JOIN invoices i ON i.id = b2.settlement_invoice_id
              WHERE b2.contract_id = energy_banking.contract_id AND b2.cycle = energy_banking.cycle) AS settlement_invoice_no,
@@ -350,4 +368,5 @@ export function bankedPosition(contractId) {
     FROM energy_banking WHERE contract_id = ?
     GROUP BY cycle, cycle_ends_on ORDER BY cycle_ends_on
   `).all(contractId);
+  return rows.map((r) => ({ ...r, entries_close_on: entriesCloseOn(r.cycle_ends_on) }));
 }

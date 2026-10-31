@@ -118,12 +118,12 @@ describe('S54 Energy banking', () => {
     expect((await post('/api/energy-banking/settle', {}, checker)).body.settled).toBe(0);
   });
 
-  it('stops drawing once the cycle has closed, whatever the request says the date is', async () => {
+  it('stops drawing once the cycle and its month of entries have closed, whatever the request says the date is', async () => {
     await bank();
-    db.prepare(`UPDATE energy_banking SET cycle_ends_on = '2026-09-30' WHERE contract_id = ?`).run(ppa.id);
+    db.prepare(`UPDATE energy_banking SET cycle_ends_on = '2026-08-31' WHERE contract_id = ?`).run(ppa.id);
     const r = await post('/api/energy-banking/draw', { contract_id: ppa.id, cycle: 'FY2026-27', draw_mwh: 10, asOf: '2026-01-01' });
     expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/closed on 2026-09-30/);
+    expect(r.body.error).toMatch(/closed on 2026-08-31 and took entries until 2026-09-30/);
   });
 
   it('is SJVN\'s only', async () => {
@@ -162,7 +162,7 @@ describe('S54 Paying for banked energy', () => {
     await bank();
     await post('/api/energy-banking/draw', { contract_id: ppa.id, cycle: 'FY2026-27', draw_mwh: 40 });
     const { settleExpiredBanking } = await import('../../src/services/energyBanking.js');
-    const res = settleExpiredBanking('2027-04-01');
+    const res = settleExpiredBanking('2027-05-01');
     expect(res.items[0]).toMatchObject({ unused_mwh: 60, settlement_amount: 129600 });
     const row = db.prepare('SELECT * FROM energy_banking WHERE contract_id = ?').get(ppa.id);
     const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(row.settlement_invoice_id);
@@ -213,7 +213,7 @@ describe('S54 Banked energy and the buyer', () => {
     await bank();
     await post('/api/energy-banking/draw', { contract_id: ppa.id, cycle: 'FY2026-27', draw_mwh: 40 });
     const { settleExpiredBanking } = await import('../../src/services/energyBanking.js');
-    const res = settleExpiredBanking('2027-04-01');
+    const res = settleExpiredBanking('2027-05-01');
     expect(res.items[0].settlement_amount).toBe(129600); // the generator's lapse bill, as before
     expect(res.buyer_invoices).toHaveLength(1);
     const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(res.buyer_invoices[0].id);
@@ -226,5 +226,84 @@ describe('S54 Banked energy and the buyer', () => {
     allocate(40);
     makeInvoice({ contract_id: psa.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-08', invoice_type: 'PROVISIONAL' });
     expect((await bank()).body.error).toMatch(/buyer has already been billed for 2026-08/);
+  });
+});
+
+// A monthly cycle (the master default) closed on the month's last day, but the
+// month's energy locks only after the month: every Bank Energy was refused
+// (31-Oct-2026). A cycle now takes entries until the end of the month after
+// it ends, and settles after that.
+describe('S54 Monthly banking cycle', () => {
+  let mppa;
+  beforeEach(() => {
+    mppa = makeContract({ contract_type: 'PPA', capacity_mw: 50, tariff_per_unit: 2.88, tenure_start: '2026-04-01' });
+    db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, '2026-09', 'FINAL', 'SEA', 7000, 'LOCKED')`).run(newId('ENG'), mppa.id);
+  });
+
+  it('closes a cycle\'s entries at the end of the month after it', async () => {
+    const { entriesCloseOn } = await import('../../src/services/energyBanking.js');
+    expect(entriesCloseOn('2026-09-30')).toBe('2026-10-31');
+    expect(entriesCloseOn('2026-12-31')).toBe('2027-01-31');
+    expect(entriesCloseOn('2027-01-31')).toBe('2027-02-28');
+    expect(entriesCloseOn('2027-03-31')).toBe('2027-04-30');
+  });
+
+  it('banks September\'s locked energy in October into cycle M2026-09, with nothing typed for the cycle', async () => {
+    const { bankEnergy } = await import('../../src/services/energyBanking.js');
+    const row = bankEnergy({ contract_id: mppa.id, period_month: '2026-09', banked_mwh: 100, asOf: '2026-10-12' });
+    expect(row).toMatchObject({ cycle: 'M2026-09', cycle_ends_on: '2026-09-30', banked_mwh: 100, tariff_per_unit: 2.88, status: 'OPEN' });
+    // The last day of October still takes it; November does not.
+    expect(bankEnergy({ contract_id: mppa.id, period_month: '2026-09', banked_mwh: 10, asOf: '2026-10-31' }).cycle).toBe('M2026-09');
+    expect(() => bankEnergy({ contract_id: mppa.id, period_month: '2026-09', banked_mwh: 10, asOf: '2026-11-01' }))
+      .toThrow(/ended on 2026-09-30 and took entries until 2026-10-31/);
+    // A financial-year cycle typed on a monthly PPA is refused, not taken.
+    expect(() => bankEnergy({ contract_id: mppa.id, cycle: 'FY2026-27', cycle_ends_on: '2027-03-31', period_month: '2026-09', banked_mwh: 10, asOf: '2026-10-12' }))
+      .toThrow(/monthly basis: 2026-09 falls in cycle M2026-09, ending 2026-09-30/);
+  });
+
+  it('draws in October and bills it for September; refuses a draw in November', async () => {
+    const { bankEnergy, drawBanked } = await import('../../src/services/energyBanking.js');
+    bankEnergy({ contract_id: mppa.id, period_month: '2026-09', banked_mwh: 100, asOf: '2026-10-12' });
+    const r = drawBanked({ contract_id: mppa.id, cycle: 'M2026-09', draw_mwh: 40, asOf: '2026-10-20' });
+    const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(r.invoice.id);
+    expect(inv).toMatchObject({ billing_period: '2026-09', energy_mwh: 40, total_amount: 115200, invoice_type: 'SUPPLEMENTARY', status: 'DRAFT' });
+    expect(() => drawBanked({ contract_id: mppa.id, cycle: 'M2026-09', draw_mwh: 10, asOf: '2026-11-01' }))
+      .toThrow(/closed on 2026-09-30 and took entries until 2026-10-31/);
+  });
+
+  it('settles what is left once October is over, billed for September: 60 MWh × ₹2.16', async () => {
+    const { bankEnergy, drawBanked, settleExpiredBanking } = await import('../../src/services/energyBanking.js');
+    bankEnergy({ contract_id: mppa.id, period_month: '2026-09', banked_mwh: 100, asOf: '2026-10-12' });
+    drawBanked({ contract_id: mppa.id, cycle: 'M2026-09', draw_mwh: 40, asOf: '2026-10-20' });
+    expect(settleExpiredBanking('2026-10-31').settled, 'entries still open').toBe(0);
+    const res = settleExpiredBanking('2026-11-01');
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0]).toMatchObject({ cycle: 'M2026-09', unused_mwh: 60, settlement_amount: 129600 });
+    const row = db.prepare('SELECT * FROM energy_banking WHERE contract_id = ?').get(mppa.id);
+    expect(db.prepare('SELECT billing_period FROM invoices WHERE id = ?').get(row.settlement_invoice_id).billing_period).toBe('2026-09');
+  });
+
+  it('banks the last month of an annual cycle in the month after: March into FY2026-27 in April', async () => {
+    const { bankEnergy } = await import('../../src/services/energyBanking.js');
+    db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, '2027-03', 'FINAL', 'SEA', 6000, 'LOCKED')`).run(newId('ENG'), ppa.id);
+    expect(bankEnergy({ contract_id: ppa.id, period_month: '2027-03', banked_mwh: 50, asOf: '2027-04-10' })).toMatchObject({ cycle: 'FY2026-27', cycle_ends_on: '2027-03-31' });
+  });
+
+  it('tells the form the cycle a month falls in, and when its entries close', async () => {
+    const r = await request(app).get(`/api/energy-banking/${mppa.id}/cycle?period=2026-09`).set(auth(reia));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body).toEqual({ basis: 'MONTHLY', cycle: 'M2026-09', ends: '2026-09-30', entries_close_on: '2026-10-31' });
+    expect((await request(app).get(`/api/energy-banking/${ppa.id}/cycle?period=2026-09`).set(auth(reia))).body)
+      .toMatchObject({ basis: 'ANNUAL', cycle: 'FY2026-27', ends: '2027-03-31', entries_close_on: '2027-04-30' });
+    expect((await request(app).get(`/api/energy-banking/${mppa.id}/cycle?period=2026-13`).set(auth(reia))).status).toBe(400);
+    const seller = signToken(makeUser('SELLER', { linked_entity_id: makeEntity('SELLER').id }));
+    expect((await request(app).get(`/api/energy-banking/${mppa.id}/cycle?period=2026-09`).set(auth(seller))).status).toBe(403);
+  });
+
+  it('shows on the position when a cycle\'s entries close', async () => {
+    const { bankEnergy } = await import('../../src/services/energyBanking.js');
+    bankEnergy({ contract_id: mppa.id, period_month: '2026-09', banked_mwh: 100, asOf: '2026-10-12' });
+    const pos = (await request(app).get(`/api/energy-banking/${mppa.id}`).set(auth(reia))).body;
+    expect(pos[0]).toMatchObject({ cycle: 'M2026-09', cycle_ends_on: '2026-09-30', entries_close_on: '2026-10-31', available_mwh: 100 });
   });
 });

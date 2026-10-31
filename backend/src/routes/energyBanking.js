@@ -5,7 +5,7 @@ import {
   newDoc, header, kpiBand, sectionTitle, table, notes as footNotes, pageNumbers, M, CONTENT_W, INK, MUTED, nowLabel,
 } from '../scripts/reportPdfKit.js';
 import { logAudit } from '../util.js';
-import { bankEnergy, drawBanked, settleExpiredBanking, bankedPosition } from '../services/energyBanking.js';
+import { bankEnergy, drawBanked, settleExpiredBanking, bankedPosition, bankingCycleFor, entriesCloseOn } from '../services/energyBanking.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -101,6 +101,17 @@ router.get('/:contractId/statement.pdf', (req, res) => {
   ]);
   pageNumbers(doc);
   doc.end();
+});
+
+// The cycle a month's energy banks into, fixed by the PPA's banking basis: the
+// Bank Energy form shows it rather than have it typed.
+router.get('/:contractId/cycle', requireRole(...BANK_READ), (req, res) => {
+  const period = String(req.query.period || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: 'period must be a month (YYYY-MM)' });
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.contractId);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const c = bankingCycleFor(contract, period);
+  res.json({ ...c, entries_close_on: entriesCloseOn(c.ends) });
 });
 
 // What is still banked for a contract, by cycle.

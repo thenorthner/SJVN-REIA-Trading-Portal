@@ -10,16 +10,10 @@ import { actsAs } from '../../lib/rolePages.js';
 // cycle closes settles in cash at a discount to tariff, because banking is a
 // carry-forward facility rather than a guaranteed sale.
 
-const EMPTY_BANK = { cycle: '', period_month: '', banked_mwh: '', cycle_ends_on: '' };
+// The cycle is not typed: the PPA's banking basis fixes it for the month, and the server says which.
+const EMPTY_BANK = { cycle: '', period_month: '', banked_mwh: '', cycle_ends_on: '', entries_close_on: '', basis: '' };
 const todayIso = () => new Date().toISOString().slice(0, 10);
-
-/** The financial-year cycle a month falls in, ending 31 March. */
-function fyCycle(period) {
-  const [y, m] = String(period).split('-').map(Number);
-  if (!y || !m) return null;
-  const start = m >= 4 ? y : y - 1;
-  return { cycle: `FY${start}-${String((start + 1) % 100).padStart(2, '0')}`, ends: `${start + 1}-03-31` };
-}
+const BASIS_LABEL = { MONTHLY: 'monthly', SEASONAL: 'seasonal (Apr–Sep / Oct–Mar)', ANNUAL: 'annual (the financial year)' };
 const EMPTY_DRAW = { cycle: '', draw_mwh: '' };
 
 function daysUntil(dateStr) {
@@ -31,14 +25,18 @@ function daysUntil(dateStr) {
 }
 
 // A cycle is only interesting once it holds energy nobody has drawn: that is what
-// expires. The closer the cycle end, the more it matters.
-function CycleWindow({ endsOn, available }) {
-  const left = daysUntil(endsOn);
+// expires. It takes entries until the end of the month after it ends, when its
+// last month's energy account is in; the closer that day, the more it matters.
+function CycleWindow({ endsOn, entriesClose, available }) {
+  const left = daysUntil(entriesClose || endsOn);
   if (left === null) return <span>—</span>;
   const urgent = available > 0 && left >= 0 && left <= 30;
   const lapsed = left < 0;
   const tone = lapsed ? 'var(--text-light)' : urgent ? 'var(--amber, #b7791f)' : 'var(--text)';
-  const note = lapsed ? 'closed' : left === 0 ? 'closes today' : `${left}d left`;
+  const ended = endsOn && endsOn < todayIso();
+  const note = lapsed ? 'closed'
+    : ended ? `ended; entries until ${entriesClose}${left === 0 ? ' (today)' : ''}`
+      : daysUntil(endsOn) === 0 ? 'ends today' : `${daysUntil(endsOn)}d left`;
   return (
     <span style={{ color: tone, fontWeight: urgent ? 600 : 400 }}>
       {endsOn}
@@ -103,11 +101,13 @@ export default function EnergyBanking() {
   async function doBank(e) {
     e.preventDefault();
     if (busy.current) return;
-    if (bankForm.cycle_ends_on && bankForm.cycle_ends_on < todayIso()) { setError(`The cycle ended on ${bankForm.cycle_ends_on}; energy cannot be banked into a closed cycle.`); return; }
+    if (!bankForm.cycle) { setError('Pick the month generated: its banking cycle is shown before you bank.'); return; }
+    if (bankForm.entries_close_on && bankForm.entries_close_on < todayIso()) { setError(`The cycle ended on ${bankForm.cycle_ends_on} and took entries until ${bankForm.entries_close_on}; energy cannot be banked into a closed cycle.`); return; }
     setError('');
     busy.current = true;
     try {
-      await api.energyBanking.bank({ ...bankForm, contract_id: contractId, banked_mwh: Number(bankForm.banked_mwh) });
+      const { cycle, period_month, banked_mwh, cycle_ends_on } = bankForm;
+      await api.energyBanking.bank({ contract_id: contractId, cycle, period_month, banked_mwh: Number(banked_mwh), cycle_ends_on });
       setBankForm(null); load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to bank energy.');
@@ -116,9 +116,16 @@ export default function EnergyBanking() {
     }
   }
 
+  // The month fixes the cycle: ask the server which, by the PPA's banking basis.
   function setPeriod(period) {
-    const fy = fyCycle(period);
-    setBankForm((f) => ({ ...f, period_month: period, cycle: f.cycle || fy?.cycle || '', cycle_ends_on: f.cycle_ends_on || fy?.ends || '' }));
+    setBankForm((f) => ({ ...f, period_month: period, cycle: '', cycle_ends_on: '', entries_close_on: '', basis: '' }));
+    if (!/^\d{4}-\d{2}$/.test(period)) return;
+    api.energyBanking.cycle(contractId, period)
+      .then((c) => {
+        setBankForm((f) => (f && f.period_month === period ? { ...f, cycle: c.cycle, cycle_ends_on: c.ends, entries_close_on: c.entries_close_on, basis: c.basis } : f));
+        if (c.entries_close_on < todayIso()) setError(`The cycle ended on ${c.ends} and took entries until ${c.entries_close_on}; energy cannot be banked into a closed cycle.`);
+      })
+      .catch((err) => setError(err.response?.data?.error || 'Could not work out the banking cycle for that month.'));
   }
 
   async function doDraw(e) {
@@ -151,7 +158,7 @@ export default function EnergyBanking() {
     setPopup({
       tone: 'warning',
       title: 'Settle closed cycles',
-      message: 'Settle every cycle that closed before today with energy unused? Settlement is at a discount to tariff and cannot be undone. (It also runs every night.)',
+      message: 'Settle every cycle whose entries have closed (the month after it ended) with energy unused? Settlement is at a discount to tariff and cannot be undone. (It also runs every night.)',
       confirm: async () => {
         const res = await api.energyBanking.settle({});
         setSweep(res); load(); setPopup(null);
@@ -173,7 +180,7 @@ export default function EnergyBanking() {
 
   const columns = [
     { key: 'cycle', header: 'Cycle' },
-    { key: 'cycle_ends_on', header: 'Cycle Ends', render: (r) => <CycleWindow endsOn={r.cycle_ends_on} available={Number(r.available_mwh) || 0} /> },
+    { key: 'cycle_ends_on', header: 'Cycle Ends', render: (r) => <CycleWindow endsOn={r.cycle_ends_on} entriesClose={r.entries_close_on} available={Number(r.available_mwh) || 0} /> },
     { key: 'banked_mwh', header: 'Banked', render: (r) => `${fmtNumber(r.banked_mwh, 3)} MWh` },
     { key: 'drawn_mwh', header: 'Drawn', render: (r) => `${fmtNumber(r.drawn_mwh, 3)} MWh` },
     {
@@ -201,8 +208,8 @@ export default function EnergyBanking() {
     {
       key: 'actions',
       header: '',
-      // A closed cycle settles in cash; it is not drawn from.
-      render: (r) => canWrite && Number(r.available_mwh) > 0 && r.cycle_ends_on >= todayIso() && (
+      // A closed cycle settles in cash; it is not drawn from. It takes draws until its entries close.
+      render: (r) => canWrite && Number(r.available_mwh) > 0 && (r.entries_close_on || r.cycle_ends_on) >= todayIso() && (
         <div onClick={(e) => e.stopPropagation()}>
           <button className="btn btn-xs btn-primary" onClick={() => { setError(''); setDrawForm({ ...EMPTY_DRAW, cycle: r.cycle }); }}>Draw</button>
         </div>
@@ -244,7 +251,7 @@ export default function EnergyBanking() {
       <div className="kpi-grid">
         <StatCard label="Banked" value={`${fmtNumber(totals.banked, 3)} MWh`} />
         <StatCard label="Drawn Back" value={`${fmtNumber(totals.drawn, 3)} MWh`} />
-        <StatCard label="Still Available" value={`${fmtNumber(totals.available, 3)} MWh`} tone={totals.available > 0 ? 'green' : 'default'} hint="drawable until the cycle closes" />
+        <StatCard label="Still Available" value={`${fmtNumber(totals.available, 3)} MWh`} tone={totals.available > 0 ? 'green' : 'default'} hint="drawable until the month after the cycle ends" />
         <StatCard label="Cash Settled" value={fmtCurrency(totals.settled)} tone="amber" hint="lapsed, paid at a discount" />
       </div>
 
@@ -294,13 +301,19 @@ export default function EnergyBanking() {
         {bankForm && (
           <form onSubmit={doBank}>
             <div className="form-grid">
-              <Field label="Banking Cycle"><input required value={bankForm.cycle} placeholder="e.g. FY2026-27" onChange={(e) => setBankForm({ ...bankForm, cycle: e.target.value })} /></Field>
-              <Field label="Cycle Ends On"><input required type="date" min={todayIso()} value={bankForm.cycle_ends_on} onChange={(e) => setBankForm({ ...bankForm, cycle_ends_on: e.target.value })} /></Field>
-            </div>
-            <div className="form-grid">
               <Field label="Month generated (locked)"><input required type="month" max={todayIso().slice(0, 7)} value={bankForm.period_month} onChange={(e) => setPeriod(e.target.value)} /></Field>
               <Field label="Energy Banked (MWh)"><input required type="number" step="0.001" min="0.001" value={bankForm.banked_mwh} onChange={(e) => setBankForm({ ...bankForm, banked_mwh: e.target.value })} /></Field>
             </div>
+            <div className="form-grid">
+              <Field label="Banking Cycle"><input readOnly value={bankForm.cycle} placeholder="Shown once the month is picked" /></Field>
+              <Field label="Cycle Ends On"><input readOnly value={bankForm.cycle_ends_on} placeholder="Shown once the month is picked" /></Field>
+            </div>
+            {bankForm.cycle && (
+              <p className="inline-note" style={{ margin: '4px 0' }}>
+                {contract?.contract_no} banks on a {BASIS_LABEL[bankForm.basis] || 'monthly'} basis. Cycle {bankForm.cycle} takes entries until {bankForm.entries_close_on};
+                what is not drawn by then settles in cash.
+              </p>
+            )}
             <p className="inline-note" style={{ margin: '4px 0' }}>
               Valued at the contract&apos;s tariff for the month ({contract?.tariff_per_unit != null ? `₹${contract.tariff_per_unit}/unit` : 'from the contract'}).
               Up to the month&apos;s locked generation can be banked, into a cycle that is still open, and only before the month is billed:

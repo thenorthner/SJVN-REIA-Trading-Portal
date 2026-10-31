@@ -444,6 +444,7 @@ export const api = {
   },
   energyBanking: {
     position: (contractId) => g(`/energy-banking/${contractId}`),
+    cycle: (contractId, period) => g(`/energy-banking/${contractId}/cycle`, { period }),
     bank: (body) => p('/energy-banking', body),
     draw: (body) => p('/energy-banking/draw', body),
     settle: (body) => p('/energy-banking/settle', body),

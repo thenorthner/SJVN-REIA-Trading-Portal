@@ -12,6 +12,7 @@ import { cercCompliance } from './cercCompliance.js';
 import { licenceCompliance } from './cercLicence.js';
 import { dueDateFor } from './cercFormIv.js';
 import { REIA_BETA } from './reiaBeta.js';
+import { entriesCloseOn } from './energyBanking.js';
 
 // The REIA beta opens its returns from the REIA filing calendar, and the licence
 // fee (the trading licence's) is not on its timeline.
@@ -113,7 +114,7 @@ export function complianceCalendar({ days = 90, today = istToday() } = {}) {
     WHERE eb.status IN ('OPEN', 'DRAWN') AND eb.cycle_ends_on BETWEEN ? AND ?
     GROUP BY eb.contract_id, eb.cycle, eb.cycle_ends_on
   `).all(today, horizon)) {
-    push(b.cycle_ends_on, 'BANKING_CYCLE_END', `Banking cycle ${b.cycle} closes — ${b.contract_no}`, `${b.open_mwh} MWh still banked; unused energy settles in money after this date`,
+    push(b.cycle_ends_on, 'BANKING_CYCLE_END', `Banking cycle ${b.cycle} closes — ${b.contract_no}`, `${b.open_mwh} MWh still banked; it can be drawn until ${entriesCloseOn(b.cycle_ends_on)}, then what is unused settles in money`,
       { ref: b.contract_id, link: '/reia/energy-banking' });
   }
 
