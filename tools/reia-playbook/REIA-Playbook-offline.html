@@ -570,7 +570,7 @@ const MISSIONS = [
   steps:[
     { who:'A', t:'Create the company’s first log-in', where:'REIA Billing & Settlement › Company Users', press:['Add Team Member','Add to team'],
       fill:['Search the company (“Type to search company…”) and pick it','Full name, email (their sign-in), designation, phone','Access level: Level 3 — Approver for the first log-in','Tick “Set the temporary password myself”, or let the platform make one (shown once)'],
-      res:{o:'Listed as', text:'Temporary password not yet changed'},
+      res:{o:'Flagged', text:'Temporary password'},
       rules:['Only SJVN Admin (or IT Super Admin) manages company log-ins. The REIA desk no longer creates users.','A company’s Admin account can be reset or switched off only by SJVN.'],
       block:'SJVN Admin: no `+ Generate Invoice`, and no other desk action. Read-only on transactions.' },
     { who:'S', t:'First sign-in, set a new password', where:'Sign-in page', press:['Sign in','Save'],
