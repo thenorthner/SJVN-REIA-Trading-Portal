@@ -4,9 +4,12 @@
 // The portal's Content-Security-Policy runs script from this origin only, so
 // the portal copy carries its script as playbook.js rather than inline.
 // Run after every edit to index.html:  node tools/reia-playbook/export.mjs
+// It then checks every quoted label against the code (check-labels.mjs) and
+// warns about any the code no longer has; the copies are written either way.
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { check } from './check-labels.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORTAL = path.resolve(HERE, '../../frontend/public/reia-playbook');
@@ -28,3 +31,6 @@ fs.mkdirSync(PORTAL, { recursive: true });
 fs.writeFileSync(path.join(PORTAL, 'index.html'), HEAD + page + TAIL);
 fs.writeFileSync(path.join(PORTAL, 'playbook.js'), code);
 console.log(`Wrote REIA-Playbook-offline.html and ${path.relative(process.cwd(), PORTAL)}/{index.html,playbook.js}`);
+
+console.log('');
+if (check({ src })) console.log('\nWarning: the playbook quotes labels the code no longer has. Fix them in index.html and export again.');

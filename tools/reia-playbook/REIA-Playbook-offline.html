@@ -978,7 +978,7 @@ const RULES = [
 /* ───────────────────────── data: side quests ─────────────────────────
    The screens beyond the ten missions, each played the same way: lanes, steps,
    log-out / log-in switches and a details drawer. Labels are the platform's own. */
-const QZONES = [['money','Money in and out'],['close','Closing the month'],['risk','Contracts and risk'],['platform','Platform']];
+const QZONES = [['money','Money in and out'],['close','Closing the month'],['risk','Contracts and risk'],['platform','Platform'],['reports','Reports']];
 const QUESTS = [
 { zone:'money', short:'Late payment surcharge', name:'Bill the late payment surcharge', screen:'REIA Billing & Settlement › Others › Month-Close Board',
   goal:'When a buyer pays after the due date, demand the surcharge its overdue bills have earned, once a month, as a bill of its own.',
@@ -1469,6 +1469,42 @@ const QUESTS = [
       rules:['Also `Activity Report (PDF)` and `Export CSV`.'] },
   ],
   also:['The compliance auditor reads the same trail.'] },
+
+{ zone:'reports', short:'Reports', name:'Pull a report, and share it', screen:'REIA Billing & Settlement › REIA Dashboard › Reports',
+  goal:'Any figure the desk holds, as a report on screen and as CSV, Excel or PDF: a ready-made one in a click, or one built to your own columns, filters and grouping, saved and shared with the desk.',
+  start:'Someone needs the desk’s figures', end:'The report on screen, downloaded, saved for next time',
+  steps:[
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Open a ready-made report', where:'REIA Dashboard › Reports › Predefined reports', press:['View report'],
+      lists:{ 'Every SJVN officer of the desk: 20 reports':['Billing: the bills registers (PSA, PPA) and monthly billing','Money: payments, outstanding and ageing on both sides, LPS, rebates','Disputes and notes: disputes register, open disputes by reason, debit and credit notes','Energy and contracts: energy accounts, energy allocated by beneficiary, contracts register','Security and reconciliation: payment security and expiry, reconciliation statements','Governance: approvals and maker–checker activity, SAP posting status'] },
+      res:{o:'Report', text:'On screen'},
+      rules:['It reads the desk’s live records: rows, subtotals and the grand total, with the filters applied listed under the title.','An officer on selected projects sees only those: “Your assigned projects only.”','The tab is in the address (?tab=reports), so it can be bookmarked and sent.'] },
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Download it', where:'The report on screen', press:['Download CSV','Download Excel','Download PDF'],
+      rules:['The file carries the same rows and totals as the screen.','Up to 50,000 rows. Past that the report says only the first rows are in it: narrow the filters.'] },
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Build a report of your own', where:'Reports › Custom report (or `Customise` on any report)', press:['Run report'],
+      fill:['Report on: what it is about, e.g. Bills register, Payments and receipts, Disputes','Report name (optional; printed as the title)','Columns: `Usual columns`, `All` or `None`, then their order in the report','Filters: Date range on, and a Period from This month to Last financial year; `Add a filter` for parties, status, people, amounts or text','Grouping and order: Group by, with subtotals; Subtotals only (one line per group); Sort by, Then by'],
+      res:{o:'Report', text:'On screen'},
+      rules:['1 to 40 columns.','A from/to pair the wrong way round is said as soon as you leave the box.','Every problem is listed at once, in one popup.'],
+      refuse:['Pick at least one column to show.'] },
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Save it, and share it with the desk', where:'Reports › Custom report', press:['Save to my reports'],
+      fill:['Report name: needed to save','Tick “Share with other SJVN officers”'],
+      res:{o:'Saved report', text:'Shared with the desk'},
+      rules:['It keeps the columns, filters and grouping, not the rows: every run reads the records afresh.','A name you already used asks before it replaces that report.','Only its owner can `Remove` it. The data it reports on is not touched.'],
+      refuse:['Give the report a name to save it under.'] },
+    { who:'H', alt:['C','F','G','A'], noquiz:true, t:'Run a colleague’s saved report', where:'Reports › Saved reports', press:['View report'],
+      res:{o:'Report', text:'On screen'},
+      rules:['Its card says “Shared by” and the colleague’s name, with no `Remove`.','`Customise` opens it in the builder; saving it there makes a copy of your own.'] },
+    { who:'G', alt:['A'], t:'Read who did what on the desk', where:'Reports › Predefined reports › Governance', press:['Audit trail by user','View report'],
+      res:{o:'Report', text:'On screen'},
+      rules:['“Audit trail by user”: every recorded action on the desk, grouped by user. Management, SJVN Admin and the compliance auditor open it.','Approvals and maker–checker activity, and SAP posting status, are open to every SJVN officer of the desk.'],
+      block:'Maker, checker, HOD and Finance: “Audit trail by user” is not among their reports.' },
+    { who:'S', noquiz:true, t:'Pull its own figures', where:'Seller Portal › Reports', press:['View report','Download PDF'],
+      lists:{ 'The seller’s 12 reports, in its own words':['My bills to SJVN (PPA)','Monthly billing to SJVN (PPA)','Payments received from SJVN','What SJVN owes you, by age','LPS accrued and billed','Rebates allowed and availed','Disputes register','Open disputes by reason','Energy accounts (PPA)','My contracts (PPAs)','Payment security and expiry','Reconciliation statements'] },
+      rules:['Only rows the company is a party to: “Rows your company is a party to, as your other screens show them.”','SJVN’s own columns, such as SJVN margin and who prepared a bill, are left out.','It can save its own layouts; there is no box to share them.','The page opens once the company’s KYC is approved.'] },
+    { who:'B', noquiz:true, t:'Pull its own figures', where:'Buyer Portal › Reports', press:['View report','Download Excel'],
+      lists:{ 'The buyer’s 12 reports, in its own words':['Bills from SJVN (PSA)','Monthly billing from SJVN (PSA)','Payments made to SJVN','What you owe SJVN, by age','LPS accrued and billed','Rebates allowed and availed','Disputes register','Open disputes by reason','Energy supplied to you (PSA)','My contracts (PSAs)','Payment security and expiry','Reconciliation statements'] },
+      rules:['The same tab as the seller’s, cut to the buyer’s own contracts.'] },
+  ],
+  also:['`Download PDF Snapshot` on the dashboard’s Overview tab gives the whole dashboard as one PDF.','Every screen keeps its own downloads too, e.g. a statement from Counterparty Ledgers & TDS (Side quest 6).'] },
 ];
 
 /* ───────────────────────── helpers ───────────────────────── */
