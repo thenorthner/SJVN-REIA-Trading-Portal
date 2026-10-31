@@ -99,11 +99,26 @@ describe('maker and checker', () => {
     }
   });
 
-  it('leaves resubmitting a rejected bill to the admin and checkers', async () => {
+  it('leaves resubmitting a rejected bill to the admin and checkers, back to SJVN\'s desk', async () => {
     const inv = bill(ppaA, 'REJECTED');
     expect((await post(`/api/invoices/${inv.id}/submit-for-approval`, t.l1)).status).toBe(403);
     expect((await post(`/api/invoices/${inv.id}/submit-for-approval`, t.l2)).status).toBe(200);
-    expect(statusOf(inv.id)).toBe('UNDER_APPROVAL');
+    // Where a new bill goes: SJVN's maker verifies it and sends it into approval (31-Oct-2026).
+    expect(statusOf(inv.id)).toBe('SUBMITTED');
+    expect(auditFor(inv.id).some((a) => a.action === 'RESUBMIT')).toBe(true);
+  });
+
+  it('does not let the company push a bill into SJVN\'s approval itself', async () => {
+    for (const status of ['SUBMITTED', 'DRAFT', 'PENDING_L2']) {
+      const inv = bill(ppaA, status);
+      for (const who of ['admin', 'l2', 'l3']) {
+        const r = await post(`/api/invoices/${inv.id}/submit-for-approval`, t[who]);
+        expect(r.status, `${who} on ${status}`).toBe(400);
+        expect(statusOf(inv.id)).toBe(status);
+      }
+    }
+    expect((await post(`/api/invoices/${bill(ppaA, 'SUBMITTED').id}/submit-for-approval`, t.l2)).body.error).toMatch(/already with SJVN/);
+    expect((await post(`/api/invoices/${bill(ppaA, 'DRAFT').id}/submit-for-approval`, t.admin)).body.error).toMatch(/Approve & submit to SJVN/);
   });
 });
 

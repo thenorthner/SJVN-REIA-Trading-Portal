@@ -166,3 +166,23 @@ describe('the statement as a document', () => {
     expect((await get(otherSeller, `/${recon.id}/statement.pdf`)).status).toBe(403);
   });
 });
+
+// 31-Oct-2026: any SJVN role, and a company's maker, could put a "signed copy"
+// on the file; the copy is the signatory's, so whoever may sign attaches it.
+describe('the copy signed with a certificate', () => {
+  it('is attached by whoever signs for the side: SJVN\'s checker, a company\'s checker or admin', async () => {
+    const copy = (u) => post(u, `/${recon.id}/signed-copy`, { version_id: 'none' });
+    for (const u of [makeUser('SJVN_ADMIN'), makeUser('MANAGEMENT'), reia]) {
+      const r = await copy(u);
+      expect(r.status, u.role).toBe(403);
+      expect(r.body.error).toMatch(/REIA checker, who signs for SJVN/);
+    }
+    const maker = await copy(makeUser('SELLER_L1', { linked_entity_id: alpha.id }));
+    expect(maker.status).toBe(403);
+    expect(maker.body.error).toMatch(/checker or admin, who signs the statement/);
+    // Past the role check, the statement still has to be signed first.
+    for (const u of [reia2, seller, makeUser('SELLER_L2', { linked_entity_id: alpha.id })]) {
+      expect((await copy(u)).body.error, u.role).toMatch(/Sign the statement here first/);
+    }
+  });
+});

@@ -685,6 +685,10 @@ router.post('/releases/:id/act', requireRole(...REIA_CHECK, 'FINANCE_USER'), (re
   if (rel.status !== 'PENDING') {
     return res.status(400).json({ error: `This release request has already been ${rel.status === 'RELEASED' ? 'approved' : words(rel.status)}` });
   }
+  // Finance both asks and releases; whoever asked does not decide their own request.
+  if (rel.requested_by_id && req.user.id && rel.requested_by_id === req.user.id) {
+    return res.status(403).json({ error: 'You asked for this release; another officer decides it.' });
+  }
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(rel.payment_security_id);
   const contractNo = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(rel.contract_id)?.contract_no || rel.contract_id;
   const note = String(req.body.note ?? '').trim().slice(0, 1000);
@@ -978,10 +982,17 @@ router.post('/:id/invoke', requireRole(...REIA_CHECK), (req, res) => {
   res.json({ instrument: enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(existing.id)), invocation: inv });
 });
 
+// Who asks for a release: the company whose instrument it is, or on SJVN's
+// side the maker or Finance, as the screen offers it. Any SJVN role, the
+// administrators included, could ask through the API (31-Oct-2026).
+const ASK_RELEASE = [...REIA_MAKE, 'FINANCE_USER'];
+
 router.post('/:id/release-request', (req, res) => {
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
-  if (!canAccessInstrument(req.user, ps) && !isReia(req.user)) return res.status(403).json({ error: 'Not authorized' });
+  if (counterpartySide(req.user) ? !canAccessInstrument(req.user, ps) : !ASK_RELEASE.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
   // A second request used to stack on the first, and one could be raised on an
   // instrument already released or never accepted.
   if (!['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED', 'EXPIRED'].includes(ps.status)) {
@@ -994,14 +1005,15 @@ router.post('/:id/release-request', (req, res) => {
   const id = newId('SRL');
   db.prepare(`
     INSERT INTO security_releases (
-      id, payment_security_id, contract_id, status, checklist_no_dues, checklist_no_disputes, reason, requested_by
-    ) VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?)
+      id, payment_security_id, contract_id, status, checklist_no_dues, checklist_no_disputes, reason, requested_by, requested_by_id
+    ) VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
   `).run(
     id, ps.id, ps.contract_id,
     position.outstanding_dues > 0 ? 0 : 1,
     position.open_disputes === 0 ? 1 : 0,
     reason,
-    req.user.name
+    req.user.name,
+    req.user.id || null
   );
   db.prepare(`UPDATE payment_security SET status = 'RELEASE_PENDING', updated_at = datetime('now') WHERE id = ?`).run(ps.id);
   recordSecurityEvent({ instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'RELEASE_REQUESTED', details: { outstanding: position.outstanding_dues, openDisputes: position.open_disputes, reason } });

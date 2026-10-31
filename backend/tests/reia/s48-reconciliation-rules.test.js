@@ -130,8 +130,22 @@ describe('S48 Signing', () => {
   it('does not let the person who asked for a reopen grant it', async () => {
     const st = await statement();
     db.prepare(`UPDATE reconciliations SET status = 'CLOSED' WHERE id = ?`).run(st.id);
-    const rr = (await post(`/api/reconciliation/${st.id}/reopen-request`, { reason: 'late credit note' }, admin)).body;
-    expect((await post(`/api/reconciliation/reopen-requests/${rr.id}/act`, { decision: 'APPROVED' }, admin)).status).toBe(403);
+    const rr = (await post(`/api/reconciliation/${st.id}/reopen-request`, { reason: 'late credit note' }, checker)).body;
+    const own = await post(`/api/reconciliation/reopen-requests/${rr.id}/act`, { decision: 'APPROVED' }, checker);
+    expect(own.status).toBe(403);
+    expect(own.body.error).toMatch(/You asked for this reopen/);
     expect((await post(`/api/reconciliation/reopen-requests/${rr.id}/act`, { decision: 'APPROVED' }, tokenFor('FINANCE_USER'))).status).toBe(200);
+  });
+
+  // 31-Oct-2026: any SJVN role could ask, the administrators included; they read the desk, they do not act on it.
+  it('is asked for by the desk or Finance, not by an administrator, the approver or Management', async () => {
+    const st = await statement();
+    db.prepare(`UPDATE reconciliations SET status = 'CLOSED' WHERE id = ?`).run(st.id);
+    for (const who of [admin, tokenFor('IT_SUPER_ADMIN'), tokenFor('REIA_APPROVER'), tokenFor('MANAGEMENT')]) {
+      const r = await post(`/api/reconciliation/${st.id}/reopen-request`, { reason: 'late credit note' }, who);
+      expect(r.status).toBe(403);
+      expect(r.body.error).toMatch(/maker, checker or Finance asks/);
+    }
+    expect((await post(`/api/reconciliation/${st.id}/reopen-request`, { reason: 'late credit note' }, reia)).status, 'the maker').toBe(201);
   });
 });

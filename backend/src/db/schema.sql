@@ -925,6 +925,7 @@ CREATE TABLE IF NOT EXISTS security_releases (
   checklist_no_disputes INTEGER NOT NULL DEFAULT 0,
   reason TEXT,
   requested_by TEXT,
+  requested_by_id TEXT,         -- who asked never decides the release (31-Oct-2026)
   acted_by TEXT,
   acted_at TEXT,
   decision_note TEXT,

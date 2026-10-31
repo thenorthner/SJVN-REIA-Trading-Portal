@@ -532,6 +532,10 @@ router.post('/:id/signed-copy', (req, res) => send(res, () => {
   const recon = reconFor(req.user, req.params.id);
   if (!recon.contract_id) throw fail(400, 'A signed copy is attached to a contract statement');
   const side = sideOf(req.user);
+  // The copy is the signatory's, so whoever may sign attaches it (31-Oct-2026):
+  // any SJVN role, and a company's maker, could put one on the file.
+  if (side === 'SJVN' && !ROLE_GROUPS.REIA_CHECK.includes(req.user.role)) throw fail(403, 'The REIA checker, who signs for SJVN, attaches SJVN\'s signed copy');
+  if (side === 'COUNTERPARTY' && /_L1$/.test(String(req.user.role || ''))) throw fail(403, 'Your company\'s checker or admin, who signs the statement, attaches its signed copy');
   if (!(side === 'SJVN' ? recon.sjvn_ack_at : recon.counterparty_ack_at)) throw fail(400, 'Sign the statement here first, then attach the copy signed with your certificate');
   const v = db.prepare(`
     SELECT v.id, v.file_path, v.file_name FROM document_versions v JOIN documents d ON d.id = v.document_id WHERE v.id = ? AND d.contract_id = ?

@@ -2452,6 +2452,27 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_MAKE, ..
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot submit a cancelled invoice for approval' });
   }
+  // A developer hands its bill to SJVN; when it enters SJVN's approval is for
+  // SJVN's maker to decide, once it is verified (31-Oct-2026). The seller's
+  // checker could send its own SUBMITTED bill, or a draft past its own
+  // checker, straight to UNDER_APPROVAL. From here a seller only resubmits a
+  // bill SJVN sent back, and it goes where a new one goes: SUBMITTED.
+  if (counterpartySide(req.user) === 'SELLER') {
+    if (inv.status !== 'REJECTED') {
+      return res.status(400).json({
+        error: inv.status === 'DRAFT' || inv.status === 'PENDING_L2'
+          ? `${inv.invoice_no} is a draft: it goes to SJVN through your company's checker (Approve & submit to SJVN).`
+          : `${inv.invoice_no} is already with SJVN (${inv.status.replace(/_/g, ' ')}); only a bill SJVN has sent back is resubmitted.`,
+      });
+    }
+    db.prepare(`UPDATE invoices SET status = 'SUBMITTED', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
+    logAudit({
+      req, user: req.user, action: 'RESUBMIT', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+      beforeValue: { status: 'REJECTED' }, afterValue: { status: 'SUBMITTED' },
+    });
+    pushNotification({ role: 'REIA_MAKER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${inv.invoice_no} resubmitted for review` });
+    return res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
+  }
   const allowed = ['DRAFT', 'SUBMITTED', 'REJECTED'];
   if (!allowed.includes(inv.status)) {
     return res.status(400).json({

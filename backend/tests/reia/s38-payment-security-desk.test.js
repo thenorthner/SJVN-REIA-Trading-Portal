@@ -253,6 +253,26 @@ describe('Releasing an instrument', () => {
   const ask = (ps, who = signToken(buyer)) => post(`/api/payment-security/${ps.id}/release-request`, { reason: 'PSA has run its term' }, who);
   const decide = (rel, body, who = checker) => post(`/api/payment-security/releases/${rel.id}/act`, body, who);
 
+  // 31-Oct-2026: any SJVN role, the administrators too, could ask through the
+  // API though the screen offers it to the maker and Finance; and Finance, who
+  // both asks and releases, could decide its own request.
+  it('is asked for by the company, the maker or Finance, and never decided by whoever asked', async () => {
+    for (const role of ['REIA_CHECKER', 'REIA_APPROVER', 'MANAGEMENT', 'SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR']) {
+      const ps = instrument(psa);
+      expect((await ask(ps, tokenFor(role))).status, role).toBe(403);
+      expect(row(ps.id).status).toBe('ACTIVE');
+    }
+    expect((await ask(instrument(psa), reia)).status, 'the maker').toBe(201);
+    expect((await ask(instrument(psa), signToken(otherBuyer))).status, 'another buyer').toBe(403);
+
+    const rel = (await ask(instrument(psa), finance)).body;
+    expect(rel.requested_by_id).toBeTruthy();
+    const own = await decide(rel, { decision: 'REJECTED', note: 'Cover is still needed' }, finance);
+    expect(own.status).toBe(403);
+    expect(own.body.error).toMatch(/You asked for this release; another officer decides it/);
+    expect((await decide(rel, { decision: 'REJECTED', note: 'Cover is still needed' })).status, 'the checker decides it').toBe(200);
+  });
+
   it('is decided on the position today, not the one stamped when it was asked for', async () => {
     const ps = instrument(psa);
     const owed = bill(psa);

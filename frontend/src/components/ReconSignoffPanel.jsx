@@ -6,6 +6,7 @@ import { PreviewModal } from './DocumentManager.jsx';
 import { triggerUrjaCelebration } from './UrjaCelebration.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 import { actsAs } from '../lib/rolePages.js';
+import { ROLE_GROUPS } from '../roles.js';
 
 // What surrounds the signatures of a reconciliation statement: the balance
 // rolled forward, the exceptions the counterparty raised, each side's recorded
@@ -280,6 +281,8 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
   const s = d.signatures;
   const both = !!(s.sjvn && s.counterparty);
   const sideKey = d.side === 'SJVN' ? 'sjvn' : 'counterparty';
+  // Whoever signs for the side attaches its signed copy: SJVN's checker, a company's checker or admin.
+  const canAttachCopy = d.side === 'SJVN' ? actsAs(user, ROLE_GROUPS.REIA_CHECK) : !/_L1$/.test(String(user?.role || ''));
   const sigLine = (label, x) => (
     <div style={{ padding: 10, border: `1px solid ${x ? 'var(--t-green-100)' : 'var(--border)'}`, background: x ? 'var(--t-green-50)' : 'var(--surface)', borderRadius: 6, fontSize: 15 }}>
       <div style={{ fontWeight: 700, color: x ? 'var(--on-green)' : 'var(--text-muted)' }}>{label}</div>
@@ -419,7 +422,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
           {copyLine('SJVN', d.signed_copies.sjvn)}
           {copyLine('Counterparty', d.signed_copies.counterparty)}
           {!d.signed_copies.sjvn && !d.signed_copies.counterparty && <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>None attached yet.</div>}
-          {s[sideKey] && (
+          {s[sideKey] && canAttachCopy && (
             <form onSubmit={attachCopy} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
               <input key={d.signed_copies[sideKey]?.version_id || 'none'} type="file" accept=".pdf,application/pdf" onChange={(e) => setCopy(e.target.files[0])} aria-label="Signed statement PDF" />
               <button type="submit" className="btn btn-primary btn-sm" disabled={!copy || busy === 'copy'}>{d.signed_copies[sideKey] ? 'Replace our signed copy' : 'Attach our signed copy'}</button>

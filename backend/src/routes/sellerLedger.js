@@ -30,7 +30,9 @@ const router = Router();
 router.use(requireAuth);
 
 const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
-const canFile = (user) => ROLE_GROUPS.FINANCE.includes(user?.role);
+// A seller's Form 16A is SJVN's as the deductor, and Finance files it. ROLE_GROUPS.FINANCE
+// also holds the REIA maker, which let the desk's maker file one too.
+const canFile = (user) => user?.role === 'FINANCE_USER';
 /** Whoever deducted the tax issues the certificate: SJVN for a seller's bills, the buyer for its own. */
 const mayFile = (user, side, partySide) => (partySide === 'BUYER' ? side === 'BUYER' && !/_L1$/.test(user?.role || '') : canFile(user));
 const fail = (status, message) => Object.assign(new Error(message), { status });

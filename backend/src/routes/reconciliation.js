@@ -762,12 +762,19 @@ router.post('/:id/acknowledge', (req, res) => {
 });
 
 // ---- reopen request ----
+// A party or the desk asks: on SJVN's side the maker, the checker or Finance.
+// Any SJVN role, the administrators included, could ask (31-Oct-2026); they
+// read the desk, they do not act on it.
+const ASK_REOPEN = [...REIA_WRITE, 'FINANCE_USER'];
 router.post('/:id/reopen-request', (req, res) => {
   const { reason } = req.body;
   if (!String(reason || '').trim()) return res.status(400).json({ error: 'Say why the period should be reopened' });
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
   if (!canAccessRecon(req.user, recon)) return res.status(403).json({ error: 'Not authorized' });
+  if (recon.scope !== 'TRADING_CLIENT' && isReia(req.user) && !ASK_REOPEN.includes(req.user.role)) {
+    return res.status(403).json({ error: 'The REIA maker, checker or Finance asks for a period to be reopened' });
+  }
   if (!['CLOSED', 'AGREED'].includes(recon.status)) {
     return res.status(400).json({ error: 'Only closed/agreed periods can be reopened' });
   }

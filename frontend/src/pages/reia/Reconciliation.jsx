@@ -694,7 +694,7 @@ export default function Reconciliation() {
                 </button>
               )}
 
-              {['CLOSED', 'AGREED'].includes(detail.status) && (
+              {['CLOSED', 'AGREED'].includes(detail.status) && actsAs(user, [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER']) && (
                 <div style={{ display: 'flex', gap: 8, flex: 1, minWidth: 280 }}>
                   <input placeholder="Reopen reason..." value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} style={{ flex: 1 }} />
                   <button type="button" className="btn btn-secondary" onClick={handleReopenRequest}>Request Reopen</button>

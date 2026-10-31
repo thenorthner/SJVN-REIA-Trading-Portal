@@ -159,6 +159,8 @@ describe('TDS certificates', () => {
     version('VB', beta.id);
     const file = (u, body) => request(app).post('/api/ledger/tds-certificates').set(as(u)).send({ entity_id: alpha.id, financial_year: '2026-27', quarter: 'Q2', tds_amount: 1000, version_id: 'V16', ...body });
     expect((await file(seller)).status).toBe(403);
+    expect((await file(reia)).status).toBe(403);
+    expect((await get(reia, `/tds-certificates?entity_id=${alpha.id}`)).body.can_file).toBe(false);
     expect((await file(finance, { financial_year: '2026-28' })).status).toBe(400);
     expect((await file(finance, { version_id: 'VB' })).status).toBe(400);
     const ok = await file(finance, { certificate_no: 'ABCDEFG' });

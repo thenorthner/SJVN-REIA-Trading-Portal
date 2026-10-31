@@ -3880,7 +3880,7 @@ function migrateDecisions20261017() {
   addCol('debit_credit_notes', 'source_kind', 'TEXT');
   addCol('debit_credit_notes', 'source_ref', 'TEXT');
   addCol('invoices', 'lps_invoiced', 'REAL NOT NULL DEFAULT 0');
-  for (const col of ['finance_signoff_at', 'finance_signoff_by', 'finance_signoff_by_id', 'finance_signoff_note']) addCol('security_releases', col, 'TEXT');
+  for (const col of ['finance_signoff_at', 'finance_signoff_by', 'finance_signoff_by_id', 'finance_signoff_note', 'requested_by_id']) addCol('security_releases', col, 'TEXT');
   addCol('power_diversions', 'deficit_note_id', 'TEXT');
   const ownCol = db.pragma('table_info(entities)').map((c) => c.name);
   if (ownCol.length && !ownCol.includes('is_sjvn_own')) {

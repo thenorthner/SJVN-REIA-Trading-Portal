@@ -285,7 +285,8 @@ describe('Revising a bill SJVN has sent back', () => {
     expect(JSON.parse(audit.after_value).total_amount).toBe(43948000);
 
     expect((await post(`/api/invoices/${rejected.id}/submit-for-approval`, seller)).status).toBe(200);
-    expect(row(rejected.id).status).toBe('UNDER_APPROVAL');
+    // Back to SJVN's desk, where its maker verifies it again (31-Oct-2026).
+    expect(row(rejected.id).status).toBe('SUBMITTED');
   });
 
   it('is only for a draft or a rejected bill, and only for its own seller', async () => {

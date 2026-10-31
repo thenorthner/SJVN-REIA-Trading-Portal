@@ -709,7 +709,10 @@ export default function PaymentSecurity() {
                 {
                   key: 'act',
                   header: '',
-                  render: (r) => (canRelease ? (
+                  // Whoever asked does not decide their own request; the server refuses it too.
+                  render: (r) => (canRelease && r.requested_by_id && r.requested_by_id === user?.id ? (
+                    <span className="audit-muted">You asked for this release; another officer decides it.</span>
+                  ) : canRelease ? (
                     <div className="cell-actions">
                       <button type="button" className="btn btn-primary btn-sm" disabled={busy || !r.checklist?.ready} title={r.checklist?.ready ? undefined : 'Every item on the checklist first'} onClick={() => actRelease(r, 'APPROVED')}>Release</button>
                       <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setRefusing(r); setRefuseNote(''); setReleaseError(''); }}>Refuse</button>
