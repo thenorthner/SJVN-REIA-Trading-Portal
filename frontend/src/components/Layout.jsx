@@ -283,6 +283,7 @@ const NAV_SELLER = [
       { to: '/seller/disputes', label: 'My Disputes', requiresKyc: true },
       { to: '/seller/payment-security', label: 'Payment Security', requiresKyc: true },
       { to: '/seller/reconciliation', label: 'Reconciliation', requiresKyc: true },
+      { to: '/seller/reports', label: 'Reports', requiresKyc: true },
     ],
   },
 ];
@@ -302,6 +303,7 @@ const NAV_BUYER = [
       { to: '/buyer/disputes', label: 'My Disputes', requiresKyc: true },
       { to: '/buyer/payment-security', label: 'Payment Security', requiresKyc: true },
       { to: '/buyer/reconciliation', label: 'Reconciliation', requiresKyc: true },
+      { to: '/buyer/reports', label: 'Reports', requiresKyc: true },
     ],
   },
 ];

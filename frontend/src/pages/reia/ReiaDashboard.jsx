@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../../api/client.js';
 import { fmtDate } from '../../datetime.js';
 import SjvnDeskCard from '../../components/SjvnDeskCard.jsx';
 import MacroEnergyGrid3D from '../../components/MacroEnergyGrid3D.jsx';
-import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table } from '../../components/ui.jsx';
+import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table, Tabs, Tab } from '../../components/ui.jsx';
 import { showAlert } from '../../lib/dialogs.js';
+import ReiaReportsTab from './ReiaReportsTab.jsx';
 
 const COLORS = ['url(#eliteBlue)', 'url(#eliteGreen)', 'url(#eliteOrange)', 'url(#eliteRed)', 'url(#elitePurple)', 'url(#eliteTeal)'];
 
@@ -15,6 +16,10 @@ export default function ReiaDashboard() {
   const [data, setData] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [showCapacityModal, setShowCapacityModal] = useState(false);
+  // The Reports tab is in the address (?tab=reports), so it can be bookmarked and sent.
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'reports' ? 'reports' : 'overview';
+  const pickTab = (t) => setParams(t === 'reports' ? { tab: 'reports' } : {}, { replace: true });
 
   useEffect(() => {
     api.dashboard.reia().then(setData).catch(() => {});
@@ -31,8 +36,8 @@ export default function ReiaDashboard() {
     }
   }
 
-  if (!data) return <div className="page-loading">Loading REIA dashboard...</div>;
-  const { kpis, byStatus, byProjectType, monthlyBilling, lps, pendingSplit, ageing, formIv, licence } = data;
+  if (!data && tab === 'overview') return <div className="page-loading">Loading REIA dashboard...</div>;
+  const { kpis, byStatus, byProjectType, monthlyBilling, lps, pendingSplit, ageing, formIv, licence } = data || {};
 
   return (
     <div>
@@ -51,6 +56,12 @@ export default function ReiaDashboard() {
         }
       />
 
+      <Tabs style={{ marginBottom: 20 }}>
+        <Tab active={tab === 'overview'} onClick={() => pickTab('overview')}>Overview</Tab>
+        <Tab active={tab === 'reports'} onClick={() => pickTab('reports')}>Reports</Tab>
+      </Tabs>
+
+      {tab === 'reports' ? <ReiaReportsTab /> : (<>
       <MacroEnergyGrid3D
         activeContractsCount={kpis.activeContracts}
         contractedCapacity={kpis.contractedCapacity}
@@ -266,6 +277,7 @@ export default function ReiaDashboard() {
           />
         </Modal>
       )}
+      </>)}
     </div>
   );
 }

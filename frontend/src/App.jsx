@@ -195,6 +195,7 @@ const SellerPayments = lazy(() => import('./pages/seller/SellerPayments.jsx'));
 const SellerDisputes = lazy(() => import('./pages/seller/SellerDisputes.jsx'));
 const SellerReconciliation = lazy(() => import('./pages/seller/SellerReconciliation.jsx'));
 const SellerPaymentSecurity = lazy(() => import('./pages/seller/SellerPaymentSecurity.jsx'));
+const SellerReports = lazy(() => import('./pages/seller/SellerReports.jsx'));
 
 const BuyerDashboard = lazy(() => import('./pages/buyer/BuyerDashboard.jsx'));
 const BuyerContracts = lazy(() => import('./pages/buyer/BuyerContracts.jsx'));
@@ -204,6 +205,7 @@ const BuyerPayments = lazy(() => import('./pages/buyer/BuyerPayments.jsx'));
 const BuyerDisputes = lazy(() => import('./pages/buyer/BuyerDisputes.jsx'));
 const BuyerReconciliation = lazy(() => import('./pages/buyer/BuyerReconciliation.jsx'));
 const BuyerPaymentSecurity = lazy(() => import('./pages/buyer/BuyerPaymentSecurity.jsx'));
+const BuyerReports = lazy(() => import('./pages/buyer/BuyerReports.jsx'));
 
 const AuditLogs = lazy(() => import('./pages/AuditLogs.jsx'));
 const MastersHub = lazy(() => import('./pages/masters/MastersHub.jsx'));
@@ -488,6 +490,7 @@ export default function App() {
         <Route path="seller/disputes" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="disputes"><SellerDisputes /></GuidedPage></ProtectedRoute>} />
         <Route path="seller/reconciliation" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="reconciliation"><SellerReconciliation /></GuidedPage></ProtectedRoute>} />
         <Route path="seller/payment-security" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="security"><SellerPaymentSecurity /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/reports" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="reports"><SellerReports /></GuidedPage></ProtectedRoute>} />
 
         {/* Buyer Portal */}
         <Route path="buyer" element={<ProtectedRoute roles={BUYER_ROLES}><GuidedPage guide="dashboard"><BuyerDashboard /></GuidedPage></ProtectedRoute>} />
@@ -500,6 +503,7 @@ export default function App() {
         <Route path="buyer/disputes" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="disputes"><BuyerDisputes /></GuidedPage></ProtectedRoute>} />
         <Route path="buyer/reconciliation" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="reconciliation"><BuyerReconciliation /></GuidedPage></ProtectedRoute>} />
         <Route path="buyer/payment-security" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="security"><BuyerPaymentSecurity /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/reports" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="reports"><BuyerReports /></GuidedPage></ProtectedRoute>} />
 
         <Route path="trading" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingDashboard /></ProtectedRoute>} />
         <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingClients /></ProtectedRoute>} />

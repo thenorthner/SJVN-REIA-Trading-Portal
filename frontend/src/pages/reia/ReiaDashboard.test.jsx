@@ -24,6 +24,9 @@ vi.mock('recharts', () => {
   };
 });
 
+// The Reports tab has its own tests; here it only has to be the tab that opens.
+vi.mock('./ReiaReportsTab.jsx', () => ({ default: () => <div data-testid="reports-tab">REPORTS TAB</div> }));
+
 const ReiaDashboard = (await import('./ReiaDashboard.jsx')).default;
 
 const PAYLOAD = {
@@ -118,6 +121,19 @@ describe('REIA dashboard — the CP-58-61 figures', () => {
     const cards = [...host.querySelectorAll('.stat-card')];
     const formIv = cards.find((c) => c.textContent.includes('CERC Form-IV'));
     expect(formIv.parentElement.getAttribute('style')).toBeNull();
+  });
+
+  it('has a Reports tab, reachable from the address, that replaces the overview', async () => {
+    await act(async () => { root.render(<MemoryRouter initialEntries={['/reia?tab=reports']}><ReiaDashboard /></MemoryRouter>); });
+    const tabs = [...host.querySelectorAll('[role="tab"]')];
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Reports']);
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+    expect(host.querySelector('[data-testid="reports-tab"]')).toBeTruthy();
+    expect(host.textContent).not.toMatch(/LPS Recovered/);
+
+    await act(async () => { tabs[0].click(); });
+    expect(host.querySelector('[data-testid="reports-tab"]')).toBeNull();
+    expect(host.textContent).toMatch(/LPS Recovered/);
   });
 
   it('still renders when a deployment answers without the new sections', async () => {

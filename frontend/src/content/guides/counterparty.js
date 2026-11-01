@@ -687,7 +687,65 @@ const reconciliation = (side) => {
   };
 };
 
-const BUILDERS = { dashboard, mail, notifications, team, documents, contracts, energy, invoices, payments, disputes, security, reconciliation };
+const reports = (side) => {
+  const w = words(side);
+  const billing = w.seller
+    ? [['My bills to SJVN (PPA)', 'Each bill you raised, with what SJVN has paid and what is still due.'],
+      ['Monthly billing to SJVN (PPA)', 'Your approved bills totalled by billing month: energy, amount, rebate, LPS, paid and balance.']]
+    : [['Bills from SJVN (PSA)', 'Each bill SJVN raised on you, with what has been paid and what is still due.'],
+      ['Monthly billing from SJVN (PSA)', 'SJVN\'s bills to you totalled by billing month: energy, amount, rebate, LPS, paid and balance.']];
+  return {
+    eyebrow: 'How this page works',
+    title: 'Reports',
+    summary: `Ready-made reports on ${w.you}'s business with SJVN — bills, payments, what is owed and how late, energy, ${w.contracts}, security and reconciliation — plus a builder for your own. Every report can be downloaded as CSV, Excel or PDF.`,
+    facts: [
+      { label: 'Reads', value: 'Your own records', hint: 'The same ones your other pages show' },
+      { label: 'Ready-made', value: 'One click each', hint: 'Grouped by subject' },
+      { label: 'Your own', value: 'Columns, filters, grouping', hint: 'Save it to run again' },
+      { label: 'Download', value: 'CSV, Excel, PDF', hint: 'Same rows and totals as the screen' },
+    ],
+    sections: [
+      { id: 'rp-ready', heading: 'The ready-made reports', blocks: [
+        { type: 'table', columns: ['Report', 'What it shows'], rows: [
+          ...billing,
+          [w.seller ? 'Payments received from SJVN' : 'Payments made to SJVN', 'Every payment recorded against the bills, with its date and reference.'],
+          [w.seller ? 'What SJVN owes you, by age' : 'What you owe SJVN, by age', 'Each bill not yet paid in full, by contract, split into Not yet due, 1–30, 31–60, 61–90 and Over 90 days past the due date.'],
+          ['LPS accrued and billed', 'Late payment surcharge on each bill: charged, received, and still accruing but not yet billed.'],
+          ['Rebates allowed and availed', 'The prompt-payment rebate on each bill.'],
+          ['Disputes register, Open disputes by reason', 'Your disputes with their amounts, SLA and outcome.'],
+          [w.seller ? 'Energy accounts (PPA)' : 'Energy supplied to you (PSA)', `Energy recorded on each of your ${w.contracts}, month by month.`],
+          [`My contracts (${w.contracts})`, 'Capacity, tariff and tenure of each contract.'],
+          ['Payment security and expiry', 'The security instruments on your contracts, nearest expiry first.'],
+          ['Reconciliation statements', 'Each statement with its exceptions and who has signed.'],
+        ] },
+        { type: 'p', text: 'Click View report to see one on screen. Customise opens it in the builder, so you can change its columns or filters.' },
+      ] },
+      { id: 'rp-build', heading: 'Building your own report', blocks: [
+        { type: 'steps', items: [
+          { title: 'Open Custom report and choose what to report on', detail: 'Bills, payments, outstanding and ageing, LPS, rebates, disputes, energy, contracts, security or reconciliation.' },
+          { title: 'Pick the columns', detail: 'Tick the columns you want. Usual columns puts back the standard set; the arrows change their order.' },
+          { title: 'Set the filters', detail: 'A date range on the date you choose (bill date, due date, payment date…), with ready periods such as This month or This financial year (April to March). Add more filters for status, contract, billing period, an amount range or a bill number.' },
+          { title: 'Group and sort', detail: 'Group by a column to get a subtotal for each group, or tick Subtotals only for one line per group. Sort by up to two columns.' },
+          { title: 'Run report', detail: 'If a filter does not make sense — a "from" date after the "to" date, say — a message tells you before anything runs.' },
+        ] },
+      ] },
+      { id: 'rp-files', heading: 'Downloads and saved reports', blocks: [
+        { type: 'p', text: 'Download CSV, Download Excel and Download PDF give you the report on screen with the same rows, subtotals and total. The top of each file says what the report was filtered on and when it was prepared.' },
+        { type: 'p', text: 'Save to my reports keeps a report you built — its columns, filters, grouping and order — under Saved reports, to run again later. Saved reports are yours alone; other users in your company do not see them.' },
+        { type: 'note', tone: 'info', title: 'Downloads are recorded', text: 'Each download is recorded in SJVN\'s audit trail with the report and the filters used, as every other action on the portal is.' },
+      ] },
+      { id: 'rp-faq', heading: 'Common questions', blocks: [
+        { type: 'faq', items: [
+          { q: 'Why is a bill, payment or contract missing?', a: 'Reports read the same records as your other pages, so an item appears here when it appears there. Check the filters too: a date range or status filter may leave it out.' },
+          { q: 'Does "what is owed" match my dashboard?', a: 'Yes. It is worked out as the dashboard\'s "Outstanding now" is, and only bills that are still open count as owed.' },
+          { q: 'Can I see other companies\' figures?', a: `No. Every report holds only the records ${w.you} is a party to.` },
+        ] },
+      ] },
+    ],
+  };
+};
+
+const BUILDERS = { dashboard, mail, notifications, team, documents, contracts, energy, invoices, payments, disputes, security, reconciliation, reports };
 
 /** The guide for one section of a counterparty's portal, or null if there is none. */
 export function counterpartyGuide(key, side) {

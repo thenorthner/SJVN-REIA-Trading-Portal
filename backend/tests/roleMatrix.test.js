@@ -47,6 +47,7 @@ const ADMIN_MAY_WRITE = [
   [/^\/api\/market-analytics\/alerts/, 'the user\'s own price alerts'],
   [/^\/api\/cerc-market\/(trigger|scan)$/, 'fetching CERC\'s published reports — a data feed, not a transaction'],
   [/\/(preview|estimate|ecr-preview|arrears\/preview|tcs\/preview|consolidate)$/, 'computes and returns figures; saves nothing'],
+  [/^\/api\/reports\/reia\/templates/, 'the user\'s own saved report layouts'],
 ];
 
 // Target #2 Phase B.2 (22-Oct-2026): on the REIA desk the maker prepares and
@@ -73,6 +74,9 @@ const MAKER_CHECKER_SHARED = {
   'DELETE /api/alerts/broadcasts/:id': 'desk-wide notices on the alert board',
   'POST /api/audit-logs/log-export': 'records that an export was taken',
   'POST /api/sandbox/age': 'test-environment clock, not a transaction',
+  'POST /api/reia-fi/:postingId/sap-check': 'reads back what SAP did with a push and records its answer; it decides nothing',
+  'POST /api/reports/reia/templates': 'the user\'s own saved report layout',
+  'DELETE /api/reports/reia/templates/:id': 'the user\'s own saved report layout',
 };
 
 const inventory = routeInventory();

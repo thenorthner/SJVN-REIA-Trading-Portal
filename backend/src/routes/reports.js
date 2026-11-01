@@ -30,9 +30,12 @@ import { verifyLogIntegrity, detectSoDViolations, secureLogAudit } from '../audi
 import { getParamNumber } from '../mastersService.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
+import reiaReportsRoutes from './reiaReports.js';
 
 const router = Router();
 router.use(requireAuth);
+// The REIA Reports tab: predefined reports and the custom report builder.
+router.use('/reia', reiaReportsRoutes);
 
 const REPORT_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
 // Power Trading reports additionally reach the trading desk — REPORT_READ is

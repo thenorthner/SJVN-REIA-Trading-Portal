@@ -4804,3 +4804,21 @@ CREATE TABLE IF NOT EXISTS custom_roles (
   retired_at TEXT,
   retired_reason TEXT
 );
+
+-- A report layout saved from the REIA Reports tab (services/reiaReports.js):
+-- the dataset, columns, filters, grouping and sort, as keys the server checks
+-- again on every run — never SQL. Its owner may share it with the desk; it is
+-- retired rather than deleted.
+CREATE TABLE IF NOT EXISTS report_templates (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  owner_name TEXT,
+  name TEXT NOT NULL,
+  dataset TEXT NOT NULL,
+  spec_json TEXT NOT NULL,
+  shared INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT,
+  retired_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_report_templates_owner ON report_templates (owner_id);

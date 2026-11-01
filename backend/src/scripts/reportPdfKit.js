@@ -46,6 +46,12 @@ export const stamp = (s) => {
 
 export const nowLabel = () => new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 
+// The page a document is drawing on. Portrait A4 gives PAGE_W / CONTENT_W, so
+// the portrait reports draw exactly as before; a landscape one gets its width.
+const pageW = (doc) => doc.page?.width || PAGE_W;
+const pageH = (doc) => doc.page?.height || PAGE_H;
+export const contentW = (doc) => pageW(doc) - M * 2;
+
 export function roundedRect(doc, x, y, w, h, r, fill) {
   doc.roundedRect(x, y, w, h, r);
   if (fill) doc.fillColor(fill).fill();
@@ -56,7 +62,8 @@ export function roundedRect(doc, x, y, w, h, r, fill) {
  * itself and the period it covers.
  */
 export function header(doc, { vertical, title, subtitle, generatedAt }) {
-  doc.rect(0, 0, PAGE_W, 66).fill(NAVY);
+  const CONTENT_W = contentW(doc);
+  doc.rect(0, 0, pageW(doc), 66).fill(NAVY);
   if (fs.existsSync(LOGO_PATH)) {
     try { doc.image(LOGO_PATH, M, 10, { height: 44, fit: [44, 44] }); } catch { /* logo optional */ }
   }
@@ -68,6 +75,7 @@ export function header(doc, { vertical, title, subtitle, generatedAt }) {
 }
 
 export function kpiBand(doc, y, items) {
+  const CONTENT_W = contentW(doc);
   const w = CONTENT_W / items.length;
   roundedRect(doc, M, y, CONTENT_W, 44, 4, NAVY_SOFT);
   items.forEach((k, i) => {
@@ -80,7 +88,7 @@ export function kpiBand(doc, y, items) {
 export function sectionTitle(doc, y, text, note) {
   doc.fillColor(INK).font('Helvetica-Bold').fontSize(10).text(text, M, y);
   if (note) {
-    doc.fillColor(MUTED).font('Helvetica').fontSize(7).text(note, M, y + 13, { width: CONTENT_W });
+    doc.fillColor(MUTED).font('Helvetica').fontSize(7).text(note, M, y + 13, { width: contentW(doc) });
     return y + 26;
   }
   return y + 16;
@@ -91,6 +99,8 @@ export function sectionTitle(doc, y, text, note) {
  * the band and the column heads.
  */
 export function table(doc, startY, cols, rows, ctx, opts = {}) {
+  const CONTENT_W = contentW(doc);
+  const PAGE_H = pageH(doc);
   const baseRowH = opts.rowH ?? 15;
   const fontSize = opts.fontSize ?? 7;
   let y = startY;
@@ -115,11 +125,22 @@ export function table(doc, startY, cols, rows, ctx, opts = {}) {
       const v = c.value(r);
       return v === null || v === undefined || v === '' ? '—' : String(v).replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ');
     });
-    
-    vals.forEach((textVal, i) => {
-       const h = doc.heightOfString(textVal, { width: cols[i].w - 8, align: cols[i].align || 'left' });
-       if (h + 8 > maxH) maxH = h + 8;
-    });
+    // A row may ask to stand out (a subtotal): a tinted band and bold figures.
+    // Measured in the font it is drawn in, so a bold row wraps as it is drawn.
+    const style = opts.rowStyle ? opts.rowStyle(r) || {} : {};
+    const rowFont = style.bold ? 'Helvetica-Bold' : 'Helvetica';
+    doc.font(rowFont).fontSize(fontSize);
+
+    // A heading row (style.span) is its first value written across the table.
+    if (style.span) {
+      const h = doc.heightOfString(vals[0], { width: CONTENT_W - 12 });
+      if (h + 8 > maxH) maxH = h + 8;
+    } else {
+      vals.forEach((textVal, i) => {
+        const h = doc.heightOfString(textVal, { width: cols[i].w - 8, align: cols[i].align || 'left' });
+        if (h + 8 > maxH) maxH = h + 8;
+      });
+    }
 
     if (y + maxH > PAGE_H - M - 14) {
       doc.addPage();
@@ -127,8 +148,12 @@ export function table(doc, startY, cols, rows, ctx, opts = {}) {
       y = 84; head();
       doc.font('Helvetica').fontSize(fontSize);
     }
+    if (style.fill) roundedRect(doc, M, y, CONTENT_W, maxH, 1, style.fill);
+    doc.font(rowFont).fontSize(fontSize);
     let x = M + 6;
-    vals.forEach((textVal, i) => {
+    if (style.span) {
+      doc.fillColor(INK).text(vals[0], x, y + 4, { width: CONTENT_W - 12, lineBreak: true });
+    } else vals.forEach((textVal, i) => {
       const c = cols[i];
       doc.fillColor(c.colour ? c.colour(r) : INK);
       doc.text(textVal, x, y + 4, {
@@ -147,7 +172,7 @@ export function notes(doc, y, lines) {
   doc.fillColor(MUTED).font('Helvetica').fontSize(7.5);
   let cur = y;
   for (const line of lines) {
-    doc.text(`•  ${line}`, M, cur, { width: CONTENT_W });
+    doc.text(`•  ${line}`, M, cur, { width: contentW(doc) });
     cur = doc.y + 3;
   }
   return cur;
@@ -155,7 +180,7 @@ export function notes(doc, y, lines) {
 
 /** Start a fresh page when the remaining space cannot hold a section. */
 export function ensureSpace(doc, y, needed, ctx) {
-  if (y > PAGE_H - M - needed) {
+  if (y > pageH(doc) - M - needed) {
     doc.addPage();
     header(doc, ctx);
     return 84;
@@ -191,13 +216,14 @@ export function eachPage(doc, draw) {
 export function pageNumbers(doc) {
   eachPage(doc, (i, count) => {
     doc.fillColor(MUTED).font('Helvetica').fontSize(7)
-      .text(`Page ${i + 1} of ${count}`, M, PAGE_H - M + 6, { width: CONTENT_W, align: 'right', lineBreak: false });
+      .text(`Page ${i + 1} of ${count}`, M, pageH(doc) - M + 6, { width: contentW(doc), align: 'right', lineBreak: false });
   });
 }
 
-export function newDoc(res, docTitle, filename) {
+export function newDoc(res, docTitle, filename, { layout = 'portrait' } = {}) {
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
+    layout,
     margins: { top: M, bottom: 20, left: M, right: M },
     bufferPages: true,
     font: 'Helvetica',

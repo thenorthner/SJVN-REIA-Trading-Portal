@@ -876,6 +876,40 @@ export const api = {
       a.remove();
       URL.revokeObjectURL(url);
     },
+    // The REIA Dashboard's Reports tab. A report is a spec of declared keys
+    // (dataset, columns, filters, grouping, sort) that the API checks against
+    // its own lists; nothing here is SQL.
+    reia: {
+      catalog: () => g('/reports/reia/catalog'),
+      facets: (dataset) => g('/reports/reia/facets', { dataset }),
+      run: (spec) => g('/reports/reia/run', { spec: JSON.stringify(spec) }),
+      templates: () => g('/reports/reia/templates'),
+      saveTemplate: (body) => p('/reports/reia/templates', body),
+      deleteTemplate: (id) => del(`/reports/reia/templates/${encodeURIComponent(id)}`),
+      // The same report as a CSV, Excel or PDF file, named by the API.
+      download: async (spec, format) => {
+        const fail = async (data) => {
+          let msg = 'The report could not be prepared';
+          try { msg = JSON.parse(await data.text()).error || msg; } catch { /* keep default */ }
+          return new Error(msg);
+        };
+        let res;
+        try {
+          res = await client.get('/reports/reia/run', { params: { spec: JSON.stringify(spec), format }, responseType: 'blob' });
+        } catch (err) {
+          throw err.response?.data instanceof Blob ? await fail(err.response.data) : err;
+        }
+        if (res.data?.type && res.data.type.includes('json')) throw await fail(res.data);
+        const cd = res.headers?.['content-disposition'] || '';
+        const name = cd.match(/filename="?([^";]+)"?/i)?.[1] || `SJVN_REIA_Report.${format}`;
+        const url = URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        return name;
+      },
+    },
   },
   disputes: {
     list: (params) => g('/disputes', params),

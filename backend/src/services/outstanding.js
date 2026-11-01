@@ -19,7 +19,7 @@ import { contractIdInVerticalSql } from './verticals.js';
 // cannot disagree.
 
 /** Charges outstanding on an invoice: what is payable, less what has been paid. */
-const OUTSTANDING_SQL = `
+export const OUTSTANDING_SQL = `
   (
     COALESCE(i.total_amount, 0)
     - COALESCE(i.rebate, 0)
@@ -51,6 +51,8 @@ export function supersededByDeveloperSql(alias = 'i') {
 // Optional desk cut: REIA's figures must not carry the Hydro or Thermal desks' bills.
 const scope = (vertical) => (vertical ? ` AND ${contractIdInVerticalSql(vertical, 'i.contract_id')}` : '');
 const OPEN = `i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${supersededByDeveloperSql('i')}`;
+// The same two rules for reports that list the bills these totals are made of.
+export const OPEN_INVOICE_SQL = OPEN;
 
 function sum(where, params = []) {
   return db.prepare(`SELECT COALESCE(SUM(${OUTSTANDING_SQL}), 0) s FROM invoices i WHERE ${where}`).get(...params).s;
