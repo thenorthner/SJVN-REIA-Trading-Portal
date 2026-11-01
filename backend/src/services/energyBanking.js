@@ -1,5 +1,6 @@
 import db from '../db/index.js';
 import { newId, genInvoiceNo, buildBillingFamilyRef, computeDueDate } from '../util.js';
+import { payerStateFor } from './workingCalendar.js';
 import { getParam, getParamNumber } from '../mastersService.js';
 import { resolveTariff } from './tariffStructure.js';
 import { allocationsInForce } from './allocations.js';
@@ -44,7 +45,7 @@ function raiseBankingBill({ contract, billingPeriod, mwh, amount, rate, lines, t
       billing_family_ref, created_by, created_by_id)
     VALUES (?, ?, ?, 'SUPPLEMENTARY', ?, ?, ?, ?, ?, ?, ?, 0, ?, 'DRAFT', ?, ?, ?)
   `).run(id, invoiceNo, contract.id, direction, billingPeriod, Math.round(mwh * 1000) / 1000, rate, amount, amount,
-    JSON.stringify(breakdown), computeDueDate(issued, contract), buildBillingFamilyRef(contract.contract_no, billingPeriod, direction),
+    JSON.stringify(breakdown), computeDueDate(issued, contract, undefined, payerStateFor(contract, direction)), buildBillingFamilyRef(contract.contract_no, billingPeriod, direction),
     createdBy?.name || 'Energy banking (system)', createdBy?.id || null);
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
   return { id, invoice_no: invoiceNo, total_amount: amount, contract_no: contract.contract_no };

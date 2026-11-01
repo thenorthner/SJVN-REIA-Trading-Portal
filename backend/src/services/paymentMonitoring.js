@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 import { contractIdInVerticalSql } from './verticals.js';
-import { invoiceLpsAsOf } from './invoiceLps.js';
+import { invoiceLpsAsOf, scheduledBaseRate } from './invoiceLps.js';
 import { getParamNumber } from '../mastersService.js';
 import { ageingBuckets, openPosition, supersededByDeveloperSql } from './outstanding.js';
 
@@ -72,7 +72,8 @@ function openBills(direction) {
 export function paymentMonitoring(side = 'RECEIVABLE') {
   const direction = DIRECTIONS[side] || DIRECTIONS.RECEIVABLE;
   const defaults = {
-    annualPct: getParamNumber('lps_annual_pct', 15),
+    // This financial year's base rate, where the masters keep a schedule.
+    annualPct: scheduledBaseRate(getParamNumber('lps_annual_pct', 15))?.(Date.now()) ?? getParamNumber('lps_annual_pct', 15),
     // The same defaults the surcharge engine uses (lpsTermsFor), so the screen
     // states the rule the figures were worked out on.
     monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),

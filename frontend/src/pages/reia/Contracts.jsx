@@ -1154,10 +1154,10 @@ export default function Contracts() {
             </div>
           </div>
           
-          <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Projects Mapped</h4>
+          <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Project SPVs</h4>
           {selected.projects?.length > 0 ? (
             <Table columns={[{key:'name', header:'Project SPV'}, {key:'capacity', header:'Allocated (MW)', render: r=>r.allocated_capacity_mw}]} rows={selected.projects} />
-          ) : <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No projects mapped.</div>}
+          ) : <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No project SPV is listed on this contract. The PPA ↔ PSA mapping is below.</div>}
 
           {(() => {
             const isPpa = selected.contract_type === 'PPA';
@@ -1182,6 +1182,11 @@ export default function Contracts() {
             const psaRoomFrom = isPpa ? null
               : [position.asOf, ...scheduled].sort().find((d) => routingPosition(selected, allocations, d).openMw > 0.005) || null;
             const canMapMore = canMap && (isPpa ? headroomPct > 0 : psaRoomFrom != null);
+            // A share starts when both contracts are in force, as the API assumes when
+            // no date is sent. Defaulting to today lost every month already supplied:
+            // a PPA and PSA from 1 September mapped in October left September unbilled.
+            const shareStart = (pick) => [selected.tenure_start, pick?.tenure_start, allocations.length ? psaRoomFrom : null].filter(Boolean).sort().pop()
+              || new Date().toISOString().slice(0, 10);
             const other = allocationForm ? sourceList.find((c) => c.id === allocationForm[otherKey]) : null;
             const ppaRec = isPpa ? selected : other;
             const psaRec = isPpa ? other : selected;
@@ -1224,7 +1229,10 @@ export default function Contracts() {
                     <h5 style={{ margin: '0 0 12px 0' }}>{isPpa ? 'Map a PSA to this PPA' : 'Map a source PPA to this PSA'}</h5>
                     <div className="form-grid">
                       <Field label={isPpa ? 'Select PSA' : 'Select PPA'} required>
-                        <select required value={allocationForm[otherKey] || ''} onChange={(e) => setAllocationForm({ ...allocationForm, [otherKey]: e.target.value })}>
+                        <select required value={allocationForm[otherKey] || ''} onChange={(e) => {
+                          const pick = sourceList.find((c) => c.id === e.target.value);
+                          setAllocationForm({ ...allocationForm, [otherKey]: e.target.value, effective_from: allocationForm.from_touched ? allocationForm.effective_from : shareStart(pick) });
+                        }}>
                           <option value="">{isPpa ? 'Select PSA...' : 'Select PPA...'}</option>
                           {candidates.map((c) => (
                             <option key={c.id} value={c.id}>{c.contract_no}{c.version > 1 ? ` v${c.version}` : ''} — {isPpa ? c.buyer_name : c.seller_name} · {c.project_type} · {fmtNumber(c.capacity_mw)} MW · ₹{c.tariff_per_unit}/unit · {c.status.replace(/_/g, ' ')}</option>
@@ -1235,7 +1243,7 @@ export default function Contracts() {
                         <input required type="number" step="0.01" min="0.01" max="100" value={allocationForm.allocation_percent} onChange={(e) => setAllocationForm({ ...allocationForm, allocation_percent: e.target.value })} />
                       </Field>
                       <Field label="Effective From" required>
-                        <input required type="date" value={allocationForm.effective_from} onChange={(e) => setAllocationForm({ ...allocationForm, effective_from: e.target.value })} />
+                        <input required type="date" value={allocationForm.effective_from} onChange={(e) => setAllocationForm({ ...allocationForm, effective_from: e.target.value, from_touched: true })} />
                       </Field>
                     </div>
                     <div style={{ fontSize: 15, margin: '8px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap', color: 'var(--slate-600)' }}>
@@ -1352,7 +1360,7 @@ export default function Contracts() {
                 })() : canMap && (
                   <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     {canMapMore && (
-                      <button className="btn btn-outline btn-sm" onClick={() => { const today = new Date().toISOString().split('T')[0]; setAllocationForm({ psa_id: '', ppa_id: '', allocation_percent: '', effective_from: psaRoomFrom && psaRoomFrom > today ? psaRoomFrom : today }); }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => setAllocationForm({ psa_id: '', ppa_id: '', allocation_percent: '', effective_from: shareStart(), from_touched: false })}>
                         {isPpa ? '+ Map PSA to this PPA' : '+ Map PPA to this PSA'}
                       </button>
                     )}

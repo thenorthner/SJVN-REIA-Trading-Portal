@@ -20,7 +20,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { noteFromException } from '../services/noteEngine.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
+import { contractVisibleTo } from '../services/counterpartyScope.js';
 import { newId, logAudit, pushNotification, nextSeriesNo, computeDueDate } from '../util.js';
 import { payableNow } from '../disputesConstants.js';
 import { notifyCounterparty } from '../paymentSecurityEngine.js';
@@ -55,7 +56,44 @@ const REASON_LABEL = {
   OTHER: 'Other',
 };
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
-const today = () => new Date().toISOString().slice(0, 10);
+// The desk's calendar day (IST): a note approved after midnight here was dated yesterday.
+const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+// A note adjusts a bill once it has been issued; before that the bill itself is corrected.
+const ADJUSTABLE = ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'DISPUTED'];
+// A YYYY-MM-DD that is a day on the calendar (31 February is not).
+const isRealDate = (d) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return false;
+  const t = new Date(`${d}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d;
+};
+
+/**
+ * Why a credit note may not take back the tax it carries, or null. CGST Act
+ * s.34: no more than the bill charged, less tax already credited on it; and
+ * not after 30 November following the end of the financial year of the
+ * supply — past that it can credit the value alone.
+ */
+function creditTaxRefusal(inv, tax, issuedOn, excludeId = null) {
+  if (!(tax > 0)) return null;
+  const already = db.prepare(`
+    SELECT COALESCE(SUM(tax_amount), 0) s FROM debit_credit_notes
+    WHERE invoice_id = ? AND note_type = 'CREDIT' AND status IN ('DRAFT','ISSUED','SETTLED') AND model = 'V2' AND id IS NOT ?
+  `).get(inv.id, excludeId).s;
+  const charged = Number(inv.taxes) || 0;
+  if (tax + already > charged + 0.005) {
+    return `${inv.invoice_no} charged tax of Rs.${charged.toLocaleString('en-IN')}${already ? ` and Rs.${already.toLocaleString('en-IN')} of it is already credited` : ''}: a credit note can take back at most Rs.${money(Math.max(0, charged - already)).toLocaleString('en-IN')} of tax.`;
+  }
+  const period = /^\d{4}-\d{2}$/.test(String(inv.billing_period || '')) ? inv.billing_period : null;
+  if (period) {
+    const [y, m] = period.split('-').map(Number);
+    const fyEnd = m >= 4 ? y + 1 : y;
+    const lastDay = `${fyEnd}-11-30`;
+    if (issuedOn > lastDay) {
+      return `${inv.invoice_no} is for ${period}, in FY ${fyEnd - 1}-${String(fyEnd % 100).padStart(2, '0')}; tax on that supply could be credited until 30 November ${fyEnd} (CGST Act s.34(2)). Raise the credit for the value alone, without tax.`;
+    }
+  }
+  return null;
+}
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
 /** April-start financial year of a date, as "2026-27". */
@@ -225,22 +263,52 @@ router.post('/', requireRole(...MAKE), (req, res) => {
   if (!inv) return res.status(404).json({ error: 'Linked invoice not found' });
   if (inv.status === 'CANCELLED') return res.status(400).json({ error: 'Cannot raise a note against a cancelled invoice' });
   if (inv.status === 'DRAFT') return res.status(400).json({ error: 'The invoice is still a draft — correct the draft instead of raising a note' });
+  // Only a bill already issued is adjusted by a note: one with the developer's
+  // checker, or SJVN's approval, or sent back, is corrected itself (1-Nov-2026).
+  if (!ADJUSTABLE.includes(inv.status)) {
+    return res.status(400).json({ error: `${inv.invoice_no} is ${inv.status.replace(/_/g, ' ').toLowerCase()} — not yet issued, so it is corrected itself rather than by a note` });
+  }
   const note_type = b.note_type === 'CREDIT' ? 'CREDIT' : b.note_type === 'DEBIT' ? 'DEBIT' : null;
   if (!note_type) return res.status(400).json({ error: 'note_type must be DEBIT or CREDIT' });
 
   // Taxable value plus the tax on it. `amount` alone is accepted as a
   // tax-free note, which is how the form sent it before.
-  const taxable = Math.abs(Number(b.taxable_amount ?? b.amount));
-  const tax = Math.abs(Number(b.tax_amount || 0));
-  if (!Number.isFinite(taxable) || taxable <= 0) return res.status(400).json({ error: 'A positive taxable amount is required' });
-  if (!Number.isFinite(tax)) return res.status(400).json({ error: 'tax_amount must be a number' });
+  // A negative figure is refused, not turned round (1-Nov-2026): -5,000 went
+  // out as a debit of 5,000. A credit is raised as a credit. So is a figure
+  // that rounds to nothing.
+  const rawTaxable = Number(b.taxable_amount ?? b.amount);
+  const rawTax = Number(b.tax_amount || 0);
+  if (!Number.isFinite(rawTaxable) || money(rawTaxable) <= 0) return res.status(400).json({ error: 'A positive taxable amount is required' });
+  if (!Number.isFinite(rawTax) || rawTax < 0) return res.status(400).json({ error: 'tax_amount must be zero or more' });
+  const taxable = money(rawTaxable);
+  const tax = money(rawTax);
   const amount = money(taxable + tax);
-  const reason_code = REASONS.includes(b.reason_code) ? b.reason_code : 'REVISED_REA';
+  // A reason the desk does not know is refused, not filed as a revised REA: a
+  // mistyped Change in Law went out as an REA revision (31-Oct-2026).
+  if (b.reason_code != null && b.reason_code !== '' && !REASONS.includes(b.reason_code)) {
+    return res.status(400).json({ error: `Unknown reason ${b.reason_code}; the reason is one of ${REASONS.join(', ')}` });
+  }
+  const reason_code = b.reason_code || 'REVISED_REA';
   if (!b.reason || String(b.reason).trim().length < 5) {
     return res.status(400).json({ error: 'Say what the note is for (at least a few words) — it is printed on the note' });
   }
 
+  // The same note twice — a double click, or two people on one figure — is
+  // refused while the first is live (1-Nov-2026).
+  const twin = db.prepare(`
+    SELECT note_no, status FROM debit_credit_notes
+    WHERE invoice_id = ? AND note_type = ? AND amount = ? AND reason = ? AND status IN ('DRAFT', 'ISSUED') AND model = 'V2'
+  `).get(inv.id, note_type, amount, String(b.reason).trim());
+  if (twin) {
+    return res.status(409).json({
+      error: `This note is already raised against ${inv.invoice_no}${twin.status === 'ISSUED' ? ` as ${twin.note_no}` : ', awaiting approval'} — same type, amount and reason.`,
+      existing_note_no: twin.note_no,
+    });
+  }
+
   if (note_type === 'CREDIT') {
+    const taxRefusal = creditTaxRefusal(inv, tax, today());
+    if (taxRefusal) return res.status(400).json({ error: taxRefusal });
     // Live credits on this bill, drafts included, cannot exceed what it billed.
     const live = db.prepare(`
       SELECT COALESCE(SUM(amount),0) s FROM debit_credit_notes
@@ -316,7 +384,20 @@ router.post('/:id/approve', requireRole(...CHECK), (req, res) => {
     if (!inv || inv.status === 'CANCELLED') throw httpError(400, 'The invoice this note refers to has been cancelled');
     const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(note.contract_id);
 
-    const issued = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.issued_date || '')) ? req.body.issued_date : today();
+    // A real date, not after today and not before the bill it adjusts was
+    // issued: 31 February was taken, and numbered (1-Nov-2026).
+    const asked = req.body?.issued_date;
+    const issued = asked == null || asked === '' ? today() : String(asked);
+    if (!isRealDate(issued)) throw httpError(400, `${issued} is not a date`);
+    if (issued > today()) throw httpError(400, `A note is issued on or before today (${today()}), not on ${issued}`);
+    // Against the day the bill went out, where that is recorded; a bill's row
+    // date is not its issue date (an imported or migrated bill's is the import).
+    const billOn = String(inv.issued_at || '').slice(0, 10);
+    if (billOn && issued < billOn) throw httpError(400, `${inv.invoice_no} was issued on ${billOn}; a note against it cannot be dated ${issued}`);
+    if (note.note_type === 'CREDIT') {
+      const taxRefusal = creditTaxRefusal(inv, Number(note.tax_amount) || 0, issued, note.id);
+      if (taxRefusal) throw httpError(400, taxRefusal);
+    }
     const prefix = note.note_type === 'DEBIT' ? 'DN' : 'CN';
     const fy = fyOf(issued);
     const noteNo = `${prefix}/${fy}/${String(nextSeriesNo(prefix, fy)).padStart(5, '0')}`;
@@ -422,6 +503,8 @@ router.post('/:id/cancel', requireRole(...CHECK), (req, res) => {
     if (!note) throw httpError(404, 'Note not found');
     if (['CANCELLED', 'REJECTED'].includes(note.status)) throw httpError(400, `Note is already ${note.status.toLowerCase()}`);
     const reason = String(req.body?.reason || '').trim() || null;
+    // An issued note has gone out; taking it back is recorded with why (1-Nov-2026).
+    if (note.status !== 'DRAFT' && !reason) throw httpError(400, 'Say why the note is cancelled — it was issued');
 
     db.transaction(() => {
       if (note.model === 'LEGACY') {
@@ -443,6 +526,10 @@ router.post('/:id/cancel', requireRole(...CHECK), (req, res) => {
       db.prepare("UPDATE debit_credit_notes SET status='CANCELLED', cancel_reason = ?, updated_at=datetime('now') WHERE id=?").run(reason, note.id);
     })();
     logAudit({ req, user: req.user, action: 'CANCEL_NOTE', module: 'REIA', entityType: 'debit_credit_note', entityId: note.id, details: { reason } });
+    // A credit that settled a dispute, taken back, unsettles it: the dispute
+    // goes back to review and its amount is held again, not demanded. It stayed
+    // resolved while the bill asked for the money (1-Nov-2026).
+    if (note.status !== 'DRAFT') onResolutionNoteDecided(note.id, 'CANCELLED', req.user, { reason });
     res.json(present(getNote(note.id)));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -450,9 +537,19 @@ router.post('/:id/cancel', requireRole(...CHECK), (req, res) => {
 });
 
 // ── The note as a document ───────────────────────────────────────────────────
-router.get('/:id/pdf', requireRole(...READ), (req, res) => {
+// The company a note was issued to may download it too (1-Nov-2026): it is
+// their document for GST, and they had only the notification of it.
+router.get('/:id/pdf', requireRole(...READ, ...SELLER_ROLES, ...BUYER_ROLES), (req, res) => {
   const n = present(getNote(req.params.id));
   if (!n) return res.status(404).json({ error: 'Note not found' });
+  const side = counterpartySide(req.user);
+  if (side) {
+    const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(n.contract_id);
+    const theirs = side === 'BUYER' ? n.direction === 'SJVN_TO_BUYER' : n.direction === 'SELLER_TO_SJVN';
+    if (!theirs || !contractVisibleTo(req.user, c) || !['ISSUED', 'CANCELLED'].includes(n.status)) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+  }
   if (n.status === 'DRAFT' || n.status === 'REJECTED') {
     return res.status(400).json({ error: 'Only an issued note has a document — this one is not issued' });
   }

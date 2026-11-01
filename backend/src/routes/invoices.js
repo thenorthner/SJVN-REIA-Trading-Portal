@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { contractIdInVerticalSql, parseVertical } from '../services/verticals.js';
 import { complianceBlock } from './invoiceCompliance.js';
 import { createIntimation } from './buyerBills.js';
-import { resolveTariff } from '../services/tariffStructure.js';
+import { familyIds, governingVersion, versionSegments, tariffForMonth } from '../services/contractVersions.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide, canonicalRole } from '../middleware/auth.js';
 import { deskVertical, verticalOfContract } from '../services/stationScope.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
-import { payableNow, lpsBaseAmount, tieredRebatePct, daysBetween } from '../disputesConstants.js';
+import { payableNow, lpsBaseAmount, tieredRebatePctOn } from '../disputesConstants.js';
+import { isSurchargeBill, isChangeInLawBill } from '../services/billReason.js';
 import { invoiceLpsAsOf, lpsTermsFor, invoiceBalance } from '../services/invoiceLps.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
@@ -288,7 +289,8 @@ function withContract(inv, asOf = new Date()) {
     accrued_lps: accrued.lps,
     days_overdue: accrued.days_overdue,
     days_past_due: daysPastDue,
-    lps_annual_pct: terms.annualPct,
+    // The base rate in force today where the masters keep a yearly schedule.
+    lps_annual_pct: terms.baseRateOn ? terms.baseRateOn(asOf) : terms.annualPct,
     lps_grace_days: terms.graceDays,
     raised_by_seller: raisedBySeller(inv),
     // A credit note raised when a dispute was upheld. The bill it answers has
@@ -795,8 +797,23 @@ function refuse(status, payload) {
 // of the pricing. Refusals throw with a status the caller turns into a response.
 function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_invoice_ids }, req) {
 
-  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
+  let contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) throw refuse(404, { error: 'Contract not found' });
+
+  // The month is billed on the version of the contract in force on its first
+  // day (services/contractVersions.js), whichever version was picked. Every
+  // version carries the same contract number, so the one picked was a guess:
+  // a month after a tariff revision was billed on the old rate through the old
+  // row, and the same month could be billed again through the new one. A
+  // revision taking effect later in the month is priced below, part by part.
+  const monthOk = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(period_month || ''));
+  const governing = monthOk ? governingVersion(contract, period_month) : null;
+  if (governing && governing.id !== contract.id) {
+    contract = governing;
+    contract_id = governing.id;
+  }
+  const family = familyIds(contract);
+  const inFamily = (alias = 'contract_id') => `${alias} IN (${family.map(() => '?').join(',')})`;
 
   // A contract is only billable once it is live. Billing one still in
   // negotiation or awaiting regulatory approval raises a demand the counterparty
@@ -907,8 +924,10 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   const multiSource = sources.length > 1;
   const alloc_percent = sources[0].allocation_percent;
 
-  const pickEnergy = db.prepare(`
-    SELECT * FROM energy_data WHERE contract_id = ? AND period_month = ?
+  // A plant's energy is the plant's, not a version's: a month recorded against
+  // the version it was entered under is read whichever version is billed.
+  const pickEnergy = { get: (ppaId, ...rest) => { const ids = familyIds(ppaId); return db.prepare(`
+    SELECT * FROM energy_data WHERE contract_id IN (${ids.map(() => '?').join(',')}) AND period_month = ?
     ORDER BY
       -- the locked figure is the month's figure; anything else is still open
       (status = 'LOCKED') DESC,
@@ -916,7 +935,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       (data_type = 'FINAL') DESC,
       created_at DESC, rowid DESC
     LIMIT 1
-  `);
+  `).get(...ids, ...rest); } };
   const supplies = sources.map((source) => ({
     source,
     energy: pickEnergy.get(source.ppa_id, period_month, invoice_type || 'PROVISIONAL'),
@@ -952,13 +971,15 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // month twice, each one a demand on the counterparty. A correction to a bill
   // that exists is a supplementary, which says so; a bill raised in error is
   // cancelled first, with its reason.
+  // Across every version of the contract: a month billed on one version is
+  // billed, and a revision reaching back over it is an arrear (POST /arrear).
   const twin = db.prepare(`
     SELECT i.invoice_no, i.status FROM invoices i
-    WHERE i.contract_id = ? AND i.billing_period = ? AND i.direction = ? AND i.invoice_type = ?
+    WHERE ${inFamily('i.contract_id')} AND i.billing_period = ? AND i.direction = ? AND i.invoice_type = ?
       AND i.status != 'CANCELLED' AND TRIM(COALESCE(i.invoice_breakdown_json, '')) != ''
       AND ${notFullyCreditedSql('i')}
     ORDER BY i.created_at DESC LIMIT 1
-  `).get(contract_id, period_month, directionForContract(contract), resolvedType);
+  `).get(...family, period_month, directionForContract(contract), resolvedType);
   if (twin) {
     throw refuse(409, {
       error: `${contract.contract_no} already has a ${resolvedType} bill for ${period_month} — ${twin.invoice_no} (${twin.status.replace(/_/g, ' ')}). Cancel that one first, or raise a Supplementary for a correction.`,
@@ -1023,7 +1044,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // SJVN — or settled at a discount if it lapses (services/energyBanking.js).
   // Billed here as well, it was paid for twice. A PSA leaves out its share of
   // what each source PPA banked; a PPA is its own source at 100 %.
-  const bankedOf = db.prepare('SELECT COALESCE(SUM(banked_mwh), 0) s FROM energy_banking WHERE contract_id = ? AND period_month = ?');
+  const bankedOf = { get: (ppaId, month) => { const ids = familyIds(ppaId); return db.prepare(`SELECT COALESCE(SUM(banked_mwh), 0) s FROM energy_banking WHERE contract_id IN (${ids.map(() => '?').join(',')}) AND period_month = ?`).get(...ids, month); } };
   const bankedOut = Math.round(supplies.reduce((t, s) => t + shareOf(bankedOf.get(s.source.ppa_id, period_month).s, s.source.allocation_percent), 0) * 1e6) / 1e6;
   const allocated_energy_mwh = Math.round((metered_energy_mwh - bankedOut) * 1e6) / 1e6;
   const allocated_units_kwh = allocated_energy_mwh * UNITS_PER_MWH;
@@ -1158,21 +1179,42 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     nrldcFees = Math.round(billableCapacityMw(contract) * nrldcPerMw);
     if (nrldcFees) breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
 
+    // A hydro bill is worked on one set of terms for the month; a revision dated
+    // inside it is not split here. The bill says so, and the part of the month
+    // it covers is settled by an arrear worked on the Hydro desk.
+    const later = versionSegments(contract, period_month).filter((x) => x.version && x.version.id !== contract.id);
+    if (later.length) {
+      breakdown.push({
+        code: 'NOTE',
+        label: `Version ${later[0].version.version} of ${contract.contract_no} applies from ${later[0].from}; this bill is on version ${contract.version} for the whole month — the difference from ${later[0].from} is settled by an arrear`,
+        value: 0,
+      });
+    }
+
   } else {
     // ──── Simple RE Billing (Solar/Wind/Hybrid) ────
     // The rate comes from the contract's tariff structure, so an escalating or
     // two-part contract is billed on its actual terms rather than its base rate.
-    const tariff = resolveTariff(contract, period_month);
-    appliedTariff = tariff.rate;
+    // Across the versions in force in the month: a revision dated inside it is
+    // priced on its own part of the month's energy, split by the energy each
+    // part delivered where the 15-minute data is in, else by days.
+    const tariff = tariffForMonth(contract, period_month, supplies.flatMap((s) => familyIds(s.source.ppa_id)));
+    const shownRate = Number(tariff.rate.toFixed(6));
+    appliedTariff = shownRate;
     breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
-    if (tariff.type !== 'FLAT') breakdown.push({ code: 'TS', label: tariff.label, value: tariff.rate, format: 'ecr' });
+    if (tariff.parts) {
+      for (const p of tariff.parts) breakdown.push({ code: 'TS', label: p.label, value: p.tariff.rate, format: 'ecr', version: p.version, from: p.from, to: p.to, share: p.share });
+      breakdown.push({ code: 'NOTE', label: tariff.label, value: 0 });
+    } else if (tariff.type !== 'FLAT') {
+      breakdown.push({ code: 'TS', label: tariff.label, value: tariff.rate, format: 'ecr' });
+    }
     if (isPsa && marginPerMwh > 0) {
       marginInsideTariff = true;
       const marginPerUnit = marginPerMwh / UNITS_PER_MWH;
       const passThrough = Math.round((tariff.rate - marginPerUnit) * 1e6) / 1e6;
       if (!(passThrough > 0)) {
         throw refuse(400, {
-          error: `${contract.contract_no}: the PSA tariff ₹${tariff.rate}/unit does not cover the trading margin of ₹${marginPerMwh}/MWh (₹${marginPerUnit}/unit). Correct the tariff or the margin on the contract.`,
+          error: `${contract.contract_no}: the PSA tariff ₹${shownRate}/unit does not cover the trading margin of ₹${marginPerMwh}/MWh (₹${marginPerUnit}/unit). Correct the tariff or the margin on the contract.`,
         });
       }
       // Energy at the pass-through rate; the margin goes on its own line below,
@@ -1180,14 +1222,14 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       energyCharges = Math.round(allocated_units_kwh * tariff.rate) - Math.round(allocated_energy_mwh * marginPerMwh);
       breakdown.push({
         code: 'EE1',
-        label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${passThrough}/unit — PSA tariff ₹${tariff.rate} less ₹${marginPerUnit} trading margin)`,
+        label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${passThrough}/unit — PSA tariff ₹${shownRate} less ₹${marginPerUnit} trading margin)`,
         value: energyCharges,
       });
       // The pass-through rate should be what the generator is paid. Where it is
       // not, the bill says so rather than quietly earning or losing the gap.
       const srcRates = supplies.map(({ source }) => {
         const ppa = db.prepare('SELECT * FROM contracts WHERE id = ?').get(source.ppa_id);
-        return ppa && ppa.id !== contract.id ? resolveTariff(ppa, period_month).rate : null;
+        return ppa && ppa.id !== contract.id ? tariffForMonth(ppa, period_month, familyIds(ppa.id)).rate : null;
       });
       if (srcRates.every((r) => r != null)) {
         const off = srcRates.map((r, i) => ({ r, no: supplies[i].source.ppa_contract_no })).filter(({ r }) => Math.abs(r - passThrough) > 0.0005);
@@ -1201,7 +1243,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       }
     } else {
       energyCharges = Math.round(allocated_units_kwh * tariff.rate);
-      breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${tariff.rate}/unit)`, value: energyCharges });
+      breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${shownRate}/unit)`, value: energyCharges });
     }
     // Deemed generation: energy the seller stood ready to deliver but the buyer
     // or grid could not take. It is paid for at the same rate, on its own line,
@@ -1212,12 +1254,12 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     if (deemedShareMwh > 0) {
       const deemedRate = isPsa && marginPerMwh > 0
         ? Math.round((tariff.rate - marginPerMwh / UNITS_PER_MWH) * 1e6) / 1e6
-        : tariff.rate;
+        : shownRate;
       deemedEnergyMwh = Number(deemedShareMwh.toFixed(3));
       deemedCharges = Math.round(deemedEnergyMwh * UNITS_PER_MWH * deemedRate);
       breakdown.push({
         code: 'DG',
-        label: `Deemed Generation (${deemedEnergyMwh} MWh × ₹${deemedRate}/unit${deemedRate !== tariff.rate ? ', pass-through, no trading margin' : ''}) — not delivered, payable under PPA`,
+        label: `Deemed Generation (${deemedEnergyMwh} MWh × ₹${deemedRate}/unit${deemedRate !== shownRate ? ', pass-through, no trading margin' : ''}) — not delivered, payable under PPA`,
         value: deemedCharges,
       });
     }
@@ -1299,12 +1341,13 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   let alreadyPaid = 0;
 
   if (resolvedType === 'FINAL') {
+    // On any version: a provisional raised before a revision is still what was paid.
     const provInvoices = db.prepare(`
       SELECT * FROM invoices
-      WHERE contract_id = ? AND billing_period = ? AND direction = ?
+      WHERE ${inFamily()} AND billing_period = ? AND direction = ?
         AND invoice_type = 'PROVISIONAL' AND status != 'CANCELLED'
       ORDER BY created_at ASC
-    `).all(contract_id, period_month, direction);
+    `).all(...family, period_month, direction);
 
     if (provInvoices.length) {
       parentInvoiceId = provInvoices[0].id;
@@ -1550,25 +1593,59 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
 
 router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const { contract_id, arrear_period, amount, taxes, reason } = req.body;
-  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
-  if (!contract) return res.status(404).json({ error: 'Contract not found' });
-  const amt = Number(amount);
+  const picked = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
+  if (!picked) return res.status(404).json({ error: 'Contract not found' });
   if (!arrear_period) return res.status(400).json({ error: 'arrear_period (YYYY-MM being recovered) is required' });
-  if (!Number.isFinite(amt) || amt === 0) return res.status(400).json({ error: 'A non-zero arrear amount is required' });
-  // An arrear recovers money; it took −100 and raised a negative bill. Money
-  // owed back to the counterparty is a credit note or a negative supplementary.
-  if (amt < 0) return res.status(400).json({ error: 'An arrear bill recovers an amount, so it cannot be negative. For money owed back, raise a credit note or a negative Supplementary.' });
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(arrear_period))) return res.status(400).json({ error: 'arrear_period must be YYYY-MM' });
   if (!reason || !reason.trim()) return res.status(400).json({ error: 'A reason for the arrear is required' });
+  const revision = String(req.body.basis || '').toUpperCase() === 'TARIFF_REVISION';
+
+  // A month the contract supplied in, and one that has come. An arrear for
+  // month 2026-03 on a contract that began in April was taken (1-Nov-2026), as
+  // the supplementary's was until 31-Oct.
+  const thisMonth = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+  if (arrear_period > thisMonth) {
+    return res.status(400).json({ error: `${arrear_period} has not come yet; an arrear recovers a month already supplied.` });
+  }
+  const contract = governingVersion(picked, arrear_period) || picked;
+  const began = String(contract.tenure_start || '').slice(0, 7);
+  const ended = String(contract.tenure_end || '').slice(0, 7);
+  if ((began && arrear_period < began) || (ended && arrear_period > ended)) {
+    return res.status(400).json({ error: `${arrear_period} is outside ${contract.contract_no}'s term (${began || '…'} to ${ended || '…'}).` });
+  }
 
   const taxAmt = Number(taxes) || 0;
   if (taxAmt < 0) return res.status(400).json({ error: 'Taxes on an arrear cannot be negative' });
+
+  let amt;
+  let line;
+  let billOn = picked;
+  let parentId = null;
+  if (revision) {
+    // Worked out, not typed: a tariff revision reaching back over a month
+    // already billed is recovered as energy billed × the rise in the rate now
+    // in force for that month (the split one, where it took effect inside it),
+    // less what earlier revision arrears for the month already recovered.
+    const worked = revisionArrear(contract, arrear_period);
+    if (worked.error) return res.status(400).json(worked);
+    ({ amt, line } = worked);
+    billOn = worked.billOn;
+    parentId = worked.bill.id;
+    line.label = `${line.label} — ${reason.trim()}`;
+  } else {
+    amt = Number(amount);
+    if (!Number.isFinite(amt) || amt === 0) return res.status(400).json({ error: 'A non-zero arrear amount is required' });
+    // An arrear recovers money; it took −100 and raised a negative bill. Money
+    // owed back to the counterparty is a credit note or a negative supplementary.
+    if (amt < 0) return res.status(400).json({ error: 'An arrear bill recovers an amount, so it cannot be negative. For money owed back, raise a credit note or a negative Supplementary.' });
+    line = { code: 'ARR', label: `Arrear recovery for ${arrear_period} — ${reason.trim()}`, value: Math.round(amt) };
+  }
   const total = Math.round(amt + taxAmt);
-  const direction = directionForContract(contract);
+  const direction = directionForContract(billOn);
 
   // The same arrear, to the rupee and the word, is a second click rather than a
   // second claim.
-  const sameArrear = db.prepare(`
+  const sameArrear = revision ? null : db.prepare(`
     SELECT invoice_no FROM invoices
     WHERE contract_id = ? AND billing_period = ? AND invoice_type = 'ARREAR' AND status != 'CANCELLED'
       AND total_amount = ? AND invoice_breakdown_json LIKE ? ESCAPE '\\'
@@ -1579,11 +1656,9 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
       existing_invoice_no: sameArrear.invoice_no,
     });
   }
-  const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, arrear_period, direction);
+  const billingFamilyRef = buildBillingFamilyRef(billOn.contract_no, arrear_period, direction);
   const id = newId('INV');
-  const breakdown = [
-    { code: 'ARR', label: `Arrear recovery for ${arrear_period} — ${reason.trim()}`, value: Math.round(amt) },
-  ];
+  const breakdown = [line];
   if (taxAmt) breakdown.push({ code: 'TAX', label: 'Taxes / GST on arrear', value: Math.round(taxAmt) });
   breakdown.push({ code: 'GROSS', label: 'Arrear Bill Total', value: total });
 
@@ -1597,27 +1672,110 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
       0, @energy_charges, 0, 0, 0, 0,
       0, 0, 0, 0, @taxes,
       0, @total_amount, @invoice_breakdown_json, 0, @due_date, 'DRAFT',
-      NULL, @billing_family_ref, NULL, @created_by, @created_by_id)
+      @parent_invoice_id, @billing_family_ref, NULL, @created_by, @created_by_id)
   `).run({
     id,
-    invoice_no: genInvoiceNo(contract.contract_type === 'PPA' ? 'ARR-PPA' : 'ARR-PSA'),
-    contract_id,
+    invoice_no: genInvoiceNo(billOn.contract_type === 'PPA' ? 'ARR-PPA' : 'ARR-PSA'),
+    contract_id: billOn.id,
     direction,
     billing_period: arrear_period,
     energy_charges: Math.round(amt),
     taxes: taxAmt,
     total_amount: total,
     invoice_breakdown_json: JSON.stringify(breakdown),
-    due_date: computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30)),
+    due_date: computeDueDate(new Date(), billOn, getParamNumber('default_payment_terms_days', 30)),
+    parent_invoice_id: parentId,
     billing_family_ref: billingFamilyRef,
     created_by: req.user.name,
     created_by_id: req.user?.id ?? null,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
-  logAudit({ req, user: req.user, action: 'GENERATE_ARREAR', module: 'REIA', entityType: 'invoice', entityId: id, details: { contract_id, arrear_period, amount: amt, taxes: taxAmt, reason } });
-  pushNotification({ role: 'REIA_MAKER', type: 'ARREAR_RAISED', message: `Arrear bill raised for ${contract.contract_no} (${arrear_period}): ₹${total.toLocaleString('en-IN')}` });
+  logAudit({ req, user: req.user, action: 'GENERATE_ARREAR', module: 'REIA', entityType: 'invoice', entityId: id, details: { contract_id: billOn.id, arrear_period, amount: amt, taxes: taxAmt, reason, basis: revision ? 'TARIFF_REVISION' : undefined } });
+  pushNotification({ role: 'REIA_MAKER', type: 'ARREAR_RAISED', message: `Arrear bill raised for ${billOn.contract_no} (${arrear_period}): ₹${total.toLocaleString('en-IN')}` });
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
+
+/**
+ * What a tariff revision adds to a month already billed (1-Nov-2026).
+ *
+ * The month's bill is its FINAL bill, presented. A month with only a provisional
+ * is not revised here: its final is priced on the rate in force when it is
+ * raised and nets what the provisional collected, so an arrear on the
+ * provisional would be recovered twice. The rate the month was last charged at
+ * is the rate_to of the latest revision arrear on it, else the bill's own; the
+ * rate now due is the month's rate across the versions in force today. Hydro
+ * bills (capacity and energy on CERC terms) are worked on the Hydro desk.
+ */
+function revisionArrear(contract, period) {
+  const family = familyIds(contract);
+  const ph = family.map(() => '?').join(',');
+  const direction = directionForContract(contract);
+  if (['Hydro', 'PSP'].includes(contract.project_type) && (contract.annual_afc || contract.capacity_charges_total || contract.annual_design_energy_mwh)) {
+    return { error: `${contract.contract_no} is billed on CERC hydro terms — a revision arrear on its capacity and energy charges is worked on the Hydro desk, or raised here with the amount.` };
+  }
+  const bills = db.prepare(`
+    SELECT * FROM invoices WHERE contract_id IN (${ph}) AND billing_period = ? AND direction = ?
+      AND invoice_type IN ('FINAL', 'PROVISIONAL') AND status IN ('APPROVED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'DISPUTED')
+    ORDER BY (invoice_type = 'FINAL') DESC, created_at DESC
+  `).all(...family, period, direction);
+  const bill = bills.find((b) => b.invoice_type === 'FINAL');
+  if (!bill) {
+    return {
+      error: bills.length
+        ? `${contract.contract_no} ${period} has only a provisional bill (${bills[0].invoice_no}). Its final bill will be priced on the revised rate and net what the provisional collected — raise the final instead of an arrear.`
+        : `There is no bill presented for ${contract.contract_no} ${period} to work a revision from. Generate and present the month's bill; it will be priced on the rate in force.`,
+    };
+  }
+  const energyIds = contract.contract_type === 'PSA'
+    ? [...new Set(sourcesForPsa(bill.contract_id, period).flatMap((s) => familyIds(s.ppa_id)))]
+    : family;
+  const due = tariffForMonth(contract, period, energyIds);
+  const earlier = db.prepare(`
+    SELECT invoice_no, invoice_breakdown_json FROM invoices WHERE contract_id IN (${ph}) AND billing_period = ?
+      AND invoice_type = 'ARREAR' AND status != 'CANCELLED' ORDER BY created_at DESC
+  `).all(...family, period)
+    .map((a) => ({ no: a.invoice_no, line: (() => { try { return JSON.parse(a.invoice_breakdown_json || '[]').find((l) => l.code === 'ARR' && l.basis === 'TARIFF_REVISION'); } catch { return null; } })() }))
+    .find((a) => a.line);
+  const rateFrom = earlier ? Number(earlier.line.rate_to) : Number(bill.tariff_per_unit) || 0;
+  const fixedFrom = earlier ? Number(earlier.line.fixed_to) || 0 : Number(bill.capacity_charges) || 0;
+  const rateTo = Number(due.rate.toFixed(6));
+  const mwh = (Number(bill.energy_mwh) || 0) + (Number(bill.deemed_energy_mwh) || 0);
+  const energyPart = Math.round(mwh * 1000 * (due.rate - rateFrom));
+  const fixedPart = Math.round((due.fixed_charge || 0) - fixedFrom);
+  const amt = energyPart + fixedPart;
+  if (Math.abs(amt) < 1) {
+    return {
+      error: `Nothing ${earlier ? 'left ' : ''}to recover on ${contract.contract_no} ${period}: ${earlier ? `${earlier.no} already brought it to` : `${bill.invoice_no} was billed at`} ₹${rateFrom}/unit, the rate in force for the month.`,
+    };
+  }
+  if (amt < 0) {
+    return {
+      error: `The revision lowers ${contract.contract_no} ${period} by ₹${Math.abs(amt).toLocaleString('en-IN')} — money owed back, so it is a credit note on ${bill.invoice_no}, not an arrear.`,
+      credit_due: Math.abs(amt),
+      suggested_note: {
+        note_type: 'CREDIT', invoice_id: bill.id, invoice_no: bill.invoice_no, amount: Math.abs(amt), reason_code: 'OTHER',
+        reason: `${period}: tariff revised from ₹${rateFrom} to ₹${rateTo}/unit on ${mwh} MWh — excess billed credited back`,
+      },
+    };
+  }
+  // The arrear is a demand under the revised agreement: the version in force at the month's end.
+  const segs = versionSegments(contract, period).filter((x) => x.version);
+  const billOn = segs[segs.length - 1]?.version || contract;
+  const parts = [];
+  if (energyPart) parts.push(`${mwh} MWh × (₹${rateTo} − ₹${rateFrom})/unit`);
+  if (fixedPart) parts.push(`fixed charge ₹${fixedFrom.toLocaleString('en-IN')} → ₹${(due.fixed_charge || 0).toLocaleString('en-IN')}`);
+  return {
+    amt,
+    bill,
+    billOn,
+    line: {
+      code: 'ARR', basis: 'TARIFF_REVISION', bill_invoice_no: bill.invoice_no, energy_mwh: mwh,
+      rate_from: rateFrom, rate_to: rateTo, fixed_from: fixedFrom, fixed_to: due.fixed_charge || 0,
+      label: `Tariff revision arrear for ${period} on ${bill.invoice_no}: ${parts.join(' + ')}${due.parts ? ` (${due.label})` : ''}`,
+      value: amt,
+    },
+  };
+}
 
 // Explicit supplementary-bill triggers per the REIA workflow (Supplementary
 // Billing): Change in Law / Revised REA / Transmission Charges / LPS. Legacy
@@ -1653,8 +1811,19 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) 
 
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
-  if (!billing_period || !/^\d{4}-\d{2}$/.test(billing_period)) {
+  if (!billing_period || !/^\d{4}-(0[1-9]|1[0-2])$/.test(billing_period)) {
     return res.status(400).json({ error: 'billing_period (YYYY-MM) is required' });
+  }
+  // A month the contract supplied in: month 13, one before it began or after it
+  // ended, and one not yet come were all taken (31-Oct-2026).
+  const thisMonth = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+  const began = String(contract.tenure_start || '').slice(0, 7);
+  const ended = String(contract.tenure_end || '').slice(0, 7);
+  if (billing_period > thisMonth) {
+    return res.status(400).json({ error: `${billing_period} has not come yet; a supplementary bill adjusts a month already supplied.` });
+  }
+  if ((began && billing_period < began) || (ended && billing_period > ended)) {
+    return res.status(400).json({ error: `${billing_period} is outside ${contract.contract_no}'s term (${began || '…'} to ${ended || '…'}).` });
   }
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt === 0) {
@@ -1669,6 +1838,23 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) 
   }
   if (code === 'OTHER' && String(reason).trim().length < 5) {
     return res.status(400).json({ error: 'Please provide a clearer reason for OTHER' });
+  }
+
+  // A Change in Law claim runs from the day the law took effect (Change in Law
+  // Rules 2021: the impact is worked from the date of the change). The claim
+  // named no date, so a month that ended before the notification could be
+  // claimed for, and nothing on the bill said which law-date it rested on
+  // (1-Nov-2026). The month claimed must be the one the law took effect in or later.
+  let lawFrom = null;
+  if (code === 'CHANGE_IN_LAW') {
+    lawFrom = String(req.body.law_effective_from ?? '').trim();
+    const d = new Date(`${lawFrom}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(lawFrom) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== lawFrom) {
+      return res.status(400).json({ error: 'Give the date the change in law took effect (law_effective_from, YYYY-MM-DD) — the claim runs from that day.' });
+    }
+    if (billing_period < lawFrom.slice(0, 7)) {
+      return res.status(400).json({ error: `${billing_period} ended before the law took effect on ${lawFrom} — a Change in Law claim starts from the month it took effect in.` });
+    }
   }
 
   let parentId = parent_invoice_id || null;
@@ -1710,7 +1896,7 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) 
   }[code] || 'Adjustment';
 
   const breakdown = [
-    { code: 'SUPP', label: `${reasonLabel} — ${String(reason).trim()}`, value: Math.round(amt) },
+    { code: 'SUPP', reason_code: code, ...(lawFrom ? { law_effective_from: lawFrom } : {}), label: `${reasonLabel}${lawFrom ? ` (law in force from ${lawFrom})` : ''} — ${String(reason).trim()}`, value: Math.round(amt) },
   ];
   if (txAmt) breakdown.push({ code: 'TX', label: 'Transmission / wheeling on adjustment', value: Math.round(txAmt) });
   if (taxAmt) breakdown.push({ code: 'TAX', label: 'Taxes / GST on adjustment', value: Math.round(taxAmt) });
@@ -2479,6 +2665,23 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_MAKE, ..
       error: `Cannot submit invoice in status ${inv.status}. Allowed: ${allowed.join(', ')}`,
     });
   }
+  // Once the developer has raised its own bill for the month, SJVN's computed
+  // bill is only the figure that bill is checked against. Release already
+  // refuses to pay it; approving it as well sent the wrong bill up the chain
+  // while the developer's waited.
+  if (inv.direction === 'SELLER_TO_SJVN' && !raisedBySeller(inv) && ['PROVISIONAL', 'FINAL'].includes(inv.invoice_type)) {
+    const own = db.prepare(`
+      SELECT invoice_no FROM invoices
+      WHERE contract_id = ? AND billing_period = ? AND id <> ? AND ${raisedBySellerSql('invoices')}
+        AND invoice_type IN ('PROVISIONAL', 'FINAL') AND status NOT IN ('CANCELLED', 'REJECTED')
+    `).get(inv.contract_id, inv.billing_period, inv.id);
+    if (own) {
+      return res.status(400).json({
+        error: `${own.invoice_no} is the developer's own bill for ${inv.billing_period}; submit that one for approval. ${inv.invoice_no} is SJVN's computed figure it was checked against, and stays as it is.`,
+        invoice_no: own.invoice_no,
+      });
+    }
+  }
   db.prepare(`UPDATE invoices SET status = 'UNDER_APPROVAL', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
 
   // The chain is sized here, every time, to what the bill is worth now.
@@ -2563,11 +2766,17 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_CHECK, 
   if (approval.status !== 'PENDING') {
     return res.status(400).json({ error: `Level ${approval.level} has already been ${approval.status.toLowerCase()}${approval.approver_name ? ` by ${approval.approver_name}` : ''}.` });
   }
-  // Each level is signed by the role it belongs to. Sending a bill back stays
-  // open to every reviewer on the route: stopping a bill needs no seniority.
-  if (decision === 'APPROVED' && !approvalRolesFor(approval.level, inv).includes(req.user.role)) {
+  // Each level is decided by the role it belongs to, both ways. Sending a bill
+  // back used to be open to every reviewer on the route, so the checker who had
+  // passed Level 1 could return it from Finance's desk. A file is decided by
+  // the officer it is pending with (decided 29-Oct-2026); whoever passed it on
+  // and has second thoughts asks that officer to send it back.
+  if (!approvalRolesFor(approval.level, inv).includes(req.user.role)) {
+    const who = rolesText(approvalRolesFor(approval.level, inv));
     return res.status(403).json({
-      error: `Level ${approval.level} of a bill this size is approved by ${rolesText(approvalRolesFor(approval.level, inv))}, not ${ROLE_LABEL[req.user.role] || req.user.role}.`,
+      error: decision === 'APPROVED'
+        ? `Level ${approval.level} of a bill this size is approved by ${who}, not ${ROLE_LABEL[req.user.role] || req.user.role}.`
+        : `Level ${approval.level} is with ${who}. Only they can send the bill back from it; tell them what is wrong.`,
       approver_roles: approvalRolesFor(approval.level, inv),
     });
   }
@@ -2579,7 +2788,7 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_CHECK, 
   // One person per level, where SJVN has switched that on. Several levels are
   // several people's judgement; one person clicking through all of them is one
   // approval recorded three times. Sending a bill back is open to anyone who
-  // may approve, including someone who signed an earlier level.
+  // may decide this level, including someone who signed an earlier one.
   // No role is exempt: an admin clicking through every level is still one
   // person's judgement recorded several times.
   if (decision === 'APPROVED' && distinctApprovers()) {
@@ -2935,6 +3144,10 @@ export function generatorRealization(devInvoiceId) {
  * so cash and rebate together never settle more than the bill.
  */
 export function rebateRateOn(inv, payDate) {
+  // Surcharge earns no rebate, and the bill's own terms give none on a
+  // change-in-law amount (note 5 on every bill): the month's LPS bill and a
+  // supplementary or debit note raised for either were earning 1.5% (31-Oct-2026).
+  if (isSurchargeBill(inv) || isChangeInLawBill(inv)) return 0;
   const rebateTerms = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
   const buyerRebate = inv.direction === 'SJVN_TO_BUYER' && Number(rebateTerms?.rebate_pct) > 0;
   if (inv.direction !== 'SELLER_TO_SJVN' && !buyerRebate) return 0;
@@ -2944,11 +3157,13 @@ export function rebateRateOn(inv, payDate) {
   // same basis error the dispute window had, and for the same reason: nothing
   // recorded presentation until issued_at existed.
   const billDate = billPresentedOn(inv);
-  let pct = contractRebatePct(rebateTerms, { billDate, dueDate: inv.due_date, payDate });
+  // Windows close on the payer's calendar, as the due date does.
+  const state = payerStateForInvoice(inv);
+  let pct = contractRebatePct(rebateTerms, { billDate, dueDate: inv.due_date, payDate, state });
   // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date. Seller bills only.
   if (pct === null && buyerRebate) pct = 0;
   if (pct === null) {
-    pct = tieredRebatePct(Math.max(0, daysBetween(new Date(billDate), payDate)), getParam('early_payment_rebate_tiers', null));
+    pct = tieredRebatePctOn(billDate, payDate, getParam('early_payment_rebate_tiers', null), state);
   }
   if (pct === null) {
     pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
@@ -3007,7 +3222,11 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
   // Effective payable = original total - rebate + lps - disputed (undisputed always due)
   const effectivePayable = payableNow({ ...inv, rebate: newRebate, lps: newLps }).payable_now;
   
-  const newStatus = totalPaid >= effectivePayable ? 'PAID' : 'PARTIALLY_PAID';
+  // A bill with a dispute open on it stays DISPUTED: paying what is not in
+  // dispute made it PAID, and when the dispute went SJVN's way the disputed
+  // part could no longer be collected (31-Oct-2026). When the dispute closes,
+  // what has been paid by then decides the status.
+  const newStatus = inv.status === 'DISPUTED' ? 'DISPUTED' : (totalPaid >= effectivePayable ? 'PAID' : 'PARTIALLY_PAID');
   
   db.prepare(`UPDATE invoices SET status = ?, rebate = ?, lps = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(newStatus, newRebate, newLps, inv.id);
@@ -3026,7 +3245,7 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
 // payment taken off principal — so a receipt the waterfall had applied to
 // surcharge left the surcharge figure where it was and the principal lower,
 // which is the opposite of what PSA Art. 6.3 and the screen both say.
-export function buyerOutstanding(buyerId, contractId = null) {
+export function buyerOutstanding(buyerId, contractId = null, asOf = new Date()) {
   const invs = db.prepare(`
     SELECT i.* FROM invoices i JOIN contracts c ON c.id = i.contract_id
     WHERE c.buyer_id = ? AND i.direction = 'SJVN_TO_BUYER'
@@ -3037,7 +3256,7 @@ export function buyerOutstanding(buyerId, contractId = null) {
   return invs.map((inv) => {
     const paid = paidTotalFor(inv.id);
     const lpsPaid = db.prepare('SELECT COALESCE(SUM(lps_component), 0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
-    const earned = Math.max(Number(inv.lps) || 0, invoiceLpsAsOf(inv, new Date()).lps || 0);
+    const earned = Math.max(Number(inv.lps) || 0, invoiceLpsAsOf(inv, asOf).lps || 0);
     const lps = Math.max(0, earned - lpsPaid);
     const principal = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - (paid - lpsPaid));
     return { inv, lps: Math.round(lps), principal: Math.round(principal) };
@@ -3058,11 +3277,14 @@ router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE), (req, res
   // Today as the desk's calendar has it (IST), so a receipt entered after
   // midnight here is not refused for being tomorrow in UTC.
   const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().split('T')[0];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate) || payDate > todayIst) {
-    return res.status(400).json({ error: 'The payment date must be a date not in the future' });
+  const asDate = /^\d{4}-\d{2}-\d{2}$/.test(payDate) ? new Date(`${payDate}T00:00:00Z`) : null;
+  if (!asDate || Number.isNaN(asDate.getTime()) || asDate.toISOString().slice(0, 10) !== payDate || payDate > todayIst) {
+    return res.status(400).json({ error: 'The payment date must be a real date not in the future' });
   }
 
-  const items = buyerOutstanding(buyer_id);
+  // Surcharge as it stood the day the money came: counted to today, a receipt
+  // entered late paid months of surcharge that had not yet run (31-Oct-2026).
+  const items = buyerOutstanding(buyer_id, null, asDate);
   if (!items.length) return res.status(400).json({ error: 'No outstanding bills for this buyer' });
 
   const toLps = new Map();

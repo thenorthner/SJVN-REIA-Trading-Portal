@@ -313,14 +313,14 @@ describe('E2E: adjusting a month that has already been billed', () => {
 
   it('recovers an under-billed past period through an arrear bill', async () => {
     const arrear = await post('/api/invoices/arrear', reia, {
-      contract_id: contract.id, arrear_period: '2026-02', amount: 450000, taxes: 0,
-      reason: 'Escalation missed in the February run',
+      contract_id: contract.id, arrear_period: '2026-05', amount: 450000, taxes: 0,
+      reason: 'Escalation missed in the May run',
     });
     expect(arrear.status, JSON.stringify(arrear.body)).toBe(201);
     expect(arrear.body.invoice_type).toBe('ARREAR');
 
     const noReason = await post('/api/invoices/arrear', reia,
-      { contract_id: contract.id, arrear_period: '2026-02', amount: 450000 });
+      { contract_id: contract.id, arrear_period: '2026-05', amount: 450000 });
     expect(noReason.status, 'an arrear was recovered without saying why').toBe(400);
   });
 

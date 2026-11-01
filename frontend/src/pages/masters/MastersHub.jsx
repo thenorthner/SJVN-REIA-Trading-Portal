@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
 import CircularsManager from '../admin/CircularsManager.jsx';
+import HolidayStateView, { INDIAN_STATES } from './HolidayStateView.jsx';
 import { showAlert, askConfirm } from '../../lib/dialogs.js';
 import { REIA_BETA } from '../../reiaBeta.js';
 
@@ -136,6 +137,8 @@ export default function MastersHub() {
   const [holidayStateFilter, setHolidayStateFilter] = useState('');
   const [holidayScopeFilter, setHolidayScopeFilter] = useState('');
   const [includeInactiveHolidays, setIncludeInactiveHolidays] = useState(false);
+  // State-wise calendar first: "which days is Punjab shut" is the usual question.
+  const [holidayView, setHolidayView] = useState('STATES');
   const [showAddHoliday, setShowAddHoliday] = useState(false);
   const [showBulkHoliday, setShowBulkHoliday] = useState(false);
   const [holidayForm, setHolidayForm] = useState(EMPTY_HOLIDAY);
@@ -355,14 +358,20 @@ export default function MastersHub() {
         showAlert('No valid rows found. Format: YYYY-MM-DD, Holiday Name, NATIONAL/STATE, State, Type');
         return;
       }
-      const res = await api.holidays.bulkAdd({ holidays: items });
-      showAlert(`Bulk Import Complete: ${res.inserted || items.length} holiday(s) saved.`);
+      // The API reads `rows`; sent as `holidays` every import came back "No rows supplied".
+      const res = await api.holidays.bulkAdd({ rows: items });
+      const skipped = Array.isArray(res.skipped) ? res.skipped : [];
+      showAlert(`Bulk Import Complete: ${res.added_count ?? 0} holiday(s) saved${skipped.length
+        ? `, ${skipped.length} skipped (${skipped.slice(0, 5).map((x) => `line ${x.line}: ${x.reason}`).join('; ')}${skipped.length > 5 ? '; …' : ''})` : ''}.`);
       setShowBulkHoliday(false);
       setBulkHolidayText('');
       loadHolidaysData();
       loadSummary();
     } catch (err) {
-      showAlert(err.response?.data?.error || 'Bulk import failed');
+      const skipped = err.response?.data?.skipped;
+      showAlert(err.response?.data?.error || (Array.isArray(skipped) && skipped.length
+        ? `Nothing imported: ${skipped.slice(0, 5).map((x) => `line ${x.line}: ${x.reason}`).join('; ')}${skipped.length > 5 ? '; …' : ''}`
+        : 'Bulk import failed'));
     }
   }
 
@@ -1170,7 +1179,7 @@ export default function MastersHub() {
                   Verify how state-specific public holidays and weekly offs affect payment deadlines & late-payment surcharge (LPS).
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <span className="badge" style={{ background: 'var(--t-blue-50)', color: 'var(--on-blue)', fontSize: 14.5 }}>
                   Weekly Offs: {holidaySettings?.weekly_off_names?.join(', ') || 'Saturday, Sunday'}
                 </span>
@@ -1227,9 +1236,9 @@ export default function MastersHub() {
                     </div>
                   </div>
                   <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 600 }}>Working Days Target</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 600 }}>Credit Terms</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green-strong)' }}>
-                      {simResult.terms_days} Working Days
+                      {simResult.terms_days} {simResult.mode === 'WORKING_DAYS' ? 'Working' : 'Calendar'} Days
                     </div>
                   </div>
                   <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16 }}>
@@ -1239,15 +1248,22 @@ export default function MastersHub() {
                     </div>
                   </div>
                   <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 600 }}>Non-Working Days Skipped</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 600 }}>
+                      {simResult.mode === 'WORKING_DAYS' ? 'Non-Working Days Skipped' : 'Days Added by Roll-Forward'}
+                    </div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--red-strong)' }}>
-                      {(simResult.calendar_days_taken || 0) - (simResult.terms_days || 0)} Days (Weekends + Holidays)
+                      {Math.max(0, (simResult.calendar_days_taken || 0) - (simResult.terms_days || 0))} Days
+                      {simResult.shifted_from ? ` (from ${simResult.shifted_from}: ${simResult.shifted_reason || 'closed day'})` : ''}
                     </div>
                   </div>
                   <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16, flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 600 }}>LPS Protection</div>
+                    <div style={{ fontSize: 14.5, color: 'var(--slate-500)', fontWeight: 600 }}>LPS &amp; Rebate</div>
                     <div style={{ fontSize: 15, color: 'var(--slate-700)' }}>
-                      Weekends & {simState ? `${simState} gazetted holidays` : 'gazetted holidays'} skipped from counting. Surcharge starts strictly after due date.
+                      {simResult.mode === 'WORKING_DAYS'
+                        ? `Weekends & ${simState ? `${simState} + national` : 'national'} holidays are not counted towards the term.`
+                        : `If day ${simResult.terms_days} is a weekly off or a ${simState ? `${simState} / national` : 'national'} holiday, the due date moves to the next working day.`}
+                      {' '}Surcharge starts the day after the due date and runs on {holidaySettings?.lps_day_count_mode === 'WORKING_DAYS' ? 'working days only' : 'every calendar day'}.
+                      {' '}A rebate window ending on a closed day is extended the same way.
                     </div>
                   </div>
                 </div>
@@ -1258,30 +1274,32 @@ export default function MastersHub() {
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>Step-by-Step Counting Progression ({simResult.daily_breakdown.length} days total):</span>
                       <span style={{ fontSize: 14.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>
-                        Working Day | Day 0 | Skipped (Sat/Sun/Holiday)
+                        {simResult.mode === 'WORKING_DAYS' ? 'Working day | Day 0 | Skipped (weekly off / holiday)' : 'Calendar day | Day 0 | Rolled past a closed last day'}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
                       {simResult.daily_breakdown.map((b) => {
-                        let bg = '#e2e8f0';
-                        let color = '#334155';
-                        let border = '1px solid #cbd5e1';
+                        let bg = 'var(--slate-100)';
+                        let color = 'var(--slate-700)';
+                        let border = '1px solid var(--slate-300)';
                         if (b.status === 'DAY_0') {
-                          bg = '#f1f5f9';
-                          color = '#475569';
-                          border = '1px solid #94a3b8';
+                          bg = 'var(--slate-50)';
+                          color = 'var(--slate-600)';
+                          border = '1px solid var(--slate-400)';
                         } else if (b.status === 'DUE_DATE') {
-                          bg = '#16a34a';
-                          color = '#ffffff';
-                          border = '1px solid #15803d';
+                          bg = 'var(--t-green-100)';
+                          color = 'var(--on-green)';
+                          border = '2px solid var(--green-strong)';
                         } else if (b.status === 'COUNTED') {
-                          bg = '#dcfce7';
-                          color = '#15803d';
-                          border = '1px solid #86efac';
-                        } else if (b.status === 'SKIPPED') {
-                          bg = '#fee2e2';
-                          color = '#b91c1c';
-                          border = '1px solid #fca5a5';
+                          // A closed day still counts in calendar mode; shown muted.
+                          const closed = b.type === 'WEEKEND' || b.type === 'HOLIDAY';
+                          bg = closed ? 'var(--slate-100)' : 'var(--t-green-50)';
+                          color = closed ? 'var(--slate-500)' : 'var(--on-green)';
+                          border = closed ? '1px dashed var(--slate-300)' : '1px solid var(--t-green-line)';
+                        } else if (b.status === 'SKIPPED' || b.status === 'ROLLED') {
+                          bg = 'var(--t-red-50)';
+                          color = 'var(--on-red)';
+                          border = '1px solid var(--t-red-line)';
                         }
                         return (
                           <div
@@ -1303,7 +1321,7 @@ export default function MastersHub() {
                           >
                             <span style={{ fontSize: 14, opacity: 0.85 }}>{b.date.slice(5)} ({b.day_name})</span>
                             <span style={{ fontSize: 14.5, fontWeight: 700 }}>
-                              {b.status === 'DAY_0' ? 'Day 0' : b.status === 'SKIPPED' ? ' Skip' : `Day ${b.day_number}`}
+                              {b.status === 'DAY_0' ? 'Day 0' : b.status === 'SKIPPED' ? 'Skip' : b.status === 'ROLLED' ? 'Rolled' : `Day ${b.day_number}`}
                             </span>
                           </div>
                         );
@@ -1315,16 +1333,27 @@ export default function MastersHub() {
             )}
           </div>
 
+          <div role="tablist" aria-label="Holiday calendar view" className="tabs" style={{ marginBottom: 12 }}>
+            <button type="button" role="tab" aria-selected={holidayView === 'STATES'} className={`tab-btn ${holidayView === 'STATES' ? 'active' : ''}`} onClick={() => { setHolidayView('STATES'); if (!holidayYear) setHolidayYear(String(new Date().getFullYear())); }}>
+              State-wise calendar
+            </button>
+            <button type="button" role="tab" aria-selected={holidayView === 'LIST'} className={`tab-btn ${holidayView === 'LIST' ? 'active' : ''}`} onClick={() => setHolidayView('LIST')}>
+              Holiday register
+            </button>
+          </div>
+
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16, background: 'var(--slate-100)', padding: '10px 14px', borderRadius: 6 }}>
             <div>
               <span style={{ fontSize: 15, fontWeight: 700, marginRight: 6 }}>Year:</span>
               <select value={holidayYear} onChange={(e) => setHolidayYear(e.target.value)} style={{ fontSize: 15, padding: '4px 8px' }}>
-                <option value="">All Years</option>
+                {/* A calendar is one year; "all years" only makes sense as a list. */}
+                {holidayView === 'LIST' && <option value="">All Years</option>}
                 <option value="2025">2025</option>
                 <option value="2026">2026</option>
                 <option value="2027">2027</option>
               </select>
             </div>
+            {holidayView === 'LIST' && (<>
             <div>
               <span style={{ fontSize: 15, fontWeight: 700, marginRight: 6 }}>Scope:</span>
               <select value={holidayScopeFilter} onChange={(e) => setHolidayScopeFilter(e.target.value)} style={{ fontSize: 15, padding: '4px 8px' }}>
@@ -1344,9 +1373,19 @@ export default function MastersHub() {
               <input type="checkbox" checked={includeInactiveHolidays} onChange={(e) => setIncludeInactiveHolidays(e.target.checked)} />
               Include Withdrawn / Inactive
             </label>
+            </>)}
           </div>
 
-          <Table
+          {holidayView === 'STATES' && (
+            <HolidayStateView
+              year={holidayYear || '2026'}
+              states={holidayStates}
+              weeklyOffs={holidaySettings?.weekly_off_days || [0, 6]}
+              refreshKey={holidays}
+            />
+          )}
+
+          {holidayView === 'LIST' && <Table
             columns={[
               { key: 'holiday_date', header: 'Date', render: (r) => <strong style={{ fontSize: 14.5 }}>{r.holiday_date}</strong> },
               { key: 'day', header: 'Day', render: (r) => <span style={{ color: 'var(--slate-500)', fontSize: 15 }}>{formatDayName(r.holiday_date)}</span> },
@@ -1374,7 +1413,7 @@ export default function MastersHub() {
             ]}
             rows={holidays}
             emptyMessage="No holidays configured for the selected criteria."
-          />
+          />}
         </Card>
       )}
 
@@ -1399,8 +1438,12 @@ export default function MastersHub() {
 
           <div className="form-grid">
             {holidayForm.scope === 'STATE' ? (
-              <Field label="State Name">
-                <input required placeholder="e.g. Himachal Pradesh / Punjab / Haryana" value={holidayForm.state} onChange={(e) => setHolidayForm({ ...holidayForm, state: e.target.value })} />
+              <Field label="State / UT">
+                {/* A fixed list: a state typed two ways would split its calendar in two. */}
+                <select required value={holidayForm.state} onChange={(e) => setHolidayForm({ ...holidayForm, state: e.target.value })}>
+                  <option value="">Select state / UT</option>
+                  {INDIAN_STATES.map((st) => <option key={st} value={st}>{st}</option>)}
+                </select>
               </Field>
             ) : (
               <Field label="Scope Note">

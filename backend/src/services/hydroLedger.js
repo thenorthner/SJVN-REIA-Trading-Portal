@@ -30,8 +30,12 @@ import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId } from '../util.js';
 import { getParamNumber, getParam } from '../mastersService.js';
-import { tieredRebatePct, daysBetween } from '../disputesConstants.js';
-import { resolvePaymentTermsDays, addDays, contractRebatePct } from '../util.js';
+import { tieredRebatePctOn, daysBetween } from '../disputesConstants.js';
+import { scheduledBaseRate } from './invoiceLps.js';
+import { resolvePaymentTermsDays, contractRebatePct } from '../util.js';
+import {
+  computeDueDateWorking, rollForwardToWorkingDay, isWorkingDay, lpsCountsWorkingDaysOnly, stateNamed,
+} from './workingCalendar.js';
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -112,10 +116,44 @@ export function insertDoc(row) {
  *
  * Taken from the contract's own payment terms rather than a constant, because
  * the terms are what the PPA actually says and they differ between stations.
+ * Counted on the working calendar like any other bill: a term ending on a
+ * Sunday or a holiday falls due on the next working day. This used to be bare
+ * calendar days, so a station bill could fall due on Diwali. Without a `state`
+ * only weekly offs and national holidays apply; each beneficiary's own state is
+ * applied when the bill is posted to its account (postBillToLedger).
  */
-export function dueDateFor(contract, billDate) {
+export function dueDateFor(contract, billDate, state = null) {
   const days = resolvePaymentTermsDays(contract, getParamNumber('default_payment_terms_days', 45));
-  return addDays(billDate, days);
+  return computeDueDateWorking(billDate, days, state).due_date;
+}
+
+/**
+ * Billing parties on a station bill that are not named after their state.
+ * The rest (PUNJAB, HARYANA, BIHAR (NBPDCL/SBPDCL)…) are read off the name.
+ */
+const BENEFICIARY_STATES = {
+  GOHP: 'Himachal Pradesh', HPSEB: 'Himachal Pradesh', HPSEBL: 'Himachal Pradesh',
+  'J & K': 'Jammu and Kashmir', MPPMCL: 'Madhya Pradesh',
+  TPDDL: 'Delhi', 'BSES RAJDHANI POWER': 'Delhi', 'BSES YAMUNA POWER': 'Delhi', NDMC: 'Delhi',
+  'AJMER VVNL': 'Rajasthan', 'JAIPUR VVNL': 'Rajasthan', 'JODHPUR VVNL': 'Rajasthan',
+};
+
+/**
+ * The state whose holidays a beneficiary pays on: the entity's own state if it
+ * has one, else the bill line's parent state (Delhi and Rajasthan discoms),
+ * else what its billing name says. null — national holidays only — for a party
+ * none of these places, such as a trader, rather than a guess.
+ */
+export function beneficiaryState({ beneficiary_name: name, beneficiary_id: id, bill_line_id: lineId, parent_state: parent } = {}) {
+  if (id) {
+    const own = db.prepare('SELECT state FROM entities WHERE id = ?').get(id)?.state;
+    if (own) return own;
+  }
+  const lineParent = parent || (lineId ? db.prepare('SELECT parent_state FROM hydro_bill_lines WHERE id = ?').get(lineId)?.parent_state : null);
+  if (lineParent) return stateNamed(lineParent) || lineParent;
+  const key = String(name || '').trim().toUpperCase();
+  if (BENEFICIARY_STATES[key]) return BENEFICIARY_STATES[key];
+  return stateNamed(key.replace(/\s*\(.*\)\s*$/, ''));
 }
 
 /** Energy bills: the monthly tariff bill and the documents that restate it. */
@@ -218,7 +256,9 @@ export function postBillToLedger(bill, { createdBy = null } = {}) {
           doc_no: genDocNo('PB', bill.billing_month),
           doc_type: 'PB',
           amount,
-          due_date: bill.due_date,
+          // The bill's date is on the national calendar; each beneficiary pays
+          // on its own state's, so a date that is a holiday there moves on.
+          due_date: bill.due_date ? rollForwardToWorkingDay(bill.due_date, beneficiaryState(line)) : bill.due_date,
           info: restates ? `${what} (difference over the month as already billed)` : what,
         }));
       } else if (amount < -EPSILON) {
@@ -290,8 +330,11 @@ const CERC_REBATE_TIERS = [{ within_days: 5, pct: 1.5 }, { within_days: 30, pct:
 
 export function rebateRateFor(pb, payDate, contract = null) {
   const c = contract || db.prepare('SELECT rebate_pct, rebate_days, rebate_basis, project_type FROM contracts WHERE id = ?').get(pb.contract_id);
-  const own = contractRebatePct(c, { billDate: pb.doc_date, dueDate: pb.due_date, payDate: new Date(payDate) });
-  const tiered = () => tieredRebatePct(Math.max(0, daysBetween(new Date(pb.doc_date), new Date(payDate))), getParam('early_payment_rebate_tiers', null));
+  // The 5 and 30 days close on the beneficiary's calendar: a window ending on
+  // its weekly off or state holiday runs on to its next working day.
+  const state = beneficiaryState(pb);
+  const own = contractRebatePct(c, { billDate: pb.doc_date, dueDate: pb.due_date, payDate, state });
+  const tiered = () => tieredRebatePctOn(pb.doc_date, payDate, getParam('early_payment_rebate_tiers', null), state);
   let pct = own;
   if (pct === null) {
     pct = tiered();
@@ -299,8 +342,7 @@ export function rebateRateFor(pb, payDate, contract = null) {
     // A station's tariff is CERC's, so the CERC tiers are the floor: a station
     // set up with the 1.5%/5-day term gave nothing on day 20, where the
     // regulations allow 1% within 30 days (Thermal QA run 6).
-    const days = Math.max(0, daysBetween(new Date(pb.doc_date), new Date(payDate)));
-    const cerc = tieredRebatePct(days, getParam('early_payment_rebate_tiers', null) || CERC_REBATE_TIERS);
+    const cerc = tieredRebatePctOn(pb.doc_date, payDate, getParam('early_payment_rebate_tiers', null) || CERC_REBATE_TIERS, state);
     pct = Math.max(pct, cerc || 0);
   }
   if (!(pct > 0)) return { pct: 0, rate: 0 };
@@ -587,7 +629,7 @@ const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
  * at base + cap. No surcharge at all if the bill was settled inside the grace
  * days.
  */
-export function lpsOnBill(pb, { annualPct, graceDays = 0, monthlyStepPct = 0, stepCapPct = 0, asOf = new Date() }) {
+export function lpsOnBill(pb, { annualPct, graceDays = 0, monthlyStepPct = 0, stepCapPct = 0, asOf = new Date(), baseRateOn = null }) {
   const none = { lps: 0, days_overdue: 0, effective_pct: annualPct, outstanding: outstandingOf(pb.id) };
   if (!pb.due_date) return none;
   const due = utcDay(pb.due_date);
@@ -602,16 +644,24 @@ export function lpsOnBill(pb, { annualPct, graceDays = 0, monthlyStepPct = 0, st
   // payment on day D covers day D itself, as the invoice engine counts it.
   const unpaidOn = (dayMs) => money(pb.amount - clearings.filter((c) => c.on < dayMs).reduce((a, c) => a + c.amount, 0));
 
+  // Every calendar day by default (LPS Rules 2022); with lps_day_count_mode set
+  // to WORKING_DAYS, only the beneficiary's working days — as the invoice
+  // engine counts them, so a station bill and a REIA bill agree.
+  const workingOnly = lpsCountsWorkingDaysOnly();
+  const state = workingOnly ? beneficiaryState(pb) : null;
+
   let lps = 0;
   let lastLate = 0;
   let pct = annualPct;
   for (let d = 1; due + d * DAY_MS <= end; d += 1) {
     const bal = unpaidOn(due + d * DAY_MS);
     if (bal <= EPSILON) break;
-    const month = Math.floor((d - 1) / 30);
-    pct = annualPct + Math.min((monthlyStepPct || 0) * month, stepCapPct || 0);
+    if (workingOnly && !isWorkingDay(new Date(due + d * DAY_MS), state)) continue;
+    lastLate += 1;
+    const month = Math.floor((lastLate - 1) / 30);
+    // The base rate of the day's financial year where the masters keep a schedule (LPS Rules 2022 r.2(1)(b)).
+    pct = (baseRateOn ? baseRateOn(due + d * DAY_MS) : annualPct) + Math.min((monthlyStepPct || 0) * month, stepCapPct || 0);
     lps += (bal * pct) / 100 / 365;
-    lastLate = d;
   }
   if (lastLate <= (graceDays || 0)) return { ...none, days_overdue: lastLate };
   return { lps: Math.round(lps), days_overdue: lastLate, effective_pct: pct, outstanding: outstandingOf(pb.id) };
@@ -624,15 +674,22 @@ export function lpsOnBill(pb, { annualPct, graceDays = 0, monthlyStepPct = 0, st
  * what the rules require: they run per bill, not per account. Bills already
  * paid off are included — a late payment earns surcharge even after it clears.
  */
-export function accruedLpsFor(contractId, beneficiaryName, { asOf = new Date() } = {}) {
-  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
-  const opts = {
-    annualPct: contract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
+/** A contract's surcharge terms, falling back to the masters, for lpsOnBill. */
+export function lpsOptionsFor(contractId, asOf = new Date()) {
+  const contract = db.prepare('SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(contractId);
+  const masterPct = getParamNumber('lps_annual_pct', 15);
+  return {
+    annualPct: contract?.lps_annual_pct ?? masterPct,
+    baseRateOn: contract?.lps_annual_pct != null ? null : scheduledBaseRate(masterPct),
     graceDays: contract?.lps_grace_days ?? 0,
     monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
     stepCapPct: getParamNumber('lps_step_cap_pct', 3),
     asOf,
   };
+}
+
+export function accruedLpsFor(contractId, beneficiaryName, { asOf = new Date() } = {}) {
+  const opts = lpsOptionsFor(contractId, asOf);
 
   // A debit note that bills surcharge is not itself surcharged: LPS is simple
   // interest on the amount in default, and it accrued on its own LPS debit

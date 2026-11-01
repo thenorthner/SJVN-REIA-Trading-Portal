@@ -1,5 +1,15 @@
 import React from 'react';
+import api from '../api/client.js';
 import { fmtCurrency } from './ui.jsx';
+
+// An issued note is the company's document too (GST): they download it here.
+async function downloadNote(n) {
+  const blob = await api.notes.downloadPdf(n.id);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${n.note_no.replace(/\//g, '-')}.pdf`; a.click();
+  URL.revokeObjectURL(url);
+}
 
 // D1: what disputes and notes do to a bill, in one figure Finance can read.
 export default function DisputeImpactPanel({ invoice }) {
@@ -25,7 +35,12 @@ export default function DisputeImpactPanel({ invoice }) {
       {(d.notes_pending.length > 0 || d.notes_issued.length > 0) && (
         <div style={{ fontSize: 15, marginTop: 6 }}>
           {d.notes_pending.map((n) => <div key={n.id}>{n.note_type === 'CREDIT' ? 'Credit' : 'Debit'} note (draft) {fmtCurrency(n.amount)} — {n.reason}</div>)}
-          {d.notes_issued.map((n) => <div key={n.id}>{n.note_no}: {n.note_type === 'CREDIT' ? 'credit' : 'debit'} {fmtCurrency(n.amount)}{n.note_type === 'CREDIT' ? `, ${fmtCurrency(n.applied)} applied` : ''}</div>)}
+          {d.notes_issued.map((n) => (
+            <div key={n.id}>
+              {n.note_no}: {n.note_type === 'CREDIT' ? 'credit' : 'debit'} {fmtCurrency(n.amount)}{n.note_type === 'CREDIT' ? `, ${fmtCurrency(n.applied)} applied` : ''}
+              {' '}<button type="button" className="btn btn-ghost btn-sm" onClick={() => downloadNote(n).catch(() => {})}>PDF</button>
+            </div>
+          ))}
         </div>
       )}
     </div>

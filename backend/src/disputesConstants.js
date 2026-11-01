@@ -1,4 +1,4 @@
-import { surchargeDays, isWorkingDay, lpsCountsWorkingDaysOnly } from './services/workingCalendar.js';
+import { surchargeDays, isWorkingDay, lpsCountsWorkingDaysOnly, paidWithinWindow } from './services/workingCalendar.js';
 import { nextSeriesNo } from './util.js';
 
 /** Dispute Management constants & helpers */
@@ -173,7 +173,7 @@ export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, g
  */
 export function accruedLpsTimeline(inv, {
   payments = [], notes = [], annualPct = 15, asOf = new Date(), graceDays = 0,
-  monthlyStepPct = 0, stepCapPct = 0, state = null,
+  monthlyStepPct = 0, stepCapPct = 0, state = null, baseRateOn = null,
 } = {}) {
   const empty = { days_overdue: 0, lps: 0, base: 0, annual_pct: annualPct, effective_pct: annualPct };
   if (!inv || !inv.due_date) return empty;
@@ -206,7 +206,9 @@ export function accruedLpsTimeline(inv, {
     if (workingOnly && !isWorkingDay(new Date(t), state)) continue;
     charged += 1;
     const step = Math.min((monthlyStepPct || 0) * Math.floor((charged - 1) / 30), stepCapPct || 0);
-    pct = annualPct + step;
+    // The base rate of the financial year the day falls in, where a schedule is
+    // kept (LPS Rules 2022 r.2(1)(b)); the step for months of default runs on.
+    pct = (baseRateOn ? baseRateOn(t) : annualPct) + step;
     lps += (base * pct) / 100 / 365;
   }
   if (charged <= (graceDays || 0)) return { ...empty, days_overdue: charged, base: lastBase };
@@ -224,6 +226,23 @@ export function tieredRebatePct(daysFromBill, tiers) {
     .sort((a, b) => Number(a.within_days) - Number(b.within_days));
   for (const t of sorted) {
     if (daysFromBill <= Number(t.within_days)) return Number(t.pct);
+  }
+  return 0;
+}
+
+/**
+ * The same tiers, measured by date on the payer's calendar: a tier's window
+ * that ends on the payer's weekly off or state holiday runs on to the next
+ * working day. tieredRebatePct counted bare days, so a bill presented on a
+ * Tuesday lost its 1.5% to a Monday payment because day 5 was a Sunday.
+ */
+export function tieredRebatePctOn(billDate, payDate, tiers, state = null) {
+  if (!Array.isArray(tiers) || tiers.length === 0) return null;
+  const sorted = tiers
+    .filter((t) => t && Number.isFinite(Number(t.within_days)) && Number.isFinite(Number(t.pct)))
+    .sort((a, b) => Number(a.within_days) - Number(b.within_days));
+  for (const t of sorted) {
+    if (paidWithinWindow(billDate, Number(t.within_days), payDate, state)) return Number(t.pct);
   }
   return 0;
 }

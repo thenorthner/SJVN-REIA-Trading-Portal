@@ -65,12 +65,35 @@ const PRESENTED = [...PAYABLE_STATUSES, 'PAID'];
 const errOf = (err, fallback) => err?.response?.data?.error || err?.message || fallback;
 
 const GEN_FORM = { contract_id: '', period_month: '', invoice_type: 'PROVISIONAL' };
-const ARREAR_FORM = { contract_id: '', arrear_period: '', amount: '', taxes: '', reason: '' };
+const ARREAR_FORM = { contract_id: '', arrear_period: '', basis: '', amount: '', taxes: '', reason: '' };
 const SUPP_FORM = {
   contract_id: '', billing_period: '', amount: '', taxes: '', transmission_charges: '',
-  reason_code: 'REVISED_REA', reason: '', parent_invoice_id: '',
+  reason_code: 'REVISED_REA', reason: '', parent_invoice_id: '', law_effective_from: '',
 };
+
+// The last day of a YYYY-MM month: a Change in Law claimed for the month took effect by then.
+const monthEnd = (ym) => (/^\d{4}-\d{2}$/.test(ym || '') ? new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).toISOString().slice(0, 10) : undefined);
+
+// Every version of an amended contract carries its number, so the pickers say
+// which is which. A month is billed on the version in force for it whichever
+// is picked; the label only stops two identical entries.
+function contractOption(c) {
+  const v = c.version > 1 ? ` v${c.version}` : '';
+  const state = c.status === 'AMENDED' ? ' — superseded' : c.status === 'PENDING_REGULATORY_APPROVAL' ? ' — awaiting approval' : '';
+  return `${c.contract_no}${v} (${c.project_type})${state}`;
+}
 const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', deduction: '', tds_amount: '', tds_section: '' };
+
+// The months a supplementary can adjust: within the contract's term and not
+// after this one. The server refuses the rest; the form stops them first.
+function suppMonthRange(contract) {
+  const thisMonth = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+  const ended = String(contract?.tenure_end || '').slice(0, 7);
+  return {
+    min: String(contract?.tenure_start || '').slice(0, 7) || undefined,
+    max: ended && ended < thisMonth ? ended : thisMonth,
+  };
+}
 
 export default function Invoices() {
   const { user } = useAuth();
@@ -372,9 +395,12 @@ export default function Invoices() {
     setArrearError('');
     setBusy('arrear');
     try {
+      const revision = arrearForm.basis === 'TARIFF_REVISION';
       const made = await api.invoices.arrear({
         ...arrearForm,
-        amount: Number(arrearForm.amount),
+        // Worked out by the server from the month's bill when it is a tariff revision.
+        amount: revision ? undefined : Number(arrearForm.amount),
+        basis: revision ? 'TARIFF_REVISION' : undefined,
         taxes: arrearForm.taxes ? Number(arrearForm.taxes) : 0,
       });
       setShowArrear(false);
@@ -784,7 +810,7 @@ export default function Invoices() {
           <Field label="Contract">
             <select required value={genForm.contract_id} onChange={(e) => setGenForm({ ...genForm, contract_id: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 15.5 }}>
               <option value="">Select contract...</option>
-              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+              {contracts.map((c) => <option key={c.id} value={c.id}>{contractOption(c)}</option>)}
             </select>
           </Field>
           
@@ -928,23 +954,33 @@ export default function Invoices() {
           <Field label="Contract">
             <select required value={arrearForm.contract_id} onChange={(e) => setArrearForm({ ...arrearForm, contract_id: e.target.value })}>
               <option value="">Select contract...</option>
-              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+              {contracts.map((c) => <option key={c.id} value={c.id}>{contractOption(c)}</option>)}
             </select>
           </Field>
           <div className="form-grid">
             <Field label="Arrear Period (recovering for)">
-              <input required type="month" value={arrearForm.arrear_period} onChange={(e) => setArrearForm({ ...arrearForm, arrear_period: e.target.value })} />
+              <input required type="month" value={arrearForm.arrear_period} {...suppMonthRange(contracts.find((c) => c.id === arrearForm.contract_id))} onChange={(e) => setArrearForm({ ...arrearForm, arrear_period: e.target.value })} />
             </Field>
+            <Field label="Amount">
+              <select value={arrearForm.basis} onChange={(e) => setArrearForm({ ...arrearForm, basis: e.target.value })}>
+                <option value="">Entered here</option>
+                <option value="TARIFF_REVISION">From a tariff revision</option>
+              </select>
+            </Field>
+          </div>
+          {arrearForm.basis === 'TARIFF_REVISION' ? (
+            <p className="inline-note">The amount is worked out from the month's final bill: its energy × the rise in rate now in force for the month (split by date where the revision took effect mid-month), less any revision arrear already raised for it. A revision downward is a credit note, not an arrear.</p>
+          ) : (
             <Field label="Arrear Amount (₹)">
               <input required type="number" step="0.01" min="0.01" value={arrearForm.amount} placeholder="e.g. 250000" onChange={(e) => setArrearForm({ ...arrearForm, amount: e.target.value })} />
             </Field>
-          </div>
+          )}
           <div className="form-grid">
             <Field label="Taxes / GST (₹)">
               <input type="number" step="0.01" min="0" value={arrearForm.taxes} placeholder="0" onChange={(e) => setArrearForm({ ...arrearForm, taxes: e.target.value })} />
             </Field>
             <Field label="Total">
-              <input disabled value={`₹${((Number(arrearForm.amount) || 0) + (Number(arrearForm.taxes) || 0)).toLocaleString('en-IN')}`} />
+              <input disabled value={arrearForm.basis === 'TARIFF_REVISION' ? 'Worked out when raised' : `₹${((Number(arrearForm.amount) || 0) + (Number(arrearForm.taxes) || 0)).toLocaleString('en-IN')}`} />
             </Field>
           </div>
           <Field label="Reason for arrear">
@@ -963,12 +999,12 @@ export default function Invoices() {
           <Field label="Contract">
             <select required value={suppForm.contract_id} onChange={(e) => setSuppForm({ ...suppForm, contract_id: e.target.value, parent_invoice_id: '' })}>
               <option value="">Select contract...</option>
-              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+              {contracts.map((c) => <option key={c.id} value={c.id}>{contractOption(c)}</option>)}
             </select>
           </Field>
           <div className="form-grid">
             <Field label="Billing Period">
-              <input required type="month" value={suppForm.billing_period} onChange={(e) => setSuppForm({ ...suppForm, billing_period: e.target.value })} />
+              <input required type="month" value={suppForm.billing_period} {...suppMonthRange(contracts.find((c) => c.id === suppForm.contract_id))} onChange={(e) => setSuppForm({ ...suppForm, billing_period: e.target.value })} />
             </Field>
             <Field label="Reason Category">
               <select required value={suppForm.reason_code} onChange={(e) => setSuppForm({ ...suppForm, reason_code: e.target.value })}>
@@ -981,6 +1017,12 @@ export default function Invoices() {
               </select>
             </Field>
           </div>
+          {suppForm.reason_code === 'CHANGE_IN_LAW' && (
+            <Field label="Law in force from">
+              <input required type="date" value={suppForm.law_effective_from} max={monthEnd(suppForm.billing_period)}
+                onChange={(e) => setSuppForm({ ...suppForm, law_effective_from: e.target.value })} />
+            </Field>
+          )}
           <div className="form-grid">
             <Field label="Adjustment Amount (₹)">
               <input required type="number" step="0.01" value={suppForm.amount} placeholder="positive debit / negative credit" onChange={(e) => setSuppForm({ ...suppForm, amount: e.target.value })} />
@@ -1179,8 +1221,9 @@ export default function Invoices() {
                     // Each level is signed by its own role (L2 Finance, L3 Management / SJVN Admin).
                     const myLevel = !a.approver_roles || actsAs(user, a.approver_roles);
                     const canApprove = canDecide && approvalsOpen && mySignedLevel == null && myLevel;
-                    // A seller's bill can be returned as soon as it arrives.
-                    const canReject = canDecide && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'));
+                    // A seller's bill can be returned as soon as it arrives. Only by
+                    // whoever decides this level: a file is decided where it is pending.
+                    const canReject = canDecide && myLevel && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'));
                     
                     const stageTitle = a.stage_title || (a.level === 1 ? 'Commercial Review & Verification' : a.level === 2 ? 'Finance Concurrence' : 'Final Administrative Sanction');
                     const postName = a.designation || (a.level === 1 ? 'Manager (Commercial & Billing)' : a.level === 2 ? 'DGM / Senior Manager (Finance)' : 'Head of Commercial / CGM');
@@ -1210,6 +1253,12 @@ export default function Invoices() {
                           </div>
                         )}
 
+                        {approvalsOpen && isNext && !myLevel && !isCancelled && (
+                          <div className="t-meta" style={{ marginTop: 6, fontSize: 15.5, color: 'var(--text-muted)' }}>
+                            Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''} · With them now. If something is wrong, ask them to send it back.
+                          </div>
+                        )}
+
                         {(canApprove || canReject) && (raisedByMe ? (
                           <div className="t-meta" style={{ marginTop: 8, fontSize: 15.5, color: 'var(--amber-strong)', background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
                             You raised this bill as Maker ({selected.created_by || 'You'}). Designated Approver for Level {a.level}: <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>].
@@ -1218,7 +1267,6 @@ export default function Invoices() {
                           <div style={{ marginTop: 10 }}>
                             <div style={{ fontSize: 15.5, color: 'var(--text-muted)', marginBottom: 8 }}>
                               Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''}
-                              {!myLevel && <div style={{ color: 'var(--amber-strong)', marginTop: 4 }}>This level is not yours to approve; you can still send the bill back.</div>}
                             </div>
                             <input
                               placeholder={canApprove ? 'Comments (optional for approve, needed to reject)' : 'Why it is being sent back'}

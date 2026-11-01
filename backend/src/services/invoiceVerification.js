@@ -273,6 +273,12 @@ export function acceptSubmission(template, body = {}) {
     if (NON_NEGATIVE.has(k) && v < 0) return { error: `${k.replace(/_/g, ' ')} cannot be negative` };
     commercial[k] = Math.round(v);
   }
+  // A bill with a change-in-law amount in its build-up carries a claim, and the
+  // claim is what this check verifies (31-Oct-2026).
+  const cil = technical.find((t) => t.key === 'CHANGE_IN_LAW_VERIFIED');
+  if (cil?.status === 'NA' && commercial.change_in_law) {
+    return { error: `${LABEL.CHANGE_IN_LAW_VERIFIED}: the build-up carries a change-in-law amount of ${rupees(commercial.change_in_law)}, so the check applies. Verify the claim, or record it as failed with the reason.` };
+  }
   return { checklist: { technical, commercial } };
 }
 

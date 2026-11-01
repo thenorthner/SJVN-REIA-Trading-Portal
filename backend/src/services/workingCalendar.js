@@ -37,15 +37,28 @@ export function isWeekend(date) {
   return weeklyOffDays().includes(d.getUTCDay());
 }
 
-/** 'CALENDAR_ROLL_FORWARD' | 'WORKING_DAYS' */
+/**
+ * 'CALENDAR_ROLL_FORWARD' | 'WORKING_DAYS'
+ *
+ * Without the parameter, calendar days rolled forward: the LPS Rules 2022 put
+ * the due date at the agreement's term or 45 days from presentation, and the
+ * PPA/PSA "Business Day" clause (General Clauses Act s.10) moves only a last
+ * day that falls on a closed day. The fallback used to be WORKING_DAYS, three
+ * weeks later on 45-day terms than the seeded master says.
+ */
 export function dueDateMode() {
-  const v = String(getParam('due_date_counting_mode', 'WORKING_DAYS')).toUpperCase();
-  return v === 'CALENDAR_ROLL_FORWARD' ? 'CALENDAR_ROLL_FORWARD' : 'WORKING_DAYS';
+  const v = String(getParam('due_date_counting_mode', 'CALENDAR_ROLL_FORWARD')).toUpperCase();
+  return v === 'WORKING_DAYS' ? 'WORKING_DAYS' : 'CALENDAR_ROLL_FORWARD';
 }
 
-/** Whether surcharge skips the payer's non-working days. */
+/**
+ * Whether surcharge skips the payer's non-working days.
+ *
+ * Off without the parameter: surcharge is for every day the money is late
+ * (LPS Rules 2022 r.3), and the seeded master says CALENDAR.
+ */
 export function lpsCountsWorkingDaysOnly() {
-  return String(getParam('lps_day_count_mode', 'WORKING_DAYS')).toUpperCase() === 'WORKING_DAYS';
+  return String(getParam('lps_day_count_mode', 'CALENDAR')).toUpperCase() === 'WORKING_DAYS';
 }
 
 const iso = (d) => d.toISOString().slice(0, 10);
@@ -65,7 +78,12 @@ const parse = (d) => {
 };
 
 /**
- * Active holidays that apply to a state, as a Set of ISO dates.
+ * Active holidays that close a state's offices, as a Set of ISO dates.
+ *
+ * A restricted (optional) holiday is left out: an employee may take it, but
+ * the office and its bank stay open, so no payment period ends early or late
+ * for one. The state is matched without regard to case, because entity and
+ * holiday rows are typed by different people.
  *
  * Cached per state for the life of the process. Adding a holiday through the
  * masters screen clears it, so a newly entered date takes effect without a
@@ -78,16 +96,16 @@ export function clearHolidayCache() {
 }
 
 export function holidaySet(state) {
-  const key = state || '__national__';
+  const key = state ? String(state).trim().toLowerCase() : '__national__';
   if (holidayCache.has(key)) return holidayCache.get(key);
 
   let rows = [];
   try {
     rows = db.prepare(`
       SELECT holiday_date FROM holidays
-      WHERE is_active = 1
-        AND (scope = 'NATIONAL' OR (scope = 'STATE' AND state = ?))
-    `).all(state || null);
+      WHERE is_active = 1 AND holiday_type <> 'RESTRICTED'
+        AND (scope = 'NATIONAL' OR (scope = 'STATE' AND state = ? COLLATE NOCASE))
+    `).all(state ? String(state).trim() : null);
   } catch {
     // Table not migrated yet — treat as no holidays rather than failing a bill.
     rows = [];
@@ -113,10 +131,10 @@ export function nonWorkingReason(date, state) {
   }
   const row = db.prepare(`
     SELECT name, scope, state FROM holidays
-    WHERE is_active = 1 AND holiday_date = ?
-      AND (scope = 'NATIONAL' OR (scope = 'STATE' AND state = ?))
+    WHERE is_active = 1 AND holiday_type <> 'RESTRICTED' AND holiday_date = ?
+      AND (scope = 'NATIONAL' OR (scope = 'STATE' AND state = ? COLLATE NOCASE))
     ORDER BY scope DESC LIMIT 1
-  `).get(iso(d), state || null);
+  `).get(iso(d), state ? String(state).trim() : null);
   return row ? `${row.name}${row.scope === 'STATE' ? ` (${row.state})` : ''}` : null;
 }
 
@@ -188,20 +206,84 @@ export function computeDueDateWorking(billDate, termsDays, state) {
   };
 }
 
+/** The 28 states and 8 union territories, as holiday rows name them. */
+export const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
+  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
+  'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
+  'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+  'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+const STATE_ALIASES = {
+  'J&K': 'Jammu and Kashmir', 'J & K': 'Jammu and Kashmir', 'NCT OF DELHI': 'Delhi', 'NEW DELHI': 'Delhi',
+  ORISSA: 'Odisha', UTTARANCHAL: 'Uttarakhand', PONDICHERRY: 'Puducherry',
+};
+
+/** A state as written anywhere ("PUNJAB", "j&k") to its holiday-row name, or null. */
+export function stateNamed(text) {
+  const t = String(text || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  if (!t) return null;
+  return STATE_ALIASES[t] || INDIAN_STATES.find((s) => s.toUpperCase() === t) || null;
+}
+
 /**
- * The state whose calendar governs an invoice — the payer's.
+ * SJVN's own calendar, for the bills SJVN pays: the state of its registered
+ * office (Shimla), which is where its bank pays from. A master parameter, so a
+ * desk paying from another office can change it.
+ */
+export function sjvnState() {
+  return String(getParam('sjvn_payer_state', 'Himachal Pradesh') || '').trim() || null;
+}
+
+/**
+ * The state whose calendar governs a bill on `contract` — the payer's.
  *
  * SJVN bills a buyer, so the buyer's state applies; a seller bills SJVN, so
- * SJVN's own state does. Falls back to null (national holidays only) when the
- * state was never captured, which is honest: no state calendar is assumed.
+ * SJVN's own state does. This used to take the seller's state for a seller's
+ * bill: the party being paid, not the one paying. Without a direction the
+ * contract says it — a PSA is SJVN selling, anything else SJVN buying.
+ *
+ * Falls back to null (national holidays only) when a buyer's state was never
+ * captured, which is honest: no state calendar is assumed.
  */
+export function payerStateFor(contract, direction = null) {
+  if (!contract) return null;
+  const dir = direction || (contract.contract_type === 'PSA' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN');
+  if (dir !== 'SJVN_TO_BUYER') return sjvnState();
+  let buyerId = contract.buyer_id;
+  if (buyerId === undefined && contract.id) {
+    buyerId = db.prepare('SELECT buyer_id FROM contracts WHERE id = ?').get(contract.id)?.buyer_id;
+  }
+  if (!buyerId) return null;
+  return db.prepare('SELECT state FROM entities WHERE id = ?').get(buyerId)?.state || null;
+}
+
+/** The payer's state for an invoice — see payerStateFor. */
 export function payerStateForInvoice(invoice) {
   if (!invoice?.contract_id) return null;
-  const contract = db.prepare('SELECT buyer_id, seller_id FROM contracts WHERE id = ?').get(invoice.contract_id);
+  const contract = db.prepare('SELECT id, buyer_id, seller_id, contract_type FROM contracts WHERE id = ?').get(invoice.contract_id);
   if (!contract) return null;
-  const payerId = invoice.direction === 'SJVN_TO_BUYER' ? contract.buyer_id : contract.seller_id;
-  if (!payerId) return null;
-  return db.prepare('SELECT state FROM entities WHERE id = ?').get(payerId)?.state || null;
+  return payerStateFor(contract, invoice.direction || null);
+}
+
+/**
+ * Last day of a window of `days` from `from` (a rebate window), on the payer's
+ * calendar: counted in calendar days as CERC's tariff regulations and the PSAs
+ * write it ("within 5 days of presentation"), and moved to the next working
+ * day if it ends on a closed one — the same rule as the due date, so a buyer
+ * whose fifth day is a Sunday or its state's holiday can still earn the rebate
+ * the next morning.
+ */
+export function windowEnd(from, days, state) {
+  const n = Math.max(0, Math.floor(Number(days) || 0));
+  return rollForwardToWorkingDay(iso(new Date(parse(from).getTime() + n * 86400000)), state);
+}
+
+/** Whether a payment on `payDate` falls inside that window. */
+export function paidWithinWindow(from, days, payDate, state) {
+  if (!from || !payDate) return false;
+  return iso(parse(payDate)) <= windowEnd(from, days, state);
 }
 
 /** Days that count towards surcharge between the due date and `asOf`. */
@@ -227,6 +309,11 @@ export default {
   addWorkingDays,
   workingDaysBetween,
   computeDueDateWorking,
+  stateNamed,
+  sjvnState,
+  payerStateFor,
   payerStateForInvoice,
+  windowEnd,
+  paidWithinWindow,
   surchargeDays,
 };

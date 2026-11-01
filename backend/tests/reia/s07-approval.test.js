@@ -318,15 +318,21 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
     const r = await act(inv, 2, makeUser('REIA_ADMIN', { name: 'RA' }));
     expect(r.status, 'REIA signed Finance concurrence').toBe(403);
     expect(r.body.error).toMatch(/Level 2 of a bill this size is approved by Finance/);
-    expect((await act(inv, 2, ops, 'REJECTED')).status, 'any reviewer may send a bill back').toBe(200);
+    // Sending it back is the decision of the level it is pending with (29-Oct-2026).
+    const back = await act(inv, 2, ops, 'REJECTED');
+    expect(back.status, 'the checker sent it back from Finance\'s level').toBe(403);
+    expect(back.body.error).toMatch(/Level 2 is with Finance\. Only they can send the bill back/);
+    expect((await act(inv, 2, fin, 'REJECTED')).status).toBe(200);
   });
 
-  it('still lets someone who signed an earlier level send the bill back', async () => {
+  it('has the officer it is pending with send it back, not whoever signed an earlier level', async () => {
     set(1);
     const a = makeUser('REIA_CHECKER', { name: 'Approver A2' });
     const inv = threeLevels();
     await act(inv, 1, a);
-    expect((await act(inv, 2, a, 'REJECTED')).status).toBe(200);
+    expect((await act(inv, 2, a, 'REJECTED')).status).toBe(403);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).not.toBe('REJECTED');
+    expect((await act(inv, 2, makeUser('FINANCE_USER', { name: 'Fin A2' }), 'REJECTED')).status).toBe(200);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('REJECTED');
   });
 
@@ -335,7 +341,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
     const a = makeUser('REIA_CHECKER', { name: 'Approver A3' });
     const inv = threeLevels();
     await act(inv, 1, a);
-    await act(inv, 2, a, 'REJECTED');
+    await act(inv, 2, makeUser('FINANCE_USER', { name: 'Fin A3' }), 'REJECTED');
     await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     expect((await act(inv, 1, a)).status, 'a signature from the earlier round still counted').toBe(200);
     const got = await request(app).get(`/api/invoices/${inv.id}`).set(auth(reia));

@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { invoiceLpsAsOf } from './invoiceLps.js';
+import { invoiceLpsAsOf, scheduledBaseRate } from './invoiceLps.js';
 import { getParamNumber } from '../mastersService.js';
 import { lpsBilled, openOverdueInvoices } from './outstanding.js';
 
@@ -35,7 +35,8 @@ function unbilledOn(invoice) {
 export function lpsPosition(direction, vertical = null) {
   const billed = lpsBilled(direction, vertical);
   const defaults = {
-    annualPct: getParamNumber('lps_annual_pct', 15),
+    // This financial year's base rate, where the masters keep a schedule.
+    annualPct: scheduledBaseRate(getParamNumber('lps_annual_pct', 15))?.(Date.now()) ?? getParamNumber('lps_annual_pct', 15),
     monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0),
     stepCapPct: getParamNumber('lps_step_cap_pct', 0),
   };

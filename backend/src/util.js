@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import db from './db/index.js';
-import { computeDueDateWorking } from './services/workingCalendar.js';
+import { computeDueDateWorking, payerStateFor, paidWithinWindow } from './services/workingCalendar.js';
 
 /**
  * Primary key for a new row.
@@ -389,29 +389,36 @@ export function billableCapacityMw(contract) {
   return Number(contract?.capacity_mw) || 0;
 }
 
-export function computeDueDate(billDate, contract, fallback = 30, state = null) {
+export function computeDueDate(billDate, contract, fallback = 30, state = undefined) {
   return computeDueDateDetailed(billDate, contract, fallback, state).due_date;
 }
 
-export function computeDueDateDetailed(billDate, contract, fallback = 30, state = null) {
+/**
+ * `state` left out means the payer's, read off the contract (payerStateFor):
+ * every caller used to leave it out, so every bill fell due on the national
+ * calendar alone and a Punjab buyer's bill could fall due on Baisakhi. Pass
+ * null to ask for the national calendar on purpose.
+ */
+export function computeDueDateDetailed(billDate, contract, fallback = 30, state = undefined) {
   const terms = resolvePaymentTermsDays(contract, fallback);
-  return computeDueDateWorking(billDate, terms, state);
+  return computeDueDateWorking(billDate, terms, state === undefined ? payerStateFor(contract) : state);
 }
 
 /**
  * Early-payment rebate % this contract grants if paid by `payDate`.
- * Deadline = (rebate_basis === 'DUE_DATE' ? dueDate : billDate) + rebate_days.
+ * Deadline = (rebate_basis === 'DUE_DATE' ? dueDate : billDate) + rebate_days,
+ * moved to the payer's next working day when it lands on a weekly off or a
+ * holiday of the payer's state (`state`) — see windowEnd.
  * Returns null when the contract defines no structured rebate (caller can fall
  * back to global master params).
  */
-export function contractRebatePct(contract, { billDate, dueDate, payDate }) {
+export function contractRebatePct(contract, { billDate, dueDate, payDate, state = null }) {
   const pct = Number(contract?.rebate_pct);
   if (!pct || pct <= 0) return null;
   const days = Number(contract?.rebate_days || 0);
   const ref = contract?.rebate_basis === 'DUE_DATE' ? dueDate : billDate;
   if (!ref) return null;
-  const deadline = new Date(addDays(ref, days) + 'T23:59:59');
-  return new Date(payDate) <= deadline ? pct : 0;
+  return paidWithinWindow(ref, days, payDate, state) ? pct : 0;
 }
 
 /** Human strings kept in sync with the structured fields (for display / PDF). */

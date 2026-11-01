@@ -20,7 +20,7 @@
 import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId } from '../util.js';
-import { insertDoc, genDocNo, applyCredit, dueDateFor, outstandingOf } from './hydroLedger.js';
+import { insertDoc, genDocNo, applyCredit, dueDateFor, outstandingOf, beneficiaryState } from './hydroLedger.js';
 import { makerCheckerConflict } from './hydroBillApproval.js';
 
 export const NOTE_REASONS = {
@@ -156,7 +156,7 @@ export function approveNote(id, user) {
         bill_id: null,
         amount: note.amount,
         doc_date: on,
-        due_date: dueDateFor(contract, on),
+        due_date: dueDateFor(contract, on, beneficiaryState(note)),
         info: `Debit note ${note.note_no} — ${NOTE_REASONS[note.reason] || note.reason}`,
         created_by: user?.id || null,
       });

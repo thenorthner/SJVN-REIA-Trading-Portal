@@ -391,8 +391,10 @@ export function onResolutionNoteDecided(noteId, decision, user, detail = {}) {
         resolution_note_id = NULL, resolution_response = NULL, resolution_response_by = NULL, resolution_response_at = NULL,
         resolved_at = NULL, resolved_by = NULL, updated_at = datetime('now') WHERE id = ?
     `).run(d.id);
-    recordEvent(d.id, user, 'RESOLUTION_NOT_APPROVED', d.status, 'UNDER_REVIEW', detail);
-    notifyDesk('DISPUTE', `${d.dispute_no}: the note for its resolution was not approved (${detail.reason || ''}) — it is back under review`);
+    // Or it was issued and then cancelled: the same, said as it happened.
+    const cancelled = decision === 'CANCELLED';
+    recordEvent(d.id, user, cancelled ? 'RESOLUTION_NOTE_CANCELLED' : 'RESOLUTION_NOT_APPROVED', d.status, 'UNDER_REVIEW', detail);
+    notifyDesk('DISPUTE', `${d.dispute_no}: the note for its resolution was ${cancelled ? 'cancelled' : 'not approved'} (${detail.reason || ''}) — it is back under review`);
   }
   setInvoiceOpenDispute(d.invoice_id);
 }

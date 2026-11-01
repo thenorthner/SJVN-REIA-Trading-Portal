@@ -615,6 +615,12 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   if (!effectiveFrom || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
     return res.status(400).json({ error: 'Give the date the amendment takes effect from — an amendment applies from a date.' });
   }
+  // A day on the calendar: 2026-13-01 and 2026-02-31 passed the pattern, and a
+  // version dated by them could never be placed against a month (1-Nov-2026).
+  const effDay = new Date(`${effectiveFrom}T00:00:00Z`);
+  if (Number.isNaN(effDay.getTime()) || effDay.toISOString().slice(0, 10) !== effectiveFrom) {
+    return res.status(400).json({ error: `${effectiveFrom} is not a date on the calendar — give the day the amendment takes effect from.` });
+  }
   if (original.tenure_start && effectiveFrom < String(original.tenure_start)) {
     return res.status(400).json({
       error: `The effective date ${effectiveFrom} is before the contract began (${original.tenure_start}) — an amendment cannot reach back past the contract itself.`,

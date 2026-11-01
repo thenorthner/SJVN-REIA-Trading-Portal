@@ -201,3 +201,20 @@ describe('S49 Who sees what, and what the queue holds', () => {
     expect(q.approved_unverified[0].invoice_no).toBe('S49-APPROVED');
   });
 });
+
+describe('SJVN\'s computed bill of a month the developer has billed', () => {
+  it('is not sent for approval; the developer\'s own bill is', async () => {
+    const own = await raise();
+    const computed = makeInvoice({ contract_id: ppa.id, billing_period: '2026-08', invoice_type: 'FINAL', direction: 'SELLER_TO_SJVN', status: 'DRAFT', invoice_breakdown_json: '[{"code":"E1"}]' });
+    const r = await post(`/api/invoices/${computed.id}/submit-for-approval`);
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/developer's own bill/);
+    expect(status(computed).status).toBe('DRAFT');
+    expect((await post(`/api/invoices/${own.id}/submit-for-approval`)).status).toBe(200);
+  });
+
+  it('is sent for approval when the developer has raised nothing for the month', async () => {
+    const computed = makeInvoice({ contract_id: ppa.id, billing_period: '2026-08', invoice_type: 'FINAL', direction: 'SELLER_TO_SJVN', status: 'DRAFT', invoice_breakdown_json: '[{"code":"E1"}]' });
+    expect((await post(`/api/invoices/${computed.id}/submit-for-approval`)).status).toBe(200);
+  });
+});

@@ -117,7 +117,7 @@ describe('Arrear and supplementary bills', () => {
   });
 
   it('will not raise the same supplementary twice', async () => {
-    const supp = () => post('/api/invoices/supplementary', reia, { contract_id: psa.id, billing_period: '2026-04', amount: 50000, reason_code: 'CHANGE_IN_LAW', reason: 'Clause 12.2 claim' });
+    const supp = () => post('/api/invoices/supplementary', reia, { contract_id: psa.id, billing_period: '2026-04', amount: 50000, reason_code: 'CHANGE_IN_LAW', law_effective_from: '2026-04-01', reason: 'Clause 12.2 claim' });
     expect((await supp()).status).toBe(201);
     expect((await supp()).status).toBe(409);
   });

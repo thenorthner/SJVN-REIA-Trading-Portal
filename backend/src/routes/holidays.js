@@ -13,7 +13,7 @@ import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import {
   clearHolidayCache, isWorkingDay, nonWorkingReason, weeklyOffDays,
-  computeDueDateWorking, dueDateMode, workingDaysBetween,
+  computeDueDateWorking, dueDateMode, workingDaysBetween, lpsCountsWorkingDaysOnly,
 } from '../services/workingCalendar.js';
 
 const router = Router();
@@ -68,6 +68,7 @@ router.get('/settings', requireRole(...READ), (_req, res) => {
   const NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   res.json({
     due_date_counting_mode: dueDateMode(),
+    lps_day_count_mode: lpsCountsWorkingDaysOnly() ? 'WORKING_DAYS' : 'CALENDAR',
     weekly_off_days: offs,
     weekly_off_names: offs.map((d) => NAMES[d]),
   });
@@ -113,11 +114,29 @@ router.get('/due-date-preview', requireRole(...READ), (req, res) => {
   });
 
   d = new Date(d.getTime() + 86400000);
+  let calendarDay = 0;
   while (d <= endDate) {
     const isoDate = d.toISOString().slice(0, 10);
     const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(d);
     const isWk = isWorkingDay(isoDate, state || null);
-    if (isWk) {
+    calendarDay += 1;
+    if (result.mode === 'CALENDAR_ROLL_FORWARD') {
+      // Every day of the term counts, open or shut; only the last day is
+      // checked, and moved on past closed days to the next working one.
+      const closedType = isWk ? 'WORKING_DAY' : (weeklyOffDays().includes(d.getUTCDay()) ? 'WEEKEND' : 'HOLIDAY');
+      const isDue = isoDate === result.due_date;
+      const rolled = calendarDay > terms && !isDue;
+      breakdown.push({
+        date: isoDate,
+        day_name: dayName,
+        type: closedType,
+        day_number: calendarDay <= terms ? calendarDay : null,
+        status: isDue ? 'DUE_DATE' : rolled ? 'ROLLED' : 'COUNTED',
+        label: isDue
+          ? `Day ${calendarDay} (DUE DATE)`
+          : rolled ? `Rolled past (${nonWorkingReason(isoDate, state || null)})` : `Day ${calendarDay}`,
+      });
+    } else if (isWk) {
       workDayCount += 1;
       breakdown.push({
         date: isoDate,

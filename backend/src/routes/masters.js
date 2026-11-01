@@ -43,7 +43,26 @@ function levelMapProblem(map, where) {
   }
   return null;
 }
+/** The LPS base-rate schedule: dated rows, each a real day and a rate in percent. */
+function lpsScheduleProblem(value) {
+  let v = value;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return 'lps_base_rate_schedule must be valid JSON'; } }
+  if (!Array.isArray(v)) return 'lps_base_rate_schedule must be a list of { from, pct } rows';
+  const seen = new Set();
+  for (const r of v) {
+    const from = String(r?.from ?? '');
+    const d = new Date(`${from}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== from) return `lps_base_rate_schedule: "${from}" is not a date`;
+    if (seen.has(from)) return `lps_base_rate_schedule: ${from} is listed twice`;
+    seen.add(from);
+    const pct = Number(r?.pct);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 50) return `lps_base_rate_schedule: the rate from ${from} must be a percent above 0`;
+  }
+  return null;
+}
+
 export function approvalParamProblem(key, value) {
+  if (key === 'lps_base_rate_schedule') return lpsScheduleProblem(value);
   if (!['invoice_approval_level_roles', 'invoice_approval_levels'].includes(key)) return null;
   let v = value;
   if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return `${key} must be valid JSON`; } }
