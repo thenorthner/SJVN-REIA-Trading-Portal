@@ -24,10 +24,17 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,jsx}'],
   },
   server: {
+    host: true,
     port: 5173,
     proxy: {
       '/api': {
         // Overridable, so a second copy of the app can run against a second backend.
+        target: process.env.VITE_API_TARGET || 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      // Uploaded logos are served by the API at /uploads with
+      // Cross-Origin-Resource-Policy: same-origin, so they must come through here.
+      '/uploads': {
         target: process.env.VITE_API_TARGET || 'http://localhost:4000',
         changeOrigin: true,
       },

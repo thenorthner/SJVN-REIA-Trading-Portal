@@ -114,10 +114,90 @@
       "port": 4010
     },
     {
+      "name": "backend-holidays",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4020 node src/server.js"
+      ],
+      "port": 4020
+    },
+    {
+      "name": "frontend-holidays",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_API_TARGET=http://localhost:4020 npx vite --port 5182 --strictPort"
+      ],
+      "port": 5182
+    },
+    {
+      "name": "backend-reports",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4030 node src/server.js"
+      ],
+      "port": 4030
+    },
+    {
+      "name": "frontend-reports",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_REIA_BETA=0 VITE_API_TARGET=http://localhost:4030 npx vite --port 5183 --strictPort"
+      ],
+      "port": 5183
+    },
+    {
+      "name": "backend-kyc",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4040 node src/server.js"
+      ],
+      "port": 4040
+    },
+    {
+      "name": "frontend-kyc",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_REIA_BETA=0 VITE_API_TARGET=http://localhost:4040 npx vite --port 5184 --strictPort"
+      ],
+      "port": 5184
+    },
+    {
       "name": "reia-playbook",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "5190", "--bind", "127.0.0.1", "--directory", "tools/reia-playbook"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5190",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "tools/reia-playbook"
+      ],
       "port": 5190
+    },
+    {
+      "name": "backend-formiv",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4050 node src/server.js"
+      ],
+      "port": 4050
+    },
+    {
+      "name": "frontend-formiv",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_REIA_BETA=0 VITE_API_TARGET=http://localhost:4050 npx vite --port 5185 --strictPort"
+      ],
+      "port": 5185
     }
   ]
 }

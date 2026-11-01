@@ -4,9 +4,10 @@ import { fmtCurrency, fmtNumber } from './ui.jsx';
 
 // B1: a PSA bill against the PPA bills it passes through — MWh, rate, and the
 // spread against SJVN's margin, flagged red where they part.
-const TONE = { OK: { bg: '#ecfdf5', border: 'var(--t-green-100)', text: '#065f46', label: 'Back-to-back matches' },
-  MISMATCH: { bg: '#fef2f2', border: 'var(--t-red-line)', text: '#991b1b', label: 'Back-to-back does not match' },
-  INCOMPLETE: { bg: '#fffbeb', border: 'var(--t-amber-line)', text: '#92400e', label: 'Back-to-back waits for the PPA bill' } };
+// Tokens, not hex: the panel sits on the page in the dark theme too.
+const TONE = { OK: { bg: 'var(--t-green-50)', border: 'var(--t-green-100)', text: 'var(--on-green-2)', label: 'Back-to-back matches' },
+  MISMATCH: { bg: 'var(--t-red-50)', border: 'var(--t-red-line)', text: 'var(--on-red)', label: 'Back-to-back does not match' },
+  INCOMPLETE: { bg: 'var(--t-amber-50)', border: 'var(--t-amber-line)', text: 'var(--on-amber)', label: 'Back-to-back waits for the PPA bill' } };
 
 export default function BackToBackCard({ invoice }) {
   const [b, setB] = useState(null);

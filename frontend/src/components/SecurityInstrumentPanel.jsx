@@ -215,7 +215,7 @@ function SfmsForm({ d, onDone, onCancel }) {
   );
 }
 
-export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
+export default function SecurityInstrumentPanel({ instrumentId, version, onChanged }) {
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
   const [mode, setMode] = useState(null); // amend | sfms
@@ -226,6 +226,14 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
     api.securityDesk.get(instrumentId).then(setD).catch((e) => setError(errText(e)));
   }, [instrumentId]);
   useEffect(() => { setD(null); setMode(null); setError(''); load(); }, [load]);
+  // The page around it changes the instrument too (the checker's bank
+  // confirmation), so it says when, and the panel reads it again in place.
+  const seen = React.useRef(version);
+  useEffect(() => {
+    if (seen.current === version) return;
+    seen.current = version;
+    load();
+  }, [version, load]);
 
   const took = (fresh) => { setD(fresh); setMode(null); onChanged?.(fresh); };
 

@@ -194,7 +194,7 @@ export default function CompanyUsers() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             {selectedCompany.logo_url ? (
               <img
-                src={selectedCompany.logo_url.startsWith('http') ? selectedCompany.logo_url : `http://localhost:4000${selectedCompany.logo_url}`}
+                src={selectedCompany.logo_url}
                 alt={selectedCompany.name}
                 style={{
                   width: 44,
@@ -433,7 +433,7 @@ export default function CompanyUsers() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           {c.logo_url ? (
                             <img
-                              src={c.logo_url.startsWith('http') ? c.logo_url : `http://localhost:4000${c.logo_url}`}
+                              src={c.logo_url}
                               alt={c.name}
                               style={{
                                 width: 32,
@@ -618,7 +618,7 @@ export default function CompanyUsers() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                       {c.logo_url ? (
                         <img
-                          src={c.logo_url.startsWith('http') ? c.logo_url : `http://localhost:4000${c.logo_url}`}
+                          src={c.logo_url}
                           alt={c.name}
                           style={{
                             width: 32,

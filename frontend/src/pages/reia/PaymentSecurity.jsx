@@ -45,6 +45,8 @@ export const typeLabel = (r) => {
   const base = r.mechanism_type === 'LC' ? 'LC' : (MECHANISM_LABEL[r.mechanism_type] || r.mechanism_type);
   return `${base}${r.is_revolving ? ' · revolving' : ''}`;
 };
+// The API refuses this too; caught here it shows as soon as the date is typed.
+const validityClash = (f) => (f.validity_start && f.validity_end && f.validity_end < f.validity_start ? 'The validity cannot end before it starts' : '');
 const lapsed = (r) => !!r.validity_end && String(r.validity_end).slice(0, 10) < new Date().toISOString().slice(0, 10);
 const parse = (json) => { try { return typeof json === 'string' ? JSON.parse(json) : (json || null); } catch { return null; } };
 
@@ -186,6 +188,8 @@ export default function PaymentSecurity() {
   async function handleCreate(e) {
     e.preventDefault();
     if (lock.current) return;
+    const clash = validityClash(form);
+    if (clash) { setCreateError(clash); return; }
     setCreateError('');
     setBusy(true);
     try {
@@ -798,7 +802,7 @@ export default function PaymentSecurity() {
               <input required type="date" value={form.validity_start} onChange={(e) => setForm({ ...form, validity_start: e.target.value })} />
             </Field>
             <Field label="Validity end">
-              <input required type="date" value={form.validity_end} onChange={(e) => setForm({ ...form, validity_end: e.target.value })} />
+              <input required type="date" min={form.validity_start || undefined} value={form.validity_end} onChange={(e) => setForm({ ...form, validity_end: e.target.value })} onBlur={() => { const m = validityClash(form); if (m) setCreateError(m); }} />
             </Field>
           </div>
           {form.mechanism_type === 'LC' && (
@@ -897,7 +901,7 @@ export default function PaymentSecurity() {
             )}
 
             <div style={{ marginTop: 14 }}>
-              <SecurityInstrumentPanel instrumentId={detail.id} onChanged={panelChanged} />
+              <SecurityInstrumentPanel instrumentId={detail.id} version={detail.updated_at} onChanged={panelChanged} />
             </div>
 
             {detail.requirements?.length > 0 && (

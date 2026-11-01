@@ -19,7 +19,7 @@ import LastLoginNotice from '../gigw/LastLoginNotice.jsx';
 import ProjectScopeNote from './ProjectScopeNote.jsx';
 import ActingSwitch, { ActingBanner } from './ActingSwitch.jsx';
 import ReadOnlyNotice from './ReadOnlyNotice.jsx';
-import { REIA_BETA } from '../reiaBeta.js';
+import { REIA_BETA, REIA_BETA_HOME } from '../reiaBeta.js';
 import { getNotificationAction, formatTimeAgo } from '../lib/notificationRouting.js';
 import { pageOpen } from '../lib/rolePages.js';
 
@@ -129,6 +129,9 @@ const NAV_INTERNAL = [
   {
     section: 'REIA Billing & Settlement',
     roles: ROLE_GROUPS.REIA_ALL,
+    // The monthly cycle in the order it runs, onboarding to reconciliation.
+    // Everything else the desk has sits under "Others" below it, so the
+    // screens used every month are not lost among twenty.
     links: [
       { to: '/reia', label: 'REIA Dashboard', end: true },
       { to: '/reia/entities', label: 'Stakeholders & KYC Desk' },
@@ -136,33 +139,40 @@ const NAV_INTERNAL = [
       // User administration is the platform administrators' (Target #2 Phase B).
       { to: '/reia/company-users', label: 'Company Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'] },
       { to: '/reia/contracts', label: 'Contracts (PPA/PSA)' },
-      // Tenure, commissioning, security, statutory approvals & CERC Form-IV filings.
-      { to: '/reia/compliance', label: 'Compliance Desk' },
+      { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
-      { to: '/reia/billing-readiness', label: 'Month-Close Board' },
-      { to: '/reia/release-planner', label: 'Developer Release Planner' },
       { to: '/reia/note-approvals', label: 'Notes for Approval' },
-      // Outstanding, delay days and surcharge, on both sides of the desk.
-      // The technical and commercial checks on developer bills, across the desk.
-      { to: '/reia/verification', label: 'Invoice Verification' },
-      { to: '/reia/payment-monitoring', label: 'Payment Monitoring' },
-      // Energy against what each project's capacity could make.
-      { to: '/reia/generation-performance', label: 'Generation Performance' },
       { to: '/reia/disputes', label: 'Dispute Management' },
-      // A seller's statement of account, and where Finance files its Form 16A.
-      { to: '/reia/seller-ledgers', label: 'Counterparty Ledgers & TDS' },
-      { to: '/reia/payment-security', label: 'Payment Security' },
-      { to: '/reia/power-diversion', label: 'Power Diversion' },
-      { to: '/reia/advances', label: 'Advances & Unapplied Receipts' },
-      { to: '/reia/energy-banking', label: 'Energy Banking' },
-      // Raising a CERC two-part tariff bill is a REIA job, but the page lives in
-      // the Power Trading section — without this entry the only roles allowed to
-      // create these bills had no way to reach it. Scoped to the REIA-only roles
-      // so nobody sees the same link twice.
-      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER'] },
+      // Outstanding, delay days and surcharge, on both sides of the desk.
+      { to: '/reia/payment-monitoring', label: 'Payment Monitoring' },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
-      { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
+    ],
+    groups: [
+      {
+        group: 'Others',
+        items: [
+          // Tenure, commissioning, security, statutory approvals & CERC Form-IV filings.
+          { to: '/reia/compliance', label: 'Compliance Desk' },
+          { to: '/reia/billing-readiness', label: 'Month-Close Board' },
+          { to: '/reia/release-planner', label: 'Developer Release Planner' },
+          // The technical and commercial checks on developer bills, across the desk.
+          { to: '/reia/verification', label: 'Invoice Verification' },
+          // A seller's statement of account, and where Finance files its Form 16A.
+          { to: '/reia/seller-ledgers', label: 'Counterparty Ledgers & TDS' },
+          // Energy against what each project's capacity could make.
+          { to: '/reia/generation-performance', label: 'Generation Performance' },
+          { to: '/reia/power-diversion', label: 'Power Diversion' },
+          { to: '/reia/advances', label: 'Advances & Unapplied Receipts' },
+          { to: '/reia/energy-banking', label: 'Energy Banking' },
+          // Raising a CERC two-part tariff bill is a REIA job, but the page lives in
+          // the Power Trading section — without this entry the only roles allowed to
+          // create these bills had no way to reach it. Scoped to the REIA-only roles
+          // so nobody sees the same link twice.
+          { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER'] },
+          { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
+        ],
+      },
     ],
   },
   {
@@ -413,7 +423,6 @@ const NavGroup = ({ section, user }) => {
       </div>
       {isOpen && (
         <div className="nav-section-links">
-          {subGroups.map((g) => <NavSubGroup key={g.group} group={g} user={user} />)}
           {links.map((l) => {
             const isKycLocked = l.requiresKyc && user?.entity && user.entity.status !== 'APPROVED';
             return (
@@ -435,6 +444,9 @@ const NavGroup = ({ section, user }) => {
               </NavLink>
             );
           })}
+          {/* After the section's own links: a section that has both keeps its
+              everyday screens on top and the rest folded below them. */}
+          {subGroups.map((g) => <NavSubGroup key={g.group} group={g} user={user} />)}
         </div>
       )}
     </div>
@@ -620,7 +632,7 @@ export default function Layout() {
     : isBuyerRole(user?.role)
       ? 'Buyer Portal'
       : 'Trading Portal';
-  const logoSrc = branded && entity.logo_url ? `http://localhost:4000${entity.logo_url}` : null;
+  const logoSrc = branded && entity.logo_url ? entity.logo_url : null;
   const pageCtx = getPageContext(location.pathname, branded, entity, portalKind);
 
   function handleLogout() {
@@ -749,7 +761,7 @@ export default function Layout() {
 
           <div className="topbar-actions">
             <NavLink
-              to="/home"
+              to={REIA_BETA ? REIA_BETA_HOME : '/home'}
               className="link-btn"
               style={{
                 fontSize: 14,

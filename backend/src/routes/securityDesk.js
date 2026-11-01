@@ -547,6 +547,7 @@ router.post('/instruments', (req, res) => send(res, () => {
   if (!validityEnd) throw fail(400, 'Valid until is needed');
   if (validityEnd < today()) throw fail(400, 'This instrument has already expired');
   const validityStart = dayOrNull(b.validity_start, 'Valid from');
+  if (validityStart && validityEnd < validityStart) throw fail(400, 'The validity cannot end before it starts');
   const claim = dayOrNull(b.claim_deadline, 'Claim period');
   if (claim && claim < validityEnd) throw fail(400, 'The claim period cannot end before the validity does');
   const doc = docOf(contract.id, b.document_version_id);

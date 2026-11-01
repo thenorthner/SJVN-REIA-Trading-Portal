@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Badge, Table, fmtCurrency, fmtNumber } from './ui.jsx';
+import { reiaTerm } from '../reiaBeta.js';
 
 /**
  * Ultra 3D Power Routing & Carve-Out Matrix
@@ -249,6 +250,9 @@ function RoutingTreeCanvas({
   const weightMw = weighted.reduce((s, [mw]) => s + mw, 0);
   const avgSpread = weightMw ? Math.round(weighted.reduce((s, [mw, sp]) => s + mw * sp, 0) / weightMw * 1000) / 1000 : null;
   const tone = STATE_TONE[pos.state];
+  // Power always reads left to right, generator → SJVN → DISCOM. A PSA's own
+  // card is the DISCOM, so on a PSA the five columns are laid out in reverse.
+  const at = (n) => (isPpa ? {} : { order: 6 - n });
 
   return (
     <div style={{
@@ -338,18 +342,21 @@ function RoutingTreeCanvas({
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(220px, 1fr) minmax(100px, 140px) minmax(200px, 1fr) minmax(100px, 140px) minmax(260px, 1.2fr)',
+          gridTemplateColumns: isPpa
+            ? 'minmax(220px, 1fr) minmax(100px, 140px) minmax(200px, 1fr) minmax(100px, 140px) minmax(260px, 1.2fr)'
+            : 'minmax(260px, 1.2fr) minmax(100px, 140px) minmax(200px, 1fr) minmax(100px, 140px) minmax(220px, 1fr)',
           alignItems: 'center',
           gap: 0,
         }}>
           {/* NODE 1: ROOT GENERATOR / PPA SOURCE */}
           <div style={{
+            ...at(1),
             background: 'linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.85))',
             border: '1.5px solid rgba(16, 185, 129, 0.35)',
             boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
             borderRadius: 14,
             padding: 16,
-            transform: 'rotateY(6deg) translateZ(8px)',
+            transform: `rotateY(${isPpa ? 6 : -6}deg) translateZ(8px)`,
             transition: 'all 0.3s ease',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
@@ -363,7 +370,7 @@ function RoutingTreeCanvas({
                 padding: '2px 7px',
                 borderRadius: 4,
               }}>
-                {isPpa ? '1. Power Generator (IPP)' : '1. Buying Utility (State DISCOM)'}
+                {isPpa ? '1. Power Generator (IPP)' : '3. Buying Utility (State DISCOM)'}
               </span>
               <span style={{
                 fontSize: 14,
@@ -407,7 +414,7 @@ function RoutingTreeCanvas({
           </div>
 
           {/* TRUNK CONDUIT: PPA ➔ SJVN ALLOCATOR */}
-          <div style={{ position: 'relative', height: 160, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ ...at(2), position: 'relative', height: 160, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <svg width="100%" height="80" viewBox="0 0 100 80" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
               <defs>
                 <linearGradient id="trunkGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -454,6 +461,7 @@ function RoutingTreeCanvas({
 
           {/* NODE 2: SJVN REIA ALLOCATION & CARVE-OUT HUB */}
           <div style={{
+            ...at(3),
             background: 'linear-gradient(145deg, rgba(14, 165, 233, 0.14), rgba(15, 23, 42, 0.95))',
             border: '2px solid rgba(56, 189, 248, 0.45)',
             boxShadow: '0 0 25px rgba(14, 165, 233, 0.3), 0 15px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
@@ -496,7 +504,7 @@ function RoutingTreeCanvas({
               SJVN Limited (REIA)
             </div>
             <div style={{ fontSize: 14, color: '#94a3b8', marginBottom: 10 }}>
-              Carve-Out & Trading Margin Engine
+              {reiaTerm('Carve-Out & Trading Margin Engine')}
             </div>
 
             <div style={{
@@ -522,8 +530,9 @@ function RoutingTreeCanvas({
           </div>
 
           {/* BRANCHING CONDUITS: SJVN HUB ➔ MULTIPLE DISCOMs */}
-          <div style={{ position: 'relative', height: Math.max(180, count * 95), display: 'flex', alignItems: 'center' }}>
-            <svg width="100%" height="100%" viewBox={`0 0 100 ${Math.max(180, count * 95)}`} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+          <div style={{ ...at(4), position: 'relative', height: Math.max(180, count * 95), display: 'flex', alignItems: 'center' }}>
+            {/* Drawn hub → cards; mirrored on a PSA, where the cards are the source PPAs on the left. */}
+            <svg width="100%" height="100%" viewBox={`0 0 100 ${Math.max(180, count * 95)}`} preserveAspectRatio="none" style={{ overflow: 'visible', transform: isPpa ? 'none' : 'scaleX(-1)' }}>
               <defs>
                 <linearGradient id="branchGradTop" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0">
                   <stop offset="0%" stopColor="#0ea5e9" />
@@ -571,7 +580,7 @@ function RoutingTreeCanvas({
                       fill="none"
                       strokeDasharray="6 8"
                       strokeLinecap="round"
-                      style={{ animation: 'trunkFlow 1.8s linear infinite' }}
+                      style={{ animation: `trunkFlow 1.8s linear infinite${isPpa ? '' : ' reverse'}` }}
                     />
                   </g>
                 );
@@ -580,7 +589,7 @@ function RoutingTreeCanvas({
           </div>
 
           {/* NODE 3: BRANCHING OFF-TAKERS (DISCOM CARDS STACK) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...at(5), display: 'flex', flexDirection: 'column', gap: 12 }}>
             {allocations.map((alloc, idx) => {
               const isHovered = hoveredIndex === idx;
               const isSelected = selectedIndex === idx;
@@ -603,26 +612,24 @@ function RoutingTreeCanvas({
                     borderRadius: 12,
                     padding: '12px 14px',
                     cursor: 'pointer',
-                    transform: isHovered || isSelected ? 'translateX(4px) scale(1.02)' : 'none',
+                    transform: isHovered || isSelected ? `translateX(${isPpa ? 4 : -4}px) scale(1.02)` : 'none',
                     transition: 'all 0.25s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{
-                        fontSize: 14,
-                        fontWeight: 800,
-                        color: '#818cf8',
-                        background: 'rgba(129, 140, 248, 0.15)',
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                      }}>
-                        {isPpa ? `Branch ${idx + 1}` : `Source ${idx + 1}`}
-                      </span>
-                      <strong style={{ fontSize: 14.5, color: '#f8fafc' }}>
-                        {isPpa ? (alloc.buyer_name || `DISCOM ${idx + 1}`) : (alloc.seller_name || `Generator ${idx + 1}`)}
-                      </strong>
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{
+                      fontSize: 14,
+                      fontWeight: 800,
+                      letterSpacing: 0.8,
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                      color: '#818cf8',
+                      background: 'rgba(129, 140, 248, 0.15)',
+                      padding: '2px 7px',
+                      borderRadius: 4,
+                    }}>
+                      {isPpa ? `Branch ${idx + 1}` : (count > 1 ? `1. Generator ${idx + 1}` : '1. Power Generator (IPP)')}
+                    </span>
                     <span style={{
                       fontSize: 14,
                       fontWeight: 700,
@@ -633,6 +640,10 @@ function RoutingTreeCanvas({
                     }}>
                       {isPpa ? 'DISCOM' : 'PPA'}
                     </span>
+                  </div>
+
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
+                    {isPpa ? (alloc.buyer_name || `DISCOM ${idx + 1}`) : (alloc.seller_name || `Generator ${idx + 1}`)}
                   </div>
 
                   <div style={{ fontSize: 14, color: '#94a3b8', marginBottom: 8 }}>
