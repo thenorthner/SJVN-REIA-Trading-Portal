@@ -551,6 +551,9 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
     }
   }
 
+  // The checker decides on the maker's evidence; the API refuses any change to it.
+  const evidenceLocked = actsAs(user, ROLE_GROUPS.REIA_CHECK);
+
   function openApprovalEditor(item) {
     setEditApproval(item);
     setApprovalForm({
@@ -1159,8 +1162,10 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
 
           <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Contacts</h4>
           {selected.contacts?.length > 0 ? (
-            <Table columns={[{key:'type', header:'Role', render: r=>r.contact_type}, {key:'name', header:'Name'}, {key:'email', header:'Email'}, {key:'phone', header:'Phone'}]} rows={selected.contacts} />
-          ) : <div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No contacts found.</div>}
+            <div className="compact-table">
+              <Table columns={[{key:'type', header:'Role', render: r=>r.contact_type}, {key:'name', header:'Name'}, {key:'email', header:'Email'}, {key:'phone', header:'Phone'}]} rows={selected.contacts} />
+            </div>
+          ) :<div style={{ fontSize: 14.5, color: 'var(--slate-500)' }}>No contacts found.</div>}
 
           {selected.entity_type === 'SELLER' && actsAs(user, CAN_MAKE) && (
             <div style={{ marginTop: 24, padding: 16, background: 'var(--slate-50)', border: '1px dashed var(--slate-300)', borderRadius: 8 }}>
@@ -1178,7 +1183,7 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
               </div>
               {selected.logo_url && (
                 <div style={{ marginTop: 16 }}>
-                  <img src={`http://localhost:4000${selected.logo_url}`} alt="Logo" style={{ maxHeight: 60, objectFit: 'contain' }} />
+                  <img src={selected.logo_url} alt="Logo" style={{ maxHeight: 60, objectFit: 'contain' }} />
                 </div>
               )}
 
@@ -1454,18 +1459,23 @@ export default function Entities({ vertical = 'REIA', initialTab = null }) {
                   ))}
               </select>
             </Field>
+            {evidenceLocked && (
+              <p style={{ fontSize: 14.5, color: 'var(--slate-500)', margin: '0 0 8px 0' }}>
+                The REIA maker records these details. If they are wrong or missing, choose Rejected and say why in the note.
+              </p>
+            )}
             <div className="form-grid">
               <Field label="Reference / Approval No.">
-                <input value={approvalForm.reference_no} onChange={(e) => setApprovalForm({ ...approvalForm, reference_no: e.target.value })} placeholder="e.g. CEA/REG/2024/…" />
+                <input value={approvalForm.reference_no} readOnly={evidenceLocked} onChange={(e) => setApprovalForm({ ...approvalForm, reference_no: e.target.value })} placeholder="e.g. CEA/REG/2024/…" />
               </Field>
               <Field label="Issued By">
-                <input value={approvalForm.issued_by} onChange={(e) => setApprovalForm({ ...approvalForm, issued_by: e.target.value })} placeholder="CEA / MoEF / SERC / CTU…" />
+                <input value={approvalForm.issued_by} readOnly={evidenceLocked} onChange={(e) => setApprovalForm({ ...approvalForm, issued_by: e.target.value })} placeholder="CEA / MoEF / SERC / CTU…" />
               </Field>
               <Field label="Issued On">
-                <input type="date" value={approvalForm.issued_on} onChange={(e) => setApprovalForm({ ...approvalForm, issued_on: e.target.value })} />
+                <input type="date" value={approvalForm.issued_on} readOnly={evidenceLocked} onChange={(e) => setApprovalForm({ ...approvalForm, issued_on: e.target.value })} />
               </Field>
               <Field label="Valid Until">
-                <input type="date" value={approvalForm.valid_until} onChange={(e) => setApprovalForm({ ...approvalForm, valid_until: e.target.value })} />
+                <input type="date" value={approvalForm.valid_until} readOnly={evidenceLocked} onChange={(e) => setApprovalForm({ ...approvalForm, valid_until: e.target.value })} />
               </Field>
             </div>
             <Field label={approvalForm.status === 'NOT_APPLICABLE' ? 'Why N/A? (required for mandatory)' : 'Notes'}>

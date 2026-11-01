@@ -106,3 +106,25 @@ describe('what the REIA maker no longer reaches', () => {
     expect((await post('/api/masters/holidays', tokenFor('SJVN_ADMIN'), {})).status).not.toBe(403);
   });
 });
+
+describe('a regulatory clearance', () => {
+  it('is recorded by the maker; the checker decides on it without changing it', async () => {
+    const entity = makeEntity('SELLER', { status: 'PENDING' });
+    const itemId = `ERA-${entity.id}`;
+    db.prepare(`INSERT INTO entity_regulatory_approvals (id, entity_id, approval_code, label, status)
+      VALUES (?, ?, 'ENV_CLEARANCE', 'Environmental Clearance', 'SUBMITTED')`).run(itemId, entity.id);
+    const url = `/api/entities/${entity.id}/regulatory-approvals/${itemId}`;
+    const put = (token, body) => request(app).put(url).set(auth(token)).send(body);
+    const checker = tokenFor('REIA_CHECKER');
+
+    const typed = await put(checker, { status: 'VERIFIED', reference_no: 'typed by the checker' });
+    expect(typed.status, 'the checker supplied the evidence it verified').toBe(403);
+    expect(typed.body.error).toMatch(/Reject it/);
+    expect(db.prepare('SELECT status, reference_no FROM entity_regulatory_approvals WHERE id = ?').get(itemId))
+      .toEqual({ status: 'SUBMITTED', reference_no: null });
+
+    expect((await put(checker, { status: 'REJECTED', reference_no: '', notes: 'no reference recorded' })).status).toBe(200);
+    expect((await put(tokenFor('REIA_MAKER'), { status: 'SUBMITTED', reference_no: 'MoEF/EC/2026/17' })).status).toBe(200);
+    expect((await put(checker, { status: 'VERIFIED', reference_no: 'MoEF/EC/2026/17' })).status).toBe(200);
+  });
+});

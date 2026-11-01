@@ -775,6 +775,11 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
   // verifies it again in the same step.
   const EVIDENCE = ['reference_no', 'issued_by', 'issued_on', 'valid_until', 'document_id'];
   const evidenceChanged = EVIDENCE.some((f) => b[f] !== undefined && String(b[f] ?? '') !== String(row[f] ?? ''));
+  // The checker decides on the evidence the maker recorded. Typing it in and
+  // verifying it in one save would make the checker the maker of it too.
+  if (ROLE_GROUPS.REIA_CHECK.includes(req.user.role) && evidenceChanged) {
+    return res.status(403).json({ error: `The checker cannot change ${row.label}'s reference, issuer, dates or document. Reject it with a note so the REIA maker corrects them, then decide on what they record.` });
+  }
   let finalStatus = status;
   if (row.status === 'VERIFIED' && status === 'VERIFIED' && evidenceChanged && b.status !== 'VERIFIED') finalStatus = 'SUBMITTED';
   if (finalStatus === 'VERIFIED') {

@@ -502,7 +502,10 @@ select, .select {
   border-radius: 8px;
   padding: 6px 34px 6px 12px;
   line-height: 1.4;
-  height: 36px;
+  /* A floor, not a fixed height: where a form gives the select more padding
+     or a larger font (dialogs, the A+ text size), a fixed 36px cut the
+     bottom off the chosen option. */
+  height: auto;
   min-height: 36px;
   cursor: pointer;
   appearance: none;
@@ -1692,6 +1695,13 @@ input[type="file"]::file-selector-button:hover {
   border-collapse: collapse;
   font-size: 15.5px;
 }
+
+/* A short list of a few text columns. At full width each column is far wider
+   than its text, so the centred header (DBIM 4.1.1) floats away from the
+   left-aligned value under it; sized to the content they line up. */
+.compact-table .data-table { width: auto; }
+.compact-table .data-table th,
+.compact-table .data-table td { padding-left: 24px; padding-right: 24px; }
 
 .data-table th {
   text-align: left;

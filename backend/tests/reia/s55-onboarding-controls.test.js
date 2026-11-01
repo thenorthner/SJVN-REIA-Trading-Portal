@@ -22,6 +22,8 @@ const items = () => db.prepare('SELECT * FROM entity_regulatory_approvals WHERE 
 const item = (code) => db.prepare('SELECT * FROM entity_regulatory_approvals WHERE entity_id = ? AND approval_code = ?').get(ent.id, code);
 const putItem = (code, body, who = reia) => request(app).put(`/api/entities/${ent.id}/regulatory-approvals/${item(code).id}`).set(auth(who)).send(body);
 // Phase B.2: clearing a company is the checker's.
+// The maker records a clearance's evidence; the checker decides on it as recorded.
+const submit = (code, evidence) => putItem(code, { status: 'SUBMITTED', ...evidence });
 const approve = (body, who = reiaAdmin) => request(app).post(`/api/entities/${ent.id}/approve`).set(auth(who)).send({ decision: 'APPROVED', ...body });
 
 beforeEach(async () => {
@@ -50,12 +52,15 @@ describe('S55 Who clears a clearance', () => {
     expect((await putItem('ENV_CLEARANCE', { status: 'NOT_APPLICABLE', notes: 'n/a' }, reiaAdmin)).status).toBe(400);
     expect((await putItem('ENV_CLEARANCE', { status: 'NOT_APPLICABLE', notes: 'Rooftop project below the EC threshold' }, reiaAdmin)).status).toBe(200);
     expect((await putItem('GENERATION_LICENSE', { status: 'VERIFIED' }, reiaAdmin)).body.error).toMatch(/attach the scanned document or record its reference/);
-    expect((await putItem('GENERATION_LICENSE', { status: 'VERIFIED', reference_no: 'CEA/REG/101', valid_until: '2020-01-01' }, reiaAdmin)).body.error).toMatch(/lapsed/);
-    expect((await putItem('GENERATION_LICENSE', { status: 'VERIFIED', reference_no: 'CEA/REG/101' }, reiaAdmin)).status).toBe(200);
+    await submit('GENERATION_LICENSE', { reference_no: 'CEA/REG/101', valid_until: '2020-01-01' });
+    expect((await putItem('GENERATION_LICENSE', { status: 'VERIFIED' }, reiaAdmin)).body.error).toMatch(/lapsed/);
+    await submit('GENERATION_LICENSE', { valid_until: '' });
+    expect((await putItem('GENERATION_LICENSE', { status: 'VERIFIED' }, reiaAdmin)).status).toBe(200);
   });
 
   it('sends a verified clearance back for checking when its evidence changes', async () => {
-    await putItem('GENERATION_LICENSE', { status: 'VERIFIED', reference_no: 'CEA/REG/101' }, reiaAdmin);
+    await submit('GENERATION_LICENSE', { reference_no: 'CEA/REG/101' });
+    await putItem('GENERATION_LICENSE', { status: 'VERIFIED' }, reiaAdmin);
     expect((await putItem('GENERATION_LICENSE', { valid_until: '2099-12-31' }, seller)).status, 'the company edited a verified clearance').toBe(403);
     const r = await putItem('GENERATION_LICENSE', { valid_until: '2030-03-31' });
     expect(r.body.item.status).toBe('SUBMITTED');
@@ -118,7 +123,8 @@ describe('S55 A new bank account goes live on proof of it', () => {
   });
 
   it('refuses a proof verified before the change was asked for', async () => {
-    await putItem('BANK_ACCOUNT_PROOF', { status: 'VERIFIED', reference_no: 'CHQ-OLD' }, reiaAdmin);
+    await submit('BANK_ACCOUNT_PROOF', { reference_no: 'CHQ-OLD' });
+    await putItem('BANK_ACCOUNT_PROOF', { status: 'VERIFIED' }, reiaAdmin);
     db.prepare(`UPDATE entity_regulatory_approvals SET verified_at = '2026-01-01T00:00:00.000Z' WHERE entity_id = ? AND approval_code = 'BANK_ACCOUNT_PROOF'`).run(ent.id);
     await stage();
     callBack(ent.id);
@@ -129,7 +135,8 @@ describe('S55 A new bank account goes live on proof of it', () => {
   it('goes live once the new proof is verified, by someone other than who asked', async () => {
     await stage();
     await new Promise((r) => setTimeout(r, 1100));
-    await putItem('BANK_ACCOUNT_PROOF', { status: 'VERIFIED', reference_no: 'CHQ-NEW' }, reiaAdmin);
+    await submit('BANK_ACCOUNT_PROOF', { reference_no: 'CHQ-NEW' });
+    await putItem('BANK_ACCOUNT_PROOF', { status: 'VERIFIED' }, reiaAdmin);
     callBack(ent.id);
     const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reiaAdmin)).send({});
     expect(r.status, JSON.stringify(r.body)).toBe(200);
