@@ -54,7 +54,7 @@ export function quotes(data) {
   }
   (data.CYCLE || []).forEach((c, i) => {
     const at = `Full cycle ${i + 1} (${c.t})`;
-    [c.t, c.ends, ...c.path.map(([, t]) => t)].forEach((s) => prose(s, at));
+    [c.t, c.ends, ...c.path.flatMap(([, t, how]) => [t, how])].forEach((s) => prose(s, at));
     c.edges.forEach((e) => { prose(e.if, `${at}: ${e.if}`); prose(e.then, `${at}: ${e.if}`); add('refusal', e.refuse, `${at}: ${e.if}`); });
   });
   data.MX.forEach((r) => { prose(r.a, `Powers: ${r.a}`); prose(r.note, `Powers: ${r.a}`); });

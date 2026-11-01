@@ -165,7 +165,7 @@ export function run({ src, log = console.log } = {}) {
   // 1.11 the full cycle: phases, roles, links, and the same wording rules
   const phases = new Set(D.CPHASES.map(([p]) => p));
   const ids = new Set([...MISSIONS.map((m) => 'm' + m.n), ...QUESTS.map((q, i) => 'q' + (i + 1))]);
-  const ifs = new Set();
+  const ifs = new Set(); const titles = new Set();
   D.CYCLE.forEach((c, ci) => {
     const at = `Cycle ${ci + 1} (${c.t})`;
     if (!phases.has(c.phase)) fail(at, `phase ${c.phase} is not in CPHASES`);
@@ -174,13 +174,18 @@ export function run({ src, log = console.log } = {}) {
     (c.see || []).forEach((id) => { if (!ids.has(id)) fail(at, `see ${id} is no mission or quest`); });
     if (!c.path?.length) fail(at, 'needs a normal path');
     if (!c.edges?.length) fail(at, 'needs its exceptions');
-    (c.path || []).forEach(([k, t], i) => { if (!roles.has(k)) fail(`${at} step ${i + 1}`, `who ${k} is not a role`); if (!str(t)) fail(`${at} step ${i + 1}`, 'empty'); });
+    (c.path || []).forEach(([k, t, how], i) => {
+      if (!roles.has(k)) fail(`${at} step ${i + 1}`, `who ${k} is not a role`);
+      if (!str(t) || !str(how)) fail(`${at} step ${i + 1}`, 'needs a title and what happens');
+      if (titles.has(t)) fail(`${at} step ${i + 1}`, `the title “${t}” is used twice: the play-through would not tell them apart`);
+      titles.add(t);
+    });
     (c.edges || []).forEach((e, i) => {
       if (!str(e.if) || !str(e.then)) fail(`${at} exception ${i + 1}`, 'needs if and then');
       if (ifs.has(e.if)) fail(`${at} exception ${i + 1}`, `“${e.if}” is listed twice`);
       ifs.add(e.if);
     });
-    [c.t, c.ends, ...(c.path || []).map(([, t]) => t), ...(c.edges || []).flatMap((e) => [e.if, e.then, e.refuse])].filter(Boolean).forEach((t) => {
+    [c.t, c.ends, ...(c.path || []).flatMap(([, t, how]) => [t, how]), ...(c.edges || []).flatMap((e) => [e.if, e.then, e.refuse])].filter(Boolean).forEach((t) => {
       if (((t.match(/`/g) || []).length) % 2) fail(at, `odd backtick in “${t}”`);
       [...t.matchAll(/\{([A-Z][A-Z0-9_]*)\}/g)].forEach(([, x]) => { if (!KIND[x]) fail(at, `{${x}} has no colour in KIND`); });
       if (FORBIDDEN.test(t)) fail(at, `other-desk or credential word in “${t}”`);

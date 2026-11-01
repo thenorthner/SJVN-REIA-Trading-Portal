@@ -17,7 +17,7 @@ they play on, the Full cycle page (`CYCLE`), and the three shipped copies (sourc
 | 1.8 | REIA-only wording: no trading / hydro / thermal / exchange / other-desk words, no passwords | Beta testers must never learn of other desks |
 | 1.9 | Quiz fairness: a step whose text says another role can also do it keeps that role out of the options | A right answer marked wrong |
 | 1.10 | No duplicate step titles inside a quest; `opt`/`noquiz` are booleans | Ambiguous quiz questions |
-| 1.11 | Full cycle: each stage has a phase from `CPHASES`, a path of real roles, exceptions with `if` and `then` (no `if` twice), `see` ids that exist; every mission and side quest is linked from a stage; 1.5 and 1.8 apply to its text, and it names no mission or quest by number | A stage that links nowhere, or a quest no stage reaches, leaves a hole in the one-page picture |
+| 1.11 | Full cycle: each stage has a phase from `CPHASES`, a path of real roles, each step with a title (none used twice) and what happens, exceptions with `if` and `then` (no `if` twice), `see` ids that exist; every mission and side quest is linked from a stage; 1.5 and 1.8 apply to its text, and it names no mission or quest by number | A stage that links nowhere, or a quest no stage reaches, leaves a hole in the one-page picture |
 
 ## Layer 2 — Labels against the code (automated: `check-labels.mjs --all`)
 
@@ -58,6 +58,11 @@ For each of the side quests:
   found by the filter under its own stage; nonsense finds nothing; clearing brings all back. A stage chip
   scrolls to its stage below the top bar; a play link opens the quest and Back returns. My role lights
   exactly that role's path steps. The Map's link opens the page.
+- Full cycle, played (`run`): the Map's Play opens the page and plays all 57 steps in order. Each
+  step is lit on the page; the bar names its stage, step and player and marks the stages; a switch
+  dialog at exactly each change of log-in; the drawer (every 7th step and the last) has the title,
+  What happens, the stage's exceptions and its play links. Finish: the counts and XP, saved as `run`,
+  back on the page marked played. A step on the page opens its drawer; `#run` lands on the page.
 
 The portal copy has no e2e file of its own: copy `e2e-quests.js` into `frontend/public/reia-playbook/`
 for the run, and delete it after.
@@ -66,6 +71,18 @@ for the run, and delete it after.
 
 `export.mjs` writes the offline file and the portal copy; the portal copy runs under the portal's
 CSP (script from `/reia-playbook/playbook.js`, no inline script) and matches the source.
+
+## Results, 1-Nov-2026 (Full cycle, playable)
+
+The Full cycle plays end to end like a mission: 57 steps (each with a title, numbered FC6.3 for stage
+6, step 3), the log-in switches, a stage bar, and each step's drawer with its stage's exceptions.
+
+| Layer | Run | Result |
+|---|---|---|
+| 1 Data | `test-quests.mjs`, 1.11 with titles | all pass |
+| 2 Labels | `check-labels.mjs`: 334 | all found |
+| 4 Browser | `e2e-quests.js` on `index.html`: 3,931 checks (305 for the play-through) | all pass |
+| 4 Phone | offline copy at 375 px, playing | no sideways scroll; the page follows the step |
 
 ## Results, 1-Nov-2026 (Full cycle)
 

@@ -274,6 +274,47 @@ export async function run({ src } = {}) {
   await route('#map');
   await click('.cy-cta [data-go="cycle"]');
   ok(location.hash === '#cycle', 'cycle: the map’s link does not open it');
+  // Play the full cycle end to end, from the map's button: a switch at every change of
+  // log-in, the stage named in the bar, each step's drawer with its stage's exceptions.
+  const RUN = CYCLE.flatMap((c, ci) => c.path.map(([who, t, how]) => ({ who, t, how, stage:ci })));
+  await route('#map'); await click('.cy-cta [data-play="run"]');
+  ok(location.hash === '#cycle' && document.body.classList.contains('playing'), `run: the map's Play went to ${location.hash}`);
+  let runSw = 0;
+  for (const [i, s] of RUN.entries()) {
+    const at = `run step ${i + 1} (${plain(s.t)})`;
+    ok($('[data-step="run:' + i + '"]')?.classList.contains('cur'), `${at}: not lit on the page`);
+    ok(txt($('.hud-txt b')) === plain(s.t) && txt($('.hud-txt small')).startsWith(`Stage ${s.stage + 1} of ${CYCLE.length}: ${CYCLE[s.stage].t} · Step ${i + 1} of ${RUN.length} · ${R[s.who].name}`), `${at}: the bar reads “${txt($('.hud-txt small'))}” “${txt($('.hud-txt b'))}”`);
+    ok($$('.hud-dots span').length === CYCLE.length && $$('.hud-dots span.on').length === 1 && $$('.hud-dots span.past').length === s.stage, `${at}: the bar's stage marks`);
+    if (i % 7 === 0 || i === RUN.length - 1) {
+      await click('[data-hud="info"]');
+      const d = $('#drawer'); const secs = Object.fromEntries($$('.dsec', d).map((x) => [txt($('h4', x)), x]));
+      ok(txt($('h2', d)) === plain(s.t) && body(secs['What happens']) === plain(s.how), `${at}: drawer title or What happens`);
+      const eh = `If it goes differently at this stage (${CYCLE[s.stage].edges.length})`;
+      ok(!!secs[eh] && $$('li', secs[eh]).length === CYCLE[s.stage].edges.length, `${at}: drawer lists ${secs[eh] ? $$('li', secs[eh]).length : 'no'} exceptions`);
+      ok(JSON.stringify($$('[data-go]', secs['Play this stage step by step'] || d).map((b) => b.dataset.go)) === JSON.stringify(CYCLE[s.stage].see), `${at}: drawer play links`);
+      await key('Escape');
+    }
+    await click('[data-hud="next"]');
+    const sw = $('#switch'); const from = (() => { for (let k = i; k >= 0; k--) if (RUN[k].who !== 'X') return RUN[k].who; return null; })();
+    const nx = RUN[i + 1];
+    if (nx) {
+      const expect = nx.who !== 'X' && from !== nx.who;
+      ok(!sw.hidden === expect, `${at}: switch dialog ${sw.hidden ? 'missing' : 'shown'} before step ${i + 2}`);
+      if (expect) { runSw++; ok(txt($('h3', sw)).endsWith(R[nx.who].name), `${at}: switch to “${txt($('h3', sw))}”`); await click($('[data-sw="go"]', sw)); }
+    }
+  }
+  const runLogins = RUN.filter((s, i) => s.who !== 'X' && (() => { for (let k = i - 1; k >= 0; k--) if (RUN[k].who !== 'X') return RUN[k].who; return null; })() !== s.who).length;
+  ok(runSw === runLogins - 1, `run: ${runSw} switch dialogs, expected ${runLogins - 1}`);
+  const fin = $('#switch');
+  ok(!fin.hidden && txt($('.eyebrow', fin)) === 'Full cycle complete' && txt($('.sw-hint', fin)) === `${RUN.length} steps, ${runLogins} log-ins. Marking it done adds ${RUN.length * 10} XP.`, `run: finish reads “${txt($('.eyebrow', fin))}” “${txt($('.sw-hint', fin))}”`);
+  await click($('[data-sw="done"]', fin));
+  ok(stored().done?.run === true && location.hash === '#cycle' && !document.body.classList.contains('playing'), 'run: not saved as done, or play left on');
+  ok(txt($('.cy-act-n')).endsWith('played ✓'), 'run: the page does not say it was played');
+  await click('[data-step="run:20"]');
+  ok(txt($('#drawer h2')) === plain(RUN[20].t) && txt($('#drawer .d-top small')).startsWith(`Full cycle · stage ${RUN[20].stage + 1} of`), 'run: a step on the page does not open its drawer');
+  await key('Escape');
+  await route('#run');
+  ok(location.hash === '#cycle' || $('#tabs [aria-current="page"]')?.dataset.go === 'cycle', 'run: #run does not land on the cycle');
 
   window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr);
   ok(!errors.length, `page errors: ${errors.join(' | ')}`);

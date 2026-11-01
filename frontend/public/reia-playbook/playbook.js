@@ -1091,18 +1091,19 @@ const QUESTS = [
 ];
 
 /* ───────────────────────── data: the complete cycle ─────────────────────────
-   The whole desk on one page: each stage's normal path, then every way it can
-   go differently and what the platform does then. Labels, refusals and
+   The whole desk on one page: each stage's normal path as [who, title, what
+   happens], then every way it can go differently and what the platform does
+   then. The path plays end to end like a mission ("run"). Labels, refusals and
    statuses are the platform's own, as in the missions; `see` opens the mission
    or side quest that plays the stage step by step. */
 const CPHASES = [['setup','Once per deal'],['month','Every month'],['wrong','When a buyer defaults'],['year','Each quarter and year'],['always','Any day']];
 const CYCLE = [
 { phase:'setup', t:'Onboard the companies (KYC)', ends:'Company {APPROVED}, bank account verified', see:['m1'],
   path:[
-    ['M','`+ Onboard Stakeholder`: name, PAN, GSTIN, address, signatory, contact and bank. The company is {PENDING}.'],
-    ['M','Fill the regulatory checklist (8 items for a seller, 4 for a buyer): reference, issuer, dates, document. Each item {SUBMITTED}. The company can upload its own evidence from its portal.'],
-    ['C','Decide each item: {VERIFIED}, {REJECTED} or not applicable.'],
-    ['C','`Standard Approval`: the company is {APPROVED}, and its bank account is verified with it.'],
+    ['M','Onboard the company','`+ Onboard Stakeholder`: name, PAN, GSTIN, address, signatory, contact and bank. The company is {PENDING}.'],
+    ['M','Fill the regulatory checklist','Fill the regulatory checklist (8 items for a seller, 4 for a buyer): reference, issuer, dates, document. Each item {SUBMITTED}. The company can upload its own evidence from its portal.'],
+    ['C','Decide each document','Decide each item: {VERIFIED}, {REJECTED} or not applicable.'],
+    ['C','Approve the company','`Standard Approval`: the company is {APPROVED}, and its bank account is verified with it.'],
   ],
   edges:[
     { if:'A PAN or GSTIN is in the wrong shape', then:'A popup says so as soon as you leave the field. One already on another company is refused.' },
@@ -1120,9 +1121,9 @@ const CYCLE = [
 
 { phase:'setup', t:'Give the companies their log-ins', ends:'Each company signed in, with its own team', see:['m2'],
   path:[
-    ['A','`Add Team Member` › `Add to team`: the company’s first log-in, at Level 3, with a temporary password.'],
-    ['S','First sign-in: a popup forces a new password. The buyer does the same.'],
-    ['S','Level 3 adds its own Level 1 makers and Level 2 checkers under My Team.'],
+    ['A','Create the company’s first log-in','`Add Team Member` › `Add to team`: the company’s first log-in, at Level 3, with a temporary password.'],
+    ['S','Sign in and set a new password','First sign-in: a popup forces a new password. The buyer does the same.'],
+    ['S','Build the company’s own team','Level 3 adds its own Level 1 makers and Level 2 checkers under My Team.'],
   ],
   edges:[
     { if:'The REIA desk wants to create a company user', then:'It cannot: only SJVN Admin (or IT Super Admin) manages company log-ins.' },
@@ -1135,10 +1136,10 @@ const CYCLE = [
 
 { phase:'setup', t:'Contracts: PPA, PSA and the mapping', ends:'PPA and PSA {ACTIVE}, the PSA mapped to the PPA', see:['m3','q11','q12'],
   path:[
-    ['M','`+ New Contract` › `Create Draft Contract`, once for the PPA (seller → SJVN) and once for the PSA (SJVN → buyer). Both {DRAFT}.'],
-    ['M','`+ Map PSA to this PPA` › `Save Map`: allocation % and Effective From.'],
-    ['M','`Update Lifecycle Stage`: {UNDER_NEGOTIATION}.'],
-    ['C','{SIGNED} once the signed agreement is on file, then {ACTIVE} from the tenure start.'],
+    ['M','Draft the PPA and the PSA','`+ New Contract` › `Create Draft Contract`, once for the PPA (seller → SJVN) and once for the PSA (SJVN → buyer). Both {DRAFT}.'],
+    ['M','Map the PSA to the PPA','`+ Map PSA to this PPA` › `Save Map`: allocation % and Effective From.'],
+    ['M','Move both into negotiation','`Update Lifecycle Stage`: {UNDER_NEGOTIATION}.'],
+    ['C','Sign them and make them live','{SIGNED} once the signed agreement is on file, then {ACTIVE} from the tenure start.'],
   ],
   edges:[
     { if:'The maker tries to sign or activate', then:'The maker moves a contract only between DRAFT and UNDER_NEGOTIATION.', refuse:'Moving a contract to SIGNED is the REIA checker’s decision.' },
@@ -1158,8 +1159,8 @@ const CYCLE = [
 
 { phase:'setup', t:'Payment security: the buyer’s LC', ends:'LC {ACTIVE}, bank confirmation received', see:['m4','q15'],
   path:[
-    ['M','`+ Instrument` › `Save`: mechanism, limit, the bank’s LC number, validity. The LC is {ACTIVE}; its SFMS column reads Pending.'],
-    ['C','`Record bank confirmation` › `Confirm`: the SFMS reference (MT700 / MT707 for an LC, MT760 / MT767 for a guarantee).'],
+    ['M','Record the buyer’s LC','`+ Instrument` › `Save`: mechanism, limit, the bank’s LC number, validity. The LC is {ACTIVE}; its SFMS column reads Pending.'],
+    ['C','Record the bank’s confirmation','`Record bank confirmation` › `Confirm`: the SFMS reference (MT700 / MT707 for an LC, MT760 / MT767 for a guarantee).'],
   ],
   edges:[
     { if:'The validity ends before it starts', then:'Refused by the form as soon as the date is typed, and by the server.', refuse:'The validity cannot end before it starts' },
@@ -1174,10 +1175,10 @@ const CYCLE = [
 
 { phase:'month', t:'Energy for the month', ends:'Energy {LOCKED}: ready to bill', see:['m5','q17'],
   path:[
-    ['M','`+ Record Energy Data` › `Save`: the PPA, the month, Provisional or Final, the source (JMR / REA) and the MWh. {DRAFT}.'],
-    ['C','`Validate`: {VALIDATED}. The seller sees the figure from here on.'],
-    ['S','`Accept` › `Accept the figure`: {ACCEPTED}.'],
-    ['C','`Lock`: {LOCKED}. Only a locked figure is billed.'],
+    ['M','Record the month’s energy','`+ Record Energy Data` › `Save`: the PPA, the month, Provisional or Final, the source (JMR / REA) and the MWh. {DRAFT}.'],
+    ['C','Validate the figure','`Validate`: {VALIDATED}. The seller sees the figure from here on.'],
+    ['S','The seller accepts the figure','`Accept` › `Accept the figure`: {ACCEPTED}.'],
+    ['C','Lock the figure','`Lock`: {LOCKED}. Only a locked figure is billed.'],
   ],
   edges:[
     { if:'The figure disagrees with another source for the month', then:'Validation sends it to {DISPUTED}. Re-record it, or lock it with a recorded reason.' },
@@ -1193,11 +1194,11 @@ const CYCLE = [
 
 { phase:'month', t:'Bills and their approval', ends:'Both bills {APPROVED}, the buyer’s bill {SENT}', see:['m6','q8'],
   path:[
-    ['M','`+ Generate Invoice` on the PSA: SJVN’s bill on the buyer, {DRAFT}. Then the same on the PPA: SJVN’s own figure, which stays DRAFT as the yardstick.'],
-    ['S','`+ Create Invoice` › `Submit to SJVN`: the seller’s own bill, {SUBMITTED}.'],
-    ['M','`Validate vs System` (MATCHED), the Verification Checklist (`Save Verification`), then `Submit for SJVN Approval` on both bills: {UNDER_APPROVAL}.'],
-    ['C','`Approve Level 1`. Above ₹1 lakh Finance signs `Approve Level 2`; above ₹10 lakh the HOD (or Management) signs `Approve Level 3`. The bill is {APPROVED}.'],
-    ['M','`Send Email to Buyer`: {SENT}. The bill is presented, and its due date and dispute window start.'],
+    ['M','Raise SJVN’s bills','`+ Generate Invoice` on the PSA: SJVN’s bill on the buyer, {DRAFT}. Then the same on the PPA: SJVN’s own figure, which stays DRAFT as the yardstick.'],
+    ['S','The seller submits its own bill','`+ Create Invoice` › `Submit to SJVN`: the seller’s own bill, {SUBMITTED}.'],
+    ['M','Verify and send into approval','`Validate vs System` (MATCHED), the Verification Checklist (`Save Verification`), then `Submit for SJVN Approval` on both bills: {UNDER_APPROVAL}.'],
+    ['C','Approve, level by level','`Approve Level 1`. Above ₹1 lakh Finance signs `Approve Level 2`; above ₹10 lakh the HOD (or Management) signs `Approve Level 3`. The bill is {APPROVED}.'],
+    ['M','Send the bill to the buyer','`Send Email to Buyer`: {SENT}. The bill is presented, and its due date and dispute window start.'],
   ],
   edges:[
     { if:'The month is already billed on this contract', then:'Refused, across every version of the contract. A bill raised in error is cancelled first; a correction is a supplementary.', refuse:'… already has a … bill for … — … (…). Cancel that one first, or raise a Supplementary for a correction.' },
@@ -1219,11 +1220,11 @@ const CYCLE = [
 
 { phase:'month', t:'Disputes', ends:'Dispute {CLOSED}, a credit note issued if accepted', see:['m7'],
   path:[
-    ['B','`Raise a dispute on this bill` › `Submit Dispute`: amount, charge line, reason, evidence. The dispute is {RAISED}; the bill shows {DISPUTED}.'],
-    ['C','`Acknowledge`, then `Start Review`: {UNDER_REVIEW}.'],
-    ['H','`Confirm Resolution`: accepted in full or part ({RESOLVED_ACCEPTED}, a draft credit note made), or rejected.'],
-    ['C','`Approve & issue` the credit note: {ISSUED}. The bill’s balance falls.'],
-    ['B','`Accept resolution` › `Accept and close`: {CLOSED}.'],
+    ['B','The buyer raises a dispute','`Raise a dispute on this bill` › `Submit Dispute`: amount, charge line, reason, evidence. The dispute is {RAISED}; the bill shows {DISPUTED}.'],
+    ['C','Acknowledge and review it','`Acknowledge`, then `Start Review`: {UNDER_REVIEW}.'],
+    ['H','Decide the dispute','`Confirm Resolution`: accepted in full or part ({RESOLVED_ACCEPTED}, a draft credit note made), or rejected.'],
+    ['C','Issue the credit note','`Approve & issue` the credit note: {ISSUED}. The bill’s balance falls.'],
+    ['B','The buyer accepts and closes','`Accept resolution` › `Accept and close`: {CLOSED}.'],
   ],
   edges:[
     { if:'More than 15 days have passed since the bill was presented', then:'The bill is conclusive: no dispute can be raised.', refuse:'This bill is now conclusive — the 15-day dispute window (from …) has passed.' },
@@ -1241,9 +1242,9 @@ const CYCLE = [
 
 { phase:'month', t:'Correct a bill already out: notes, arrears, supplementaries', ends:'Note {ISSUED}, or the new bill {SENT}', see:['q2','q3'],
   path:[
-    ['M','`+ Raise Note` › `Save as draft`: debit (owes more) or credit (owes less), reason, taxable value, tax. {DRAFT}. Finance can raise notes too.'],
-    ['C','`Approve & issue` in Notes for Approval: {ISSUED}. A debit note becomes its own supplementary bill; a credit note is set against the bill.'],
-    ['M','For a past month: `+ Arrear Bill` › `Raise Arrear`, or `+ Supplementary` › `Create Supplementary`. It climbs the same ladder by amount and is sent like any bill.'],
+    ['M','Raise a debit or credit note','`+ Raise Note` › `Save as draft`: debit (owes more) or credit (owes less), reason, taxable value, tax. {DRAFT}. Finance can raise notes too.'],
+    ['C','Approve and issue the note','`Approve & issue` in Notes for Approval: {ISSUED}. A debit note becomes its own supplementary bill; a credit note is set against the bill.'],
+    ['M','Arrear or supplementary for a past month','For a past month: `+ Arrear Bill` › `Raise Arrear`, or `+ Supplementary` › `Create Supplementary`. It climbs the same ladder by amount and is sent like any bill.'],
   ],
   edges:[
     { if:'The bill is still a draft, in approval or sent back', then:'Not issued yet, so it is corrected itself, not by a note.', refuse:'The invoice is still a draft — correct the draft instead of raising a note' },
@@ -1263,8 +1264,8 @@ const CYCLE = [
 
 { phase:'month', t:'The buyer pays: rebate and surcharge', ends:'Bill {PAID}', see:['m8','q1','q4'],
   path:[
-    ['B','`Intimate payment to SJVN` › `Send to SJVN Finance`: amount, date, mode, UTR. {SUBMITTED}.'],
-    ['F','`Confirm receipt` › `Confirm and record the payment`, at the value date in SJVN’s bank: {PAID}. Only Finance says money arrived.'],
+    ['B','The buyer intimates its payment','`Intimate payment to SJVN` › `Send to SJVN Finance`: amount, date, mode, UTR. {SUBMITTED}.'],
+    ['F','Finance confirms the money arrived','`Confirm receipt` › `Confirm and record the payment`, at the value date in SJVN’s bank: {PAID}. Only Finance says money arrived.'],
   ],
   edges:[
     { if:'The buyer’s Level 1 maker sends the intimation', then:'It waits at {PENDING_CHECKER}; the buyer’s checker sends it on or returns it ({RETURNED_BY_CHECKER}).' },
@@ -1284,9 +1285,9 @@ const CYCLE = [
 
 { phase:'month', t:'Pay the seller: pay-when-paid', ends:'Seller’s bill {PAID}', see:['m9','q5'],
   path:[
-    ['F','Developer Release Planner: what buyers paid that is each generator’s energy share, what has gone out, what can be released now.'],
-    ['C','`Release to Generator`: net amount, TDS, fund source, date and reference. The seller’s bill is {PAID}. Finance can release too.'],
-    ['S','Sees the money under Latest payments from SJVN, with no other company named.'],
+    ['F','See what can be released','Developer Release Planner: what buyers paid that is each generator’s energy share, what has gone out, what can be released now.'],
+    ['C','Release to the generator','`Release to Generator`: net amount, TDS, fund source, date and reference. The seller’s bill is {PAID}. Finance can release too.'],
+    ['S','The seller sees the payment','Sees the money under Latest payments from SJVN, with no other company named.'],
   ],
   edges:[
     { if:'The release asks for more than is available', then:'Refused: never more than the buyer realised, nor more than the bill less the rebate SJVN earns.', refuse:'₹2,17,80,000 is more than the ₹2,14,53,300 left on … (₹2,17,80,000 owed, less the 1.50% early-payment rebate it earns if paid today).' },
@@ -1298,10 +1299,10 @@ const CYCLE = [
 
 { phase:'month', t:'Reconcile the month', ends:'Statement {CLOSED}, signed by both sides', see:['m10'],
   path:[
-    ['X','Every hour: last month’s statement for each ACTIVE contract, {PENDING_SIGN_OFF} (or {NEEDS_REVIEW} where a line differs).'],
-    ['C','`Override` a line that differs, with why the variance is accepted.'],
-    ['F','`Concur for Finance` on a statement above ₹1 crore billed.'],
-    ['C','`✓ SJVN Agree & Sign-Off`. The buyer and the seller each press `I agree — sign off`: {CLOSED}.'],
+    ['X','A statement for each contract','Every hour: last month’s statement for each ACTIVE contract, {PENDING_SIGN_OFF} (or {NEEDS_REVIEW} where a line differs).'],
+    ['C','Override a line that differs','`Override` a line that differs, with why the variance is accepted.'],
+    ['F','Finance concurs above ₹1 crore','`Concur for Finance` on a statement above ₹1 crore billed.'],
+    ['C','Both sides sign off','`✓ SJVN Agree & Sign-Off`. The buyer and the seller each press `I agree — sign off`: {CLOSED}.'],
   ],
   edges:[
     { if:'The statement was made before payments landed', then:'`Regenerate statement (Re-sync)`.' },
@@ -1316,12 +1317,12 @@ const CYCLE = [
 
 { phase:'month', t:'Close the month: Finance, SAP, CERC and DSM', ends:'Posting {POSTED}, Form-IV {SUBMITTED}', see:['q7','q9','q22','q10'],
   path:[
-    ['M','Month-Close Board: `Generate all ready (n)` raises every ready bill; `Raise LPS bills` raises the month’s surcharge.'],
-    ['M','Finance Posting (FI): `Prepare the posting` for the month and what is booked: {PREPARED}.'],
-    ['C','`Push to SAP`, then `Read back from SAP`: {POSTED} on SAP’s FI documents. A posting not sent to SAP is booked with `Post` and Finance’s voucher.'],
-    ['M','CERC Form-IV: `Prepare Form-IV` › `Create Filing` from the month’s bills: {DRAFT}.'],
-    ['C','`Mark Submitted to CERC` › `Confirm and submit` on CERC’s reference, by the 15th: {SUBMITTED}, then locked.'],
-    ['M','Each week, DSM: `Upload official NRPC DSA`, `Raise from NRPC statement`, `Generate supplementary bill`; the bill climbs the ladder.'],
+    ['M','Raise every ready bill','Month-Close Board: `Generate all ready (n)` raises every ready bill; `Raise LPS bills` raises the month’s surcharge.'],
+    ['M','Prepare the month’s posting','Finance Posting (FI): `Prepare the posting` for the month and what is booked: {PREPARED}.'],
+    ['C','Book it in SAP','`Push to SAP`, then `Read back from SAP`: {POSTED} on SAP’s FI documents. A posting not sent to SAP is booked with `Post` and Finance’s voucher.'],
+    ['M','Prepare the Form-IV return','CERC Form-IV: `Prepare Form-IV` › `Create Filing` from the month’s bills: {DRAFT}.'],
+    ['C','File it with CERC','`Mark Submitted to CERC` › `Confirm and submit` on CERC’s reference, by the 15th: {SUBMITTED}, then locked.'],
+    ['M','Bill the week’s DSM','Each week, DSM: `Upload official NRPC DSA`, `Raise from NRPC statement`, `Generate supplementary bill`; the bill climbs the ladder.'],
   ],
   edges:[
     { if:'A row on the board cannot be raised', then:'The popup says why. A month that has not ended cannot be picked.' },
@@ -1339,9 +1340,9 @@ const CYCLE = [
 
 { phase:'wrong', t:'When a buyer defaults', ends:'Invocation {FUNDS_RECEIVED}, or the power sold elsewhere and {RECOVERED}', see:['q14','q16','q12'],
   path:[
-    ['M','`Invoke waterfall` › `Confirm invocation` on the PSA, for everything 30 days or more past due: {NOTICE_ISSUED}, the buyer told.'],
-    ['C','`Claimed` › `Save` when the claim reaches the bank ({CLAIMED}); `Funds in` when it pays ({FUNDS_RECEIVED}).'],
-    ['M','Or `+ Record Diversion` › `Record`: the power sold elsewhere ({RECORDED}), then `Recover against dues` ({RECOVERED}).'],
+    ['M','Invoke the security','`Invoke waterfall` › `Confirm invocation` on the PSA, for everything 30 days or more past due: {NOTICE_ISSUED}, the buyer told.'],
+    ['C','Claim from the bank','`Claimed` › `Save` when the claim reaches the bank ({CLAIMED}); `Funds in` when it pays ({FUNDS_RECEIVED}).'],
+    ['M','Or sell the power elsewhere','Or `+ Record Diversion` › `Record`: the power sold elsewhere ({RECORDED}), then `Recover against dues` ({RECOVERED}).'],
   ],
   edges:[
     { if:'Which security pays first', then:'The buyer’s LC, then the payment security fund, then the corpus fund. A seller’s guarantee answers only for the seller.' },
@@ -1356,10 +1357,10 @@ const CYCLE = [
 
 { phase:'year', t:'Each quarter and each year', ends:'Certificates filed, CUF trued up, the year’s returns and rates in place', see:['q6','q13','q22','q25'],
   path:[
-    ['F','Each quarter: `+ File a certificate` (Form 16A) for each seller, then reconcile TDS against Form 16A.'],
-    ['M','Each contract year: `Raise true-up note` where the CUF fell short. The checker approves it in Notes for Approval.'],
-    ['M','By 30 April: `Roll up annual` on Form-IV once the twelve monthlies are filed; the checker files it.'],
-    ['A','Each April, the year’s LPS base rate as a new row in the masters’ schedule; each new year, the holiday calendar.'],
+    ['F','File Form 16A each quarter','Each quarter: `+ File a certificate` (Form 16A) for each seller, then reconcile TDS against Form 16A.'],
+    ['M','True up the CUF each contract year','Each contract year: `Raise true-up note` where the CUF fell short. The checker approves it in Notes for Approval.'],
+    ['M','Roll up the annual Form-IV','By 30 April: `Roll up annual` on Form-IV once the twelve monthlies are filed; the checker files it.'],
+    ['A','Set the year’s rate and holidays','Each April, the year’s LPS base rate as a new row in the masters’ schedule; each new year, the holiday calendar.'],
   ],
   edges:[
     { if:'A month of the contract year is not locked', then:'The CUF waits: Waiting on locked energy.' },
@@ -1371,11 +1372,11 @@ const CYCLE = [
 
 { phase:'always', t:'People and access, any day', ends:'The work goes on, under each officer’s own name', see:['q18','q19','q20','q24','q26','q21','q23'],
   path:[
-    ['A','Additional charge: `Record a charge` for an officer away (up to 90 days): {IN_FORCE}. The holder acts as them under their own name.'],
-    ['M','Break-glass when nobody holding a role can act: `Ask for break-glass`, opened on two approvals, one from Management.'],
-    ['A','Project Assignments and Role Powers: who works on which project, and which role may do what.'],
-    ['M','Every day: the Notification Board, Quick Connect and the Reports tab.'],
-    ['X','Every action is logged: who, when, and the value before and after. SJVN Admin reads it in the Audit Trail and checks nothing was altered (`Verify full chain`).'],
+    ['A','Record an additional charge','Additional charge: `Record a charge` for an officer away (up to 90 days): {IN_FORCE}. The holder acts as them under their own name.'],
+    ['M','Break-glass when nobody can act','Break-glass when nobody holding a role can act: `Ask for break-glass`, opened on two approvals, one from Management.'],
+    ['A','Assign projects and powers','Project Assignments and Role Powers: who works on which project, and which role may do what.'],
+    ['M','Keep up with messages and reports','Every day: the Notification Board, Quick Connect and the Reports tab.'],
+    ['X','Every action is logged','Who, when, and the value before and after, and the value before and after. SJVN Admin reads it in the Audit Trail and checks nothing was altered (`Verify full chain`).'],
   ],
   edges:[
     { if:'An officer would hold their own charge, or an administrator a desk charge', then:'Not allowed.' },
@@ -1429,6 +1430,12 @@ const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; 
 MISSIONS.forEach((m) => { m.id = 'm' + m.n; m.kind = 'Mission'; m.list = MISSIONS; });
 QUESTS.forEach((q, i) => { q.n = i + 1; q.id = 'q' + q.n; q.kind = 'Quest'; q.list = QUESTS; });
 const BOOK = Object.fromEntries([...MISSIONS, ...QUESTS].map((m) => [m.id, m]));
+// The full cycle plays on the same engine: one run through every stage's path,
+// from the Full cycle page (its home), each step keeping its stage.
+const RUN = { id:'run', kind:'Cycle', n:1, home:'cycle', name:'The full cycle', short:'Full cycle', screen:'', also:[],
+  steps:CYCLE.flatMap((c, ci) => c.path.map(([who, t, how]) => ({ who, t, how, stage:ci }))) };
+RUN.list = [RUN];
+BOOK.run = RUN;
 const doneKey = (m) => (m.kind === 'Mission' ? m.n : m.id);
 const isDone = (m) => !!P.done[doneKey(m)];
 const zoneName = (m) => (m.kind === 'Mission' ? (m.zone === 'setup' ? 'One-time setup' : 'Every month') : 'Side quest · ' + QZONES.find(([z]) => z === m.zone)[1]);
@@ -1508,7 +1515,10 @@ function stepLink(m, s) {
   if (main && !main.none && main.side === side) return main;
   return side === 'SJVN' ? null : { side, name:PORTAL_OF[side], url:SCREENS[side][PORTAL_OF[side]] };
 }
-const stepId = (m, i) => `${m.kind === 'Quest' ? 'Q' : 'M'}${m.n}.${i + 1}`;
+// A full-cycle step is numbered within its stage: FC6.3 is stage 6, step 3.
+const stepId = (m, i) => (m.kind === 'Cycle'
+  ? `FC${m.steps[i].stage + 1}.${i - m.steps.findIndex((x) => x.stage === m.steps[i].stage) + 1}`
+  : `${m.kind === 'Quest' ? 'Q' : 'M'}${m.n}.${i + 1}`);
 function feedbackUrl(m, s, i) {
   const from = `REIA Playbook ${stepId(m, i)} · ${m.short} · ${s.t}`.slice(0, 200);
   return '/feedback?from=' + encodeURIComponent(from);
@@ -1535,9 +1545,9 @@ function sessions(filter) {
 const TOTAL_STEPS = MISSIONS.reduce((a, m) => a + m.steps.length, 0);
 const LOGINS = sessions('all').filter((s) => s.who !== 'X').length;
 const QUEST_STEPS = QUESTS.reduce((a, q) => a + q.steps.length, 0);
-const MAXXP = (TOTAL_STEPS + QUEST_STEPS) * 10 + 100;
+const MAXXP = (TOTAL_STEPS + QUEST_STEPS + RUN.steps.length) * 10 + 100;
 const RANKS = [[0,'Trainee'],[0.2,'Desk Officer'],[0.45,'Senior Officer'],[0.7,'Desk Lead'],[1,'REIA Pro']];
-const xpNow = () => [...MISSIONS, ...QUESTS].reduce((a, m) => a + (isDone(m) ? m.steps.length * 10 : 0), 0) + (P.best || 0) * 10;
+const xpNow = () => [...MISSIONS, ...QUESTS, RUN].reduce((a, m) => a + (isDone(m) ? m.steps.length * 10 : 0), 0) + (P.best || 0) * 10;
 const rankOf = (x) => { let r = RANKS[0][1]; RANKS.forEach(([t, n]) => { if (x / MAXXP >= t - 1e-9) r = n; }); return r; };
 
 /* ───────────────────────── shell ───────────────────────── */
@@ -1560,6 +1570,7 @@ function paintTabs() {
 }
 
 function go(token, push = true) {
+  if (token === 'run') token = 'cycle';
   if (token === 'missions') token = 'm' + (P.lastM || (MISSIONS.find((m) => !isDone(m)) || MISSIONS[0]).n);
   const views = { map:viewMap, cycle:viewCycle, find:viewFind, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
   const playable = /^[mq]\d+$/.test(token);
@@ -1639,7 +1650,7 @@ function viewMap() {
         <div class="me-n"><b>${doneN}</b> of ${MISSIONS.length} missions done · <b>${questsN}</b> of ${QUESTS.length} side quests · best quiz <b>${P.best || 0}</b>/10 · ${x} XP</div>
         <button class="btn primary" type="button" data-go="m${next ? next.n : 1}">${ICON.play} ${next ? `Next: ${esc(next.short)}` : 'Replay mission 1'}</button>
       </div>
-      <p class="cy-cta"><button class="btn" type="button" data-go="cycle">The whole cycle on one page, every exception included →</button></p>
+      <p class="cy-cta"><button class="btn" type="button" data-play="run">${ICON.play} Play the whole cycle in one go</button> <button class="lnk" type="button" data-go="cycle">or read it on one page, every exception included →</button></p>
     </div>
     <div class="stats">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>
   </section>
@@ -1734,7 +1745,7 @@ function viewMission(id) {
   const main = ON_PORTAL ? placeLink(m.screen) : null;
   return `
   <nav class="mnav" aria-label="${m.kind === 'Quest' ? 'Side quests' : 'Missions'}">
-    ${m.kind === 'Quest' ? '<button class="lnk" type="button" data-go="quests">← All side quests</button>' : ''}
+    ${m.kind === 'Quest' ? '<button class="lnk" type="button" data-go="quests">← All side quests</button>' : '<button class="lnk" type="button" data-go="cycle">Full cycle</button>'}
     ${L.map((x) => `<button class="chip${isDone(x) ? ' done' : ''}" type="button" data-go="${x.id}"${x.n === n ? ' aria-current="true"' : ''} title="${esc(x.name)}">${x.n}</button>`).join('')}
     <span class="sp"></span>
     ${n > 1 ? `<button class="lnk" type="button" data-go="${L[n - 2].id}">← ${esc(L[n - 2].short)}</button>` : ''}
@@ -1793,6 +1804,7 @@ function tierTable(k) {
 /* ───────────────────────── drawer ───────────────────────── */
 let lastFocus = null;
 function lastWord(m) {
+  if (m.kind === 'Cycle') return 'The full cycle is done. Next month starts again at Energy; the quarter and the year come round in their turn.';
   if (m.kind === 'Quest') return m.n < QUESTS.length ? `Quest complete. Next side quest: ${esc(QUESTS[m.n].name)}.` : 'That was the last side quest. The board shows which are still open.';
   return m.n < MISSIONS.length ? `Mission complete. Next mission: ${esc(MISSIONS[m.n].name)}.` : 'The month is closed. Next month starts again at Energy.';
 }
@@ -1803,10 +1815,11 @@ function openDrawer(id, i) {
   const link = ON_PORTAL ? stepLink(m, s) : null;
   const lists = s.lists ? Object.entries(s.lists).map(([h, items]) => `<div class="dsec"><h4>${esc(h)}</h4><ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('') : '';
   drawer.innerHTML = `
-    <div class="d-top">${rb(s.who,'lg')}<div><small>${m.kind === 'Quest' ? 'Side quest' : 'Mission'} ${n} · step ${i + 1} of ${m.steps.length}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="d-top">${rb(s.who,'lg')}<div><small>${m.kind === 'Cycle' ? `Full cycle · stage ${s.stage + 1} of ${CYCLE.length} · step ${i + 1} of ${m.steps.length}` : `${m.kind === 'Quest' ? 'Side quest' : 'Mission'} ${n} · step ${i + 1} of ${m.steps.length}`}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
     <h2>${fmt(s.t)}</h2>
     <div class="dsec"><h4>Log-in</h4><div class="dlog">${s.who === 'X' ? ICON.auto : ICON.login}<span>${esc(login)}</span></div></div>
     ${s.where || link ? `<div class="dsec"><h4>Where</h4>${s.where ? `<p>${esc(s.where)}</p>` : ''}${link ? `<a class="golink" href="${esc(link.url)}" target="_blank" rel="noopener">${link.name === PORTAL_OF[s.who] ? `Open the ${esc(link.name)}` : 'Open this screen'} ↗ <small>${esc(link.url)}</small></a><p class="hint">Opens in a new tab, as whoever is signed in there: ${R[s.who].side === 'SJVN' ? `sign in as the ${esc(R[s.who].short)} first` : `sign in with the ${esc(R[s.who].short.toLowerCase())} company’s log-in first`}.</p>` : ''}</div>` : ''}
+    ${s.how ? `<div class="dsec"><h4>What happens</h4><p>${fmt(s.how)}</p></div>` : ''}
     ${s.press ? `<div class="dsec"><h4>Press</h4><div class="row">${s.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</div></div>` : ''}
     ${s.fill ? `<div class="dsec"><h4>Fill in</h4><ul>${s.fill.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
     ${lists}
@@ -1814,6 +1827,7 @@ function openDrawer(id, i) {
     ${s.rules ? `<div class="dsec"><h4>What the platform applies</h4><ul>${s.rules.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
     ${s.refuse ? `<div class="dsec"><h4>If it refuses, you see</h4>${s.refuse.map((x) => `<p class="quote">“${esc(x)}”</p>`).join('')}</div>` : ''}
     ${s.block ? `<div class="dsec"><h4>Blocked for the wrong role</h4><div class="row" style="color:var(--bad)">${ICON.lock}<span>${fmt(s.block)}</span></div></div>` : ''}
+    ${m.kind === 'Cycle' ? cycleDrawer(CYCLE[s.stage]) : ''}
     <div class="dsec"><h4>Next</h4><p>${next ? `${next.who !== s.who ? (next.who === 'X' ? 'The platform takes over: ' : `Hand over to ${esc(R[next.who].name)}: `) : 'Same person: '}${fmt(next.t)}` : lastWord(m)}</p></div>
     <div class="dsec"><h4>Something wrong with this step?</h4><div class="sid"><code>${stepId(m, i)}</code>${ON_PORTAL ? `<a class="golink" style="margin:0" href="${esc(feedbackUrl(m, s, i))}" target="_blank" rel="noopener">Report a problem ↗</a>` : '<span class="hint" style="margin:0">Quote this step’s number when you report it.</span>'}</div>${ON_PORTAL ? '<p class="hint">The feedback form opens with this step filled in as the page it is about.</p>' : ''}</div>
     <div class="dnav"><button class="btn" type="button" data-open="${id}:${i - 1}"${i === 0 ? ' disabled' : ''}>← Previous step</button><button class="btn" type="button" data-open="${id}:${i + 1}"${!next ? ' disabled' : ''}>Next step →</button></div>`;
@@ -1821,6 +1835,11 @@ function openDrawer(id, i) {
   drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); scrim.hidden = false;
   drawer.scrollTop = 0;
   const c = $('[data-close]', drawer); if (c) c.focus({ preventScroll:true });
+}
+// A full-cycle step's drawer: its stage's exceptions, and where to play the stage.
+function cycleDrawer(c) {
+  return `<div class="dsec"><h4>If it goes differently at this stage (${c.edges.length})</h4><ul class="cy-dl">${c.edges.map((e) => `<li><b>${fmt(e.if)}</b> ${fmt(e.then)}${e.refuse ? `<p class="quote">“${esc(e.refuse)}”</p>` : ''}</li>`).join('')}</ul></div>
+    <div class="dsec"><h4>Play this stage step by step</h4><div class="cy-dsee">${c.see.map((id) => `<button class="lnk" type="button" data-go="${id}">${esc(seeName(id))} →</button>`).join('')}</div></div>`;
 }
 function closeDrawer(silent) {
   if (!drawer.classList.contains('open')) return;
@@ -1840,12 +1859,15 @@ function startPlay(id) {
 function showStep() {
   if (!play) return;
   const m = BOOK[play.id]; const s = m.steps[play.i];
-  $$('.step').forEach((el) => el.classList.toggle('cur', el.dataset.step === `${play.id}:${play.i}`));
-  const el = $(`.step[data-step="${play.id}:${play.i}"]`);
+  $$('[data-step]').forEach((el) => el.classList.toggle('cur', el.dataset.step === `${play.id}:${play.i}`));
+  const el = $(`[data-step="${play.id}:${play.i}"]`);
   if (el) el.scrollIntoView({ block:'center', inline:'center', behavior: REDUCE ? 'auto' : 'smooth' });
   hud.hidden = false;
-  hud.innerHTML = `<div class="hud-dots">${m.steps.map((x, k) => `<span class="${k === play.i ? 'on' : k < play.i ? 'past' : ''}"></span>`).join('')}</div>
-    <div class="hud-row">${rb(s.who,'md')}<div class="hud-txt"><small>Step ${play.i + 1} of ${m.steps.length} · ${esc(R[s.who].name)}${s.opt ? ' · if needed' : ''}</small><b>${fmt(s.t)}</b></div>
+  // The full cycle's 57 steps would be hairlines: its bar counts stages.
+  const cyc = m.kind === 'Cycle';
+  const dots = cyc ? CYCLE.map((c, k) => (k === s.stage ? 'on' : k < s.stage ? 'past' : '')) : m.steps.map((x, k) => (k === play.i ? 'on' : k < play.i ? 'past' : ''));
+  hud.innerHTML = `<div class="hud-dots">${dots.map((c) => `<span class="${c}"></span>`).join('')}</div>
+    <div class="hud-row">${rb(s.who,'md')}<div class="hud-txt"><small>${cyc ? `Stage ${s.stage + 1} of ${CYCLE.length}: ${esc(CYCLE[s.stage].t)} · ` : ''}Step ${play.i + 1} of ${m.steps.length} · ${esc(R[s.who].name)}${s.opt ? ' · if needed' : ''}</small><b>${fmt(s.t)}</b></div>
     <div class="hud-btns"><button class="hb" type="button" data-hud="prev"${play.i === 0 ? ' disabled' : ''} aria-label="Previous step">←</button>${hudLink(m, s)}<button class="hb" type="button" data-hud="info">Details</button><button class="hb primary" type="button" data-hud="next">${play.i === m.steps.length - 1 ? 'Finish' : 'Next →'}</button><button class="hb" type="button" data-hud="exit" aria-label="Stop playing">✕</button></div></div>`;
 }
 function hudLink(m, s) {
@@ -1873,10 +1895,10 @@ function showSwitch(from, to) {
 }
 function finishPlay() {
   const m = BOOK[play.id]; const n = m.n; const done = isDone(m); const more = n < m.list.length;
-  const what = m.kind === 'Quest' ? 'Side quest' : 'Mission';
+  const what = m.kind === 'Quest' ? 'Side quest' : m.kind === 'Cycle' ? 'Full cycle' : 'Mission';
   const gain = done ? 0 : m.steps.length * 10;
   clearTimeout(swTimer);
-  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="${what} complete"><p class="eyebrow">${what} ${n} complete</p><h3>${esc(m.name)}</h3>
+  sw.innerHTML = `<div class="sw-box" role="dialog" aria-label="${what} complete"><p class="eyebrow">${what}${m.kind === 'Cycle' ? '' : ` ${n}`} complete</p><h3>${esc(m.name)}</h3>
     <div class="sw-row"><div class="sw-who">${playersOf(m).map((k) => rb(k,'md')).join('')}</div></div>
     <p class="sw-hint">${m.steps.length} steps, ${loginsIn(m)} log-ins.${gain ? ` Marking it done adds ${gain} XP.` : ' Already marked done.'}</p>
     <div class="sw-btns">${done ? '' : `<button class="btn primary" type="button" data-sw="done">${ICON.check} Mark done${more ? ' and go to the next' : ''}</button>`}${done && more ? `<button class="btn primary" type="button" data-sw="next">Next ${m.kind === 'Quest' ? 'quest' : 'mission'} →</button>` : ''}<button class="btn" type="button" data-sw="stay">Stay here</button></div></div>`;
@@ -1888,7 +1910,7 @@ function exitPlay() {
   play = null; clearTimeout(swTimer); swNext = null;
   sw.hidden = true; hud.hidden = true;
   document.body.classList.remove('playing');
-  $$('.step.cur').forEach((el) => el.classList.remove('cur'));
+  $$('[data-step].cur').forEach((el) => el.classList.remove('cur'));
 }
 
 /* ───────────────────────── view: players ───────────────────────── */
@@ -2157,6 +2179,7 @@ function viewCycle() {
     <div class="stats">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>
   </section>
   <nav class="cy-nav" aria-label="Stages">${CPHASES.map(([p, name]) => `<div class="cy-ph"><small>${esc(name)}</small><div>${CYCLE.map((c, i) => c.phase === p ? `<button class="chip" type="button" data-cy="${i + 1}">${i + 1} · ${esc(c.t)}</button>` : '').join('')}</div></div>`).join('')}</nav>
+  <div class="mact cy-act"><button class="btn primary" type="button" data-play="run">${ICON.play} Play the full cycle</button><span class="cy-act-n">${RUN.steps.length} steps, ${loginsIn(RUN)} log-ins, start to end${isDone(RUN) ? ' · played ✓' : ''}</span></div>
   <div class="tools cy-tools"><input class="search" id="cy-q" type="search" placeholder="Filter the exceptions, e.g. late, cancel, KYC" value="${esc(CY.q)}" aria-label="Filter the exceptions" autocomplete="off"><button class="btn" type="button" data-print>Print or save as PDF</button></div>
   ${P.me ? `<p class="me-bar-m">${rb(P.me,'sm')}Your steps as ${esc(R[P.me].short)} are lit. <button class="lnk" type="button" data-me="">Show everyone’s</button></p>` : ''}
   <div id="cy-out" aria-live="polite">${cycleStages()}</div>`;
@@ -2165,8 +2188,9 @@ function cycleStages() {
   const q = CY.q.trim(); const ws = q ? words(q) : [];
   const res = ws.map((w) => new RegExp(`(^|[^a-z0-9])${reEsc(w)}`));
   const hit = (hay) => res.every((re) => re.test(hay));
-  let shown = 0; let edges = 0;
+  let shown = 0; let edges = 0; let gi = 0;
   const html = CYCLE.map((c, i) => {
+    const first = gi; gi += c.path.length;
     const all = ws.length && hit(plain(c.t + ' ' + phaseName(c.phase)).toLowerCase());
     const es = !ws.length || all ? c.edges : c.edges.filter((e) => hit(edgeHay(e)));
     if (ws.length && !es.length) return '';
@@ -2177,7 +2201,7 @@ function cycleStages() {
         <p class="cy-meta"><span class="cy-who">${who.map((k) => rb(k,'sm')).join('')}</span><span>Ends: ${fmt(c.ends)}</span></p></div>
         <div class="cy-see"><small>Play it</small>${c.see.map((id) => `<button class="lnk" type="button" data-go="${id}">${esc(seeName(id))} →</button>`).join('')}</div></header>
       <div class="cy-cols">
-        <div><h3>The normal path</h3><ol class="cy-path${P.me ? ' mine' : ''}">${c.path.map(([k, t]) => `<li class="${k === P.me ? 'me' : ''}">${rb(k,'sm')}<span><b>${esc(R[k].short)}</b> ${fmt(t)}</span></li>`).join('')}</ol></div>
+        <div><h3>The normal path</h3><ol class="cy-path${P.me ? ' mine' : ''}">${c.path.map(([k, t, how], j) => `<li class="${k === P.me ? 'me' : ''}"><button class="cy-step" type="button" data-step="run:${first + j}">${rb(k,'sm')}<span><b>${fmt(t)}</b><small>${esc(R[k].short)} · ${stepId(RUN, first + j)}</small>${fmt(how)}</span></button></li>`).join('')}</ol></div>
         <div><h3>If it goes differently <span class="cy-c">${es.length}${es.length < c.edges.length ? ` of ${c.edges.length}` : ''}</span></h3>
           <ul class="cy-edges">${es.map((e) => `<li><b>${fmt(e.if)}</b><p>${fmt(e.then)}</p>${e.refuse ? `<p class="quote">“${esc(e.refuse)}”</p>` : ''}</li>`).join('')}</ul></div>
       </div></section>`;
@@ -2258,7 +2282,7 @@ document.addEventListener('click', (e) => {
   if (openEl) { if (openEl.disabled) return; const [id, k] = openEl.dataset.open.split(':'); openDrawer(id, Number(k)); return; }
   if (t.closest('[data-close]') || t === scrim) { closeDrawer(); return; }
   const playEl = t.closest('[data-play]');
-  if (playEl) { const id = playEl.dataset.play; if (current !== id) go(id); startPlay(id); return; }
+  if (playEl) { const id = playEl.dataset.play; const home = (BOOK[id] && BOOK[id].home) || id; if (current !== home) go(home); startPlay(id); return; }
   const doneEl = t.closest('[data-done]');
   if (doneEl) { const m = BOOK[doneEl.dataset.done]; const k = doneKey(m); P.done[k] = !P.done[k]; save(); go(m.id, false); return; }
   const hb = t.closest('[data-hud]');
@@ -2267,7 +2291,7 @@ document.addEventListener('click', (e) => {
   if (swb) {
     const a = swb.dataset.sw;
     if (a === 'go' && swNext) { swNext(); return; }
-    if (a === 'done' && play) { const m = BOOK[play.id]; P.done[doneKey(m)] = true; save(); const nx = m.list[m.n]; go(nx ? nx.id : (m.kind === 'Quest' ? 'quests' : 'map')); return; }
+    if (a === 'done' && play) { const m = BOOK[play.id]; P.done[doneKey(m)] = true; save(); const nx = m.list[m.n]; go(nx ? nx.id : m.home || (m.kind === 'Quest' ? 'quests' : 'map')); return; }
     if (a === 'next' && play) { const nx = BOOK[play.id].list[BOOK[play.id].n]; if (nx) go(nx.id); return; }
     if (a === 'stay') { exitPlay(); return; }
     return;
@@ -2301,7 +2325,7 @@ document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.id === 'pw-q') { PW.q = t.value; paintPowers(); return; }
   if (t.id === 'fd-q') { FD.q = t.value; paintFind(); return; }
-  if (t.id === 'cy-q') { CY.q = t.value; $('#cy-out').innerHTML = cycleStages(); return; }
+  if (t.id === 'cy-q') { CY.q = t.value; $('#cy-out').innerHTML = cycleStages(); if (play) showStep(); return; }
   if (t.id && t.id.startsWith('mv-')) {
     const k = t.id.slice(3);
     if (k === 'tds') MV.tds = t.checked; else MV[k] = Number(t.value);
