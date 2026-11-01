@@ -138,6 +138,7 @@ import delegationsRoutes from './routes/delegations.js';
 import circularsRoutes from './routes/circulars.js';
 import { projectScopeGuard, alertUncoveredProjects } from './services/projectScope.js';
 import { reiaBetaFilter } from './services/reiaBeta.js';
+import { counterpartyKycGuard } from './middleware/kycGate.js';
 
 // Read-level access to the trading desk screens. There is no TRADING_READ group
 // — TRADING_ALL is the read tier; TRADING_WRITE is the narrower acting tier.
@@ -205,6 +206,9 @@ app.use('/api', statutoryDeclarations(userFromToken));
 app.use('/api', projectScopeGuard(userFromToken));
 // Role powers: a power an administrator took from a role is refused before any router.
 app.use('/api', rolePowerGuard(userFromToken));
+// A seller or buyer whose company KYC is not approved reaches only its onboarding
+// routes (middleware/kycGate.js), as the screen allows; every data route refuses.
+app.use('/api', counterpartyKycGuard(userFromToken));
 // REIA beta (REIA_BETA=1): list answers lose the other desks' rows. A no-op otherwise.
 app.use('/api', reiaBetaFilter());
 // `dev` writes ANSI colour codes, which journalctl stores verbatim and every

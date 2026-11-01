@@ -84,7 +84,7 @@ export default function CounterpartyHome() {
                 <button key={key} type="button" className={period === key ? 'active' : ''} onClick={() => setPeriod(key)}>{key === 'FY' ? d.period.key === 'FY' ? d.period.label : label : label}</button>
               ))}
             </div>
-            <button type="button" className="btn btn-secondary" onClick={downloadSummary} disabled={busy}>{busy ? 'Preparing…' : 'Download summary (PDF)'}</button>
+            {!d.me.kyc_held && <button type="button" className="btn btn-secondary" onClick={downloadSummary} disabled={busy}>{busy ? 'Preparing…' : 'Download summary (PDF)'}</button>}
           </div>
         )}
       />
@@ -93,6 +93,7 @@ export default function CounterpartyHome() {
       {d.me.kyc_status && d.me.kyc_status !== 'APPROVED' && (
         <div className="ps-alert amber">
           Your company's KYC is <strong>{String(d.me.kyc_status).replace(/_/g, ' ').toLowerCase()}</strong>. Please submit required physical compliance documents directly to the SJVN REIA desk for intake and administrative verification.
+          {d.me.kyc_held && ' Your contracts, bills and payments show here once SJVN has approved it.'}
         </div>
       )}
 

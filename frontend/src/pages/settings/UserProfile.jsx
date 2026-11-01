@@ -1,5 +1,5 @@
 import React from 'react';
-import { usePortfolios } from '../../context/PortfolioContext.jsx';
+import { usePortfolios, usesPortfolios } from '../../context/PortfolioContext.jsx';
 import { PageHeader, Card, Badge, Field } from '../../components/ui.jsx';
 import PrivacyPanel from '../../gigw/PrivacyPanel.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -90,7 +90,7 @@ export default function UserProfile() {
             </div>
           </Card>
 
-          <Card title="Portfolios on the desk">
+          {usesPortfolios(user) && <Card title="Portfolios on the desk">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Two fixed portfolio ids used to be printed here for every user.
                   There is no per-user portfolio assignment in the platform yet,
@@ -116,7 +116,7 @@ export default function UserProfile() {
                 View Full Registry →
               </button>
             </div>
-          </Card>
+          </Card>}
         </div>
       </div>
       <PrivacyPanel />

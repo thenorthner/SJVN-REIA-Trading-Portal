@@ -334,7 +334,9 @@ router.get('/resolve', (req, res) => {
   const { name } = req.query;
   if (!name) return res.status(400).json({ error: 'name is required' });
   const entityId = resolveEntityByName(name);
-  if (!entityId) return res.json({ resolved: false, entity: null });
+  // A counterparty is told about its own company only: another's comes back as
+  // an unknown name, so the answer does not say the name matched anyone.
+  if (!entityId || !entityVisibleTo(req.user, entityId)) return res.json({ resolved: false, entity: null });
   const entity = db.prepare('SELECT id, name, entity_type, pan_no FROM entities WHERE id = ?').get(entityId);
   res.json({ resolved: true, entity });
 });
@@ -1113,7 +1115,8 @@ router.post('/:id/signature', requireRole(...ROLE_GROUPS.REIA_MAKE, 'SELLER', 'B
 // All spellings registered for one entity.
 router.get('/:id/aliases', (req, res) => {
   const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
-  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  // A counterparty reads its own company's spellings, as it reads its own record.
+  if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
   res.json(db.prepare('SELECT * FROM entity_aliases WHERE entity_id = ? ORDER BY created_at').all(req.params.id));
 });
 

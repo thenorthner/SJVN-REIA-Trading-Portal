@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { ZipArchive } from 'archiver';
 import { unreadablePdf } from '../services/fileChecks.js';
 import { requireAuth, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, PLATFORM_ADMINS } from '../middleware/auth.js';
+import { kycPending } from '../middleware/kycGate.js';
 import { pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { fileURLToPath } from 'url';
@@ -132,7 +133,9 @@ function ownEntityIds(user) {
 
 function ownContractIds(user) {
   const ids = ownEntityIds(user);
-  if (!ids.length) return [];
+  // A seller or buyer waiting on KYC keeps its company's own documents here;
+  // its contracts' documents wait with the contract pages (middleware/kycGate.js).
+  if (!ids.length || kycPending(user)) return [];
   const marks = ids.map(() => '?').join(',');
   return db.prepare(`SELECT id FROM contracts WHERE seller_id IN (${marks}) OR buyer_id IN (${marks})`)
     .all(...ids, ...ids).map((c) => c.id);

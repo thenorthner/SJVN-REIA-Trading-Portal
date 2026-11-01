@@ -1,12 +1,22 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from './AuthContext.jsx';
+import { ROLE_GROUPS } from '../roles.js';
+import { pageOpen } from '../lib/rolePages.js';
 
 /**
  * The trading portfolios (clients/assets) the desk works across, and which one
  * is currently in context.
  */
 const PortfolioContext = createContext(null);
+
+/**
+ * Who works across portfolios: the trading desk, or a role given the desk's
+ * pages (role powers). Nobody else asks for the list. Every signed-in login
+ * used to ask, so a seller or buyer fetched the whole client register; the
+ * server refuses it to them now.
+ */
+export const usesPortfolios = (user) => !!user && pageOpen(user, '/trading', ROLE_GROUPS.TRADING_ALL);
 
 const STORAGE_KEY = 'sjvn_active_portfolio';
 
@@ -18,7 +28,7 @@ export function PortfolioProvider({ children }) {
   const [error, setError] = useState('');
 
   const fetchPortfolios = useCallback(async () => {
-    if (!localStorage.getItem('sjvn_token')) {
+    if (!localStorage.getItem('sjvn_token') || !usesPortfolios(user)) {
       setPortfolios([]);
       setLoading(false);
       return;
@@ -36,7 +46,7 @@ export function PortfolioProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchPortfolios();

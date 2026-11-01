@@ -15,6 +15,7 @@ import { OPEN_STATUSES } from '../disputesConstants.js';
 import { presentedSql, raisedBySellerSql } from '../services/counterpartyScope.js';
 import { getParamNumber } from '../mastersService.js';
 import { buildBoard } from '../services/alertBoard.js';
+import { kycPending } from '../middleware/kycGate.js';
 import {
   newDoc, header, kpiBand, sectionTitle, table, notes, pageNumbers, nowLabel, rs, RED, AMBER, GREEN, CONTENT_W,
 } from '../scripts/reportPdfKit.js';
@@ -69,14 +70,18 @@ function scopeOf(user) {
   const entityId = user.linked_entity_id;
   if (!entityId) throw Object.assign(new Error('Your account is not linked to a company. Contact SJVN.'), { status: 400 });
   const seller = side === 'SELLER';
-  const contracts = seller
+  // The landing page opens before KYC (it carries the KYC notice), but the
+  // company's contracts, bills and payments wait for approval like the pages
+  // behind them (middleware/kycGate.js). With no contracts every figure is empty.
+  const kycHeld = !!kycPending(user);
+  const contracts = kycHeld ? [] : seller
     ? all(`SELECT DISTINCT c.* FROM contracts c LEFT JOIN contract_projects cp ON cp.contract_id = c.id
            WHERE (c.seller_id = ? OR cp.project_entity_id = ?) AND c.status NOT IN ('DRAFT') ORDER BY c.contract_no`, entityId, entityId)
     : all(`SELECT * FROM contracts WHERE buyer_id = ? AND status NOT IN ('DRAFT') ORDER BY contract_no`, entityId);
   const level = /_L([123])$/.exec(user.role)?.[1];
   const tier = level ? `L${level}` : 'ADMIN';
   return {
-    side, seller, entityId, tier, prefix: seller ? '/seller' : '/buyer',
+    side, seller, entityId, tier, kycHeld, prefix: seller ? '/seller' : '/buyer',
     direction: seller ? 'SELLER_TO_SJVN' : 'SJVN_TO_BUYER',
     contracts, ids: contracts.map((c) => c.id),
     // A seller sees its own bills at every stage; a buyer only those SJVN has
@@ -109,7 +114,7 @@ function todoOf(user, s) {
     add({ key: 'bills-due', level: 'amber', count: due.n, title: `${due.n} bill${due.n === 1 ? '' : 's'} due within 10 days`, detail: `${inr(due.amt)} to pay; the first falls due on ${due.first}. A bill paid after its due date attracts late payment surcharge.`, link: `${P}/invoices`, due: due.first });
   }
 
-  if (!s.seller) {
+  if (!s.seller && !s.kycHeld) {
     const pin = all(`SELECT status, COUNT(*) n, COALESCE(SUM(amount), 0) amt FROM payment_intimations WHERE entity_id = ? AND (status = 'PENDING_CHECKER' OR (status = 'REJECTED' AND decided_at >= datetime('now', '-14 days'))) GROUP BY status`, s.entityId);
     const waiting = pin.find((p) => p.status === 'PENDING_CHECKER');
     const refused = pin.find((p) => p.status === 'REJECTED');
@@ -298,7 +303,7 @@ function build(user, periodKey) {
 
   return {
     side: s.side, tier: s.tier, prefix: s.prefix,
-    me: { name: user.name, entity_name: entity.name || '', kyc_status: entity.status || null, previous_sign_in: logins[1]?.created_at || null },
+    me: { name: user.name, entity_name: entity.name || '', kyc_status: entity.status || null, kyc_held: s.kycHeld, previous_sign_in: logins[1]?.created_at || null },
     period: { key: w.key, label: w.label, compare_label: w.prev?.label || null, options: PERIODS },
     kpis: {
       active_contracts: active.length,

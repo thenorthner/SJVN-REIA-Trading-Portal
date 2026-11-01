@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { TRADING_CLIENT_ROLES, clientScope, mayUseClient } from '../services/tradingClientScope.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -20,11 +21,18 @@ const withDetails = (client) => {
   return client;
 };
 
+// Who may read the register: the trading desk, and the REIA desk, which runs a
+// trading client's reconciliation statement. A trading client's own office
+// reads its own row. It answered every signed-in login, so a seller or buyer
+// could read each client's exposure limit and risk rating.
+const REGISTER_READ = [...new Set([...ROLE_GROUPS.TRADING_ALL, ...ROLE_GROUPS.REIA_ALL, ...TRADING_CLIENT_ROLES])];
+
 // 1. List clients
-router.get('/', (req, res) => {
+router.get('/', requireRole(...REGISTER_READ), (req, res) => {
   const { status, client_type, include_demo } = req.query;
-  let sql = 'SELECT * FROM trading_clients WHERE 1=1';
-  const params = [];
+  const own = clientScope(req.user, 'id');
+  let sql = `SELECT * FROM trading_clients WHERE 1=1${own.sql}`;
+  const params = [...own.params];
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (client_type) { sql += ' AND client_type = ?'; params.push(client_type); }
   sql += ' ORDER BY CASE status WHEN \'ACTIVE\' THEN 0 WHEN \'SUSPENDED\' THEN 1 ELSE 2 END, name ASC, created_at DESC';
@@ -36,9 +44,9 @@ router.get('/', (req, res) => {
 });
 
 // 2. Get specific client
-router.get('/:id', (req, res) => {
+router.get('/:id', requireRole(...REGISTER_READ), (req, res) => {
   const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(req.params.id);
-  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!client || !mayUseClient(req.user, client.id)) return res.status(404).json({ error: 'Client not found' });
   res.json(withDetails(client));
 });
 

@@ -16,7 +16,7 @@
 import { contractVerticalSql } from './verticals.js';
 import db from '../db/index.js';
 import { newId } from '../util.js';
-import { ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
+import { ROLE_GROUPS, PLATFORM_ADMINS, counterpartySide } from '../middleware/auth.js';
 import { deliverDirect } from './notificationService.js';
 import { getSmsConfig, templateIdFor } from './smsService.js';
 import { invoiceBalance } from './invoiceLps.js';
@@ -59,6 +59,9 @@ export function safeAll(sql, ...params) {
   try { return db.prepare(sql).all(...params) || []; } catch { return []; }
 }
 
+/** A seller or buyer login not tied to a company: it has no contracts, so no alerts, only messages. */
+const unlinkedCounterparty = (scope) => ['SELLER', 'BUYER'].includes(scope.kind) && !scope.entityId;
+
 /**
  * Who is looking at the board decides (a) which rows count — counterparties
  * only ever see their own contracts' figures — and (b) where alert cards link,
@@ -66,10 +69,11 @@ export function safeAll(sql, ...params) {
  */
 export function scopeFor(user) {
   const role = user?.role || '';
-  if (role.startsWith('SELLER')) {
+  const side = counterpartySide(user);
+  if (side === 'SELLER') {
     return { kind: 'SELLER', entityId: user.linked_entity_id || null, prefix: '/seller', audiences: ['ALL', 'SELLERS'] };
   }
-  if (role.startsWith('BUYER')) {
+  if (side === 'BUYER') {
     return { kind: 'BUYER', entityId: user.linked_entity_id || null, prefix: '/buyer', audiences: ['ALL', 'BUYERS'] };
   }
   if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) {
@@ -218,6 +222,9 @@ export function computeAlerts(scope) {
     alerts.sort((a, b) => order[a.severity] - order[b.severity]);
     return alerts;
   }
+  // Without a company it fell through to the "everything" filter below, and
+  // was shown SJVN's own board.
+  if (unlinkedCounterparty(scope)) return alerts;
 
   // Contract-ownership filters. Internal staff see everything (empty filter);
   // counterparties are pinned to contracts where they are the seller/buyer.
@@ -704,10 +711,11 @@ export function boardHistory(user, { q = '', severity = '', group = '', status =
   }
 
   const audience = scope.audiences ? `AND audience IN (${scope.audiences.map(() => '?').join(',')})` : '';
+  // An unlinked seller or buyer has no alerts; any logged under its key were SJVN's board.
   const base = `
     SELECT 'ALERT' AS kind, id, alert_key AS item_key, title, detail, category, grp, severity,
            peak_count, last_count, first_seen_at AS started_at, resolved_at AS ended_at, NULL AS posted_by
-    FROM board_alert_episodes WHERE scope_key = ?
+    FROM board_alert_episodes WHERE scope_key = ?${unlinkedCounterparty(scope) ? ' AND 1 = 0' : ''}
     UNION ALL
     SELECT 'BROADCAST', id, id, title, message, 'Message', 'BROADCAST', severity, NULL, NULL, created_at,
            CASE WHEN is_active = 0 THEN COALESCE(removed_at, created_at)
