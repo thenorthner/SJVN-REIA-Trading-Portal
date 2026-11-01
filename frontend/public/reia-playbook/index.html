@@ -498,6 +498,42 @@ table.pw{border-collapse:separate;border-spacing:0;width:100%;min-width:800px}
 .me-bar-m{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;font-size:15px;color:var(--muted)}
 .lanes.mine .cell:not(.me) .step{opacity:.38}
 .lanes.mine .cell:not(.me) .step:hover,.lanes.mine .cell:not(.me) .step.cur{opacity:1}
+/* Full cycle: every stage on one page */
+.cy-cta{margin-top:14px}
+.cy-nav{display:grid;gap:10px;margin:4px 0 6px}
+.cy-ph small{display:block;font:700 12px var(--font-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.cy-ph>div{display:flex;flex-wrap:wrap;gap:6px}
+.cy-ph .chip{font-size:13.5px;padding:7px 11px 6px}
+.cy-st{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 20px;box-shadow:var(--shadow);scroll-margin-top:120px}
+.cy-h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px 16px;align-items:start;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.cy-n{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--brand);color:var(--bg);font:900 19px/1 var(--font-display)}
+.cy-hd .eyebrow{margin-bottom:4px}
+.cy-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px;font-size:15px;color:var(--muted)}
+.cy-who{display:inline-flex;gap:3px}
+.cy-see{display:grid;gap:5px;justify-items:start;max-width:280px}
+.cy-see small{font:700 12px var(--font-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.cy-see .lnk{text-align:left;font-size:14.5px}
+.cy-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px 26px;margin-top:14px}
+.cy-cols h3{font:700 12.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.cy-c{color:var(--ink)}
+.cy-path{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:cy}
+.cy-path li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;font-size:15.5px}
+.cy-path li b{font-family:var(--font-display)}
+.cy-path.mine li:not(.me){opacity:.42}
+.cy-edges{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cy-edges li{border-left:3px solid var(--wait);background:var(--surface-2);border-radius:0 10px 10px 0;padding:9px 12px}
+.cy-edges li b{display:block;font:800 15.5px/1.35 var(--font-display)}
+.cy-edges li p{font-size:15px;margin-top:3px}
+.cy-edges .quote{margin-top:7px;background:var(--surface)}
+@media (max-width:860px){
+  .cy-h{grid-template-columns:auto minmax(0,1fr)}
+  .cy-see{grid-column:1 / -1;max-width:none}
+  .cy-cols{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:540px){
+  .cy-st{padding:14px 14px}
+  .cy-n{width:36px;height:36px;font-size:16px}
+}
 /* Print: one mission or quest, every step written out in full. */
 .print-only{display:none}
 @media print{
@@ -517,6 +553,11 @@ table.pw{border-collapse:separate;border-spacing:0;width:100%;min-width:800px}
   .pr-step ul{margin:0;padding-left:18px}
   .pr-foot{margin-top:14px;font-size:10pt;color:var(--muted)}
   .ui{box-shadow:none}
+  .cy-nav,.cy-tools,.cy-cta,.cy-see{display:none!important}
+  .cy-st{box-shadow:none;border-radius:0;border:0;border-top:2px solid var(--ink);padding:12px 0 0;margin-top:16px}
+  .cy-path li,.cy-edges li{break-inside:avoid}
+  .cy-path.mine li{opacity:1!important}
+  .cy-edges li{background:none;border-left-width:2px}
 }
 @media (max-width:540px){
   .stats{grid-template-columns:repeat(2,auto)}

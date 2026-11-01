@@ -25,7 +25,7 @@ export function playbookData(src = fs.readFileSync(path.join(HERE, 'index.html')
   const to = src.indexOf('/* ───────────────────────── helpers');
   if (from === -1 || to === -1) throw new Error('index.html: the data section markers have moved');
   // eslint-disable-next-line no-new-func
-  return new Function(`${src.slice(from, to)}\nreturn { MISSIONS, QUESTS, MX, LIFE };`)();
+  return new Function(`${src.slice(from, to)}\nreturn { MISSIONS, QUESTS, MX, LIFE, CYCLE };`)();
 }
 
 // ── What the playbook quotes ───────────────────────────────────────────────────
@@ -52,6 +52,11 @@ export function quotes(data) {
       [s.t, s.where, s.block, ...(s.fill || []), ...(s.rules || [])].forEach((x) => prose(x, at));
     });
   }
+  (data.CYCLE || []).forEach((c, i) => {
+    const at = `Full cycle ${i + 1} (${c.t})`;
+    [c.t, c.ends, ...c.path.map(([, t]) => t)].forEach((s) => prose(s, at));
+    c.edges.forEach((e) => { prose(e.if, `${at}: ${e.if}`); prose(e.then, `${at}: ${e.if}`); add('refusal', e.refuse, `${at}: ${e.if}`); });
+  });
   data.MX.forEach((r) => { prose(r.a, `Powers: ${r.a}`); prose(r.note, `Powers: ${r.a}`); });
   data.LIFE.forEach((l) => l.tracks.forEach((t) => [...t.main, ...(t.side || [])].forEach((x) => {
     if (x.s) add('status', x.s, `Lifecycle: ${l.name}`);

@@ -26,8 +26,8 @@ export async function run({ src } = {}) {
   if (!src.includes('data: roles')) src = await (await fetch(`${$('script[src]')?.src || 'index.html'}?${Date.now()}`, { cache: 'no-store' })).text();
   const cut = (a, b) => { const i = src.indexOf(a); return src.slice(i, src.indexOf(b, i)); };
   // eslint-disable-next-line no-new-func
-  const D = new Function(`${cut('/* ───────────────────────── data: roles', '/* ───────────────────────── helpers')}\nreturn { R, MISSIONS, QUESTS, QZONES };`)();
-  const { R, MISSIONS, QUESTS, QZONES } = D;
+  const D = new Function(`${cut('/* ───────────────────────── data: roles', '/* ───────────────────────── helpers')}\nreturn { R, MISSIONS, QUESTS, QZONES, CYCLE };`)();
+  const { R, MISSIONS, QUESTS, QZONES, CYCLE } = D;
   // The portal copy links each step to its screen and to the feedback form; the offline one does not.
   const PORTAL = /\/reia-playbook\//.test(location.pathname);
   const plain = (s) => String(s).replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\{([A-Z][A-Z0-9_]*)\}/g, (m, t) => t.replace(/_/g, ' '));
@@ -232,6 +232,48 @@ export async function run({ src } = {}) {
   // "/" goes to the search, ready to type.
   await route('#map'); await key('/'); await sleep(60);
   ok(location.hash === '#find' && document.activeElement?.id === 'fd-q', `keyboard: / went to ${location.hash}, focus on ${document.activeElement?.id}`);
+
+  // Full cycle: every stage, step and exception on one page; the filter finds each exception; links play.
+  await route('#cycle');
+  ok($('#tabs [aria-current="page"]')?.dataset.go === 'cycle', 'cycle: the Full cycle tab is not lit');
+  const stages = $$('.cy-st');
+  ok(stages.length === CYCLE.length, `cycle: ${stages.length} stages shown, ${CYCLE.length} in the data`);
+  CYCLE.forEach((c, i) => {
+    const el = stages[i]; const at = `cycle ${i + 1} (${c.t})`;
+    if (!el) return;
+    ok(txt($('h2', el)) === c.t, `${at}: titled “${txt($('h2', el))}”`);
+    ok($$('.cy-path li', el).length === c.path.length && $$('.cy-edges li', el).length === c.edges.length, `${at}: ${$$('.cy-path li', el).length} steps, ${$$('.cy-edges li', el).length} exceptions`);
+    ok(JSON.stringify($$('.cy-see [data-go]', el).map((b) => b.dataset.go)) === JSON.stringify(c.see), `${at}: play links ${$$('.cy-see [data-go]', el).map((b) => b.dataset.go)}`);
+    ok($$('.cy-edges li', el).every((li, k) => txt($('b', li)) === plain(c.edges[k].if) && (!c.edges[k].refuse || txt($('.quote', li)) === `“${c.edges[k].refuse}”`)), `${at}: an exception or its refusal reads differently`);
+    ok(!/`|\{[A-Z_]+\}|undefined/.test(el.textContent), `${at}: raw markup on the page`);
+  });
+  const cyq = async (v) => { const box = await need('#cy-q'); box.value = v; box.dispatchEvent(new Event('input', { bubbles: true })); await sleep(15); };
+  for (const [i, c] of CYCLE.entries()) {
+    for (const e of c.edges) {
+      await cyq(plain(e.if));
+      ok($$(`#cy-${i + 1} .cy-edges b`).some((b) => txt(b) === plain(e.if)), `cycle filter: “${plain(e.if)}” is not found in stage ${i + 1}`);
+    }
+  }
+  await cyq('zzzz qqqq');
+  ok(!$$('.cy-st').length && !!$('#cy-out .empty'), 'cycle filter: nonsense found something');
+  await cyq('');
+  ok($$('.cy-edges li').length === CYCLE.reduce((a, c) => a + c.edges.length, 0), 'cycle filter: clearing it does not bring every exception back');
+  await click('[data-cy="12"]'); await sleep(80);
+  ok(Math.abs($('#cy-12').getBoundingClientRect().top - 120) < 30, `cycle: the stage chip scrolled stage 12 to ${Math.round($('#cy-12').getBoundingClientRect().top)}`);
+  await click('#cy-12 [data-go="q22"]');
+  ok(location.hash === '#q22' && txt($('h1')) === QUESTS[21].name, `cycle: a play link went to ${location.hash}`);
+  history.back(); await sleep(150);
+  ok(location.hash === '#cycle' && $$('.cy-st').length === CYCLE.length, 'cycle: back did not return to the cycle');
+  for (const k of ['M', 'F', 'S']) {
+    await route('#find'); await click(`[data-me="${k}"]`); await route('#cycle');
+    const want = CYCLE.reduce((a, c) => a + c.path.filter(([w]) => w === k).length, 0);
+    ok($$('.cy-path.mine').length === CYCLE.length && $$('.cy-path li.me').length === want, `cycle: ${R[k].short} lights ${$$('.cy-path li.me').length} steps, expected ${want}`);
+  }
+  await click('.me-bar-m [data-me=""]');
+  ok(!$('.cy-path.mine'), 'cycle: “Show everyone’s” did not clear it');
+  await route('#map');
+  await click('.cy-cta [data-go="cycle"]');
+  ok(location.hash === '#cycle', 'cycle: the map’s link does not open it');
 
   window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr);
   ok(!errors.length, `page errors: ${errors.join(' | ')}`);

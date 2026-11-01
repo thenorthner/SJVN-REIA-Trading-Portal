@@ -1,7 +1,7 @@
 # REIA Playbook: side quest test plan
 
 Scope: all 26 side quests (`QUESTS` in `index.html`, ids `q1`..`q26`), the engine
-they play on, and the three shipped copies (source, offline file, portal copy).
+they play on, the Full cycle page (`CYCLE`), and the three shipped copies (source, offline file, portal copy).
 
 ## Layer 1 — Structure and data (automated: `node tools/reia-playbook/test-quests.mjs`)
 
@@ -17,6 +17,7 @@ they play on, and the three shipped copies (source, offline file, portal copy).
 | 1.8 | REIA-only wording: no trading / hydro / thermal / exchange / other-desk words, no passwords | Beta testers must never learn of other desks |
 | 1.9 | Quiz fairness: a step whose text says another role can also do it keeps that role out of the options | A right answer marked wrong |
 | 1.10 | No duplicate step titles inside a quest; `opt`/`noquiz` are booleans | Ambiguous quiz questions |
+| 1.11 | Full cycle: each stage has a phase from `CPHASES`, a path of real roles, exceptions with `if` and `then` (no `if` twice), `see` ids that exist; every mission and side quest is linked from a stage; 1.5 and 1.8 apply to its text, and it names no mission or quest by number | A stage that links nowhere, or a quest no stage reaches, leaves a hole in the one-page picture |
 
 ## Layer 2 — Labels against the code (automated: `check-labels.mjs --all`)
 
@@ -52,6 +53,11 @@ For each of the side quests:
   it; nonsense finds nothing. My role: each role lists exactly its own steps (missions and quests,
   `alt` counted), lights them in the lanes, is saved, and "Show everyone’s" clears it.
 - Print: the print-only copy writes out every step of a mission and of a quest. `/` opens the search.
+- Full cycle (`#cycle`): one section per stage, in order, with its title, every path step and exception,
+  each refusal quoted as written, and its play links; no raw backticks or `{STATUS}`. Every exception is
+  found by the filter under its own stage; nonsense finds nothing; clearing brings all back. A stage chip
+  scrolls to its stage below the top bar; a play link opens the quest and Back returns. My role lights
+  exactly that role's path steps. The Map's link opens the page.
 
 The portal copy has no e2e file of its own: copy `e2e-quests.js` into `frontend/public/reia-playbook/`
 for the run, and delete it after.
@@ -60,6 +66,22 @@ for the run, and delete it after.
 
 `export.mjs` writes the offline file and the portal copy; the portal copy runs under the portal's
 CSP (script from `/reia-playbook/playbook.js`, no inline script) and matches the source.
+
+## Results, 1-Nov-2026 (Full cycle)
+
+The Full cycle tab: 15 stages in five phases (once per deal, every month, when a buyer defaults, each
+quarter and year, any day), 57 path steps and 144 exceptions, 39 of them with the platform's refusal.
+
+| Layer | Run | Result |
+|---|---|---|
+| 1 Data | `test-quests.mjs`, with 1.11 | all pass |
+| 2 Labels | `check-labels.mjs`, the cycle's labels, statuses and refusals included: 334 | all found |
+| 4 Browser | `e2e-quests.js` on `index.html`: 3,626 checks (231 for the cycle) | all pass |
+| 4 Phone | offline copy at 375 px, light and dark | no sideways scroll |
+| 4 Print | print rules forced on screen | navigation, filter and links hidden; stages print in full |
+
+Found while testing: no stage linked side quests 21 (Audit trail) or 23 (Reports); the any-day stage
+links both now and has the audit trail's exceptions, and 1.11 fails a quest no stage links.
 
 ## Results, 1-Nov-2026
 

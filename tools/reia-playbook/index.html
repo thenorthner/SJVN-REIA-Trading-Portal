@@ -493,6 +493,42 @@ table.pw{border-collapse:separate;border-spacing:0;width:100%;min-width:800px}
 .me-bar-m{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;font-size:15px;color:var(--muted)}
 .lanes.mine .cell:not(.me) .step{opacity:.38}
 .lanes.mine .cell:not(.me) .step:hover,.lanes.mine .cell:not(.me) .step.cur{opacity:1}
+/* Full cycle: every stage on one page */
+.cy-cta{margin-top:14px}
+.cy-nav{display:grid;gap:10px;margin:4px 0 6px}
+.cy-ph small{display:block;font:700 12px var(--font-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.cy-ph>div{display:flex;flex-wrap:wrap;gap:6px}
+.cy-ph .chip{font-size:13.5px;padding:7px 11px 6px}
+.cy-st{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 20px;box-shadow:var(--shadow);scroll-margin-top:120px}
+.cy-h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px 16px;align-items:start;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.cy-n{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--brand);color:var(--bg);font:900 19px/1 var(--font-display)}
+.cy-hd .eyebrow{margin-bottom:4px}
+.cy-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px;font-size:15px;color:var(--muted)}
+.cy-who{display:inline-flex;gap:3px}
+.cy-see{display:grid;gap:5px;justify-items:start;max-width:280px}
+.cy-see small{font:700 12px var(--font-mono);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.cy-see .lnk{text-align:left;font-size:14.5px}
+.cy-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px 26px;margin-top:14px}
+.cy-cols h3{font:700 12.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.cy-c{color:var(--ink)}
+.cy-path{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:cy}
+.cy-path li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;font-size:15.5px}
+.cy-path li b{font-family:var(--font-display)}
+.cy-path.mine li:not(.me){opacity:.42}
+.cy-edges{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cy-edges li{border-left:3px solid var(--wait);background:var(--surface-2);border-radius:0 10px 10px 0;padding:9px 12px}
+.cy-edges li b{display:block;font:800 15.5px/1.35 var(--font-display)}
+.cy-edges li p{font-size:15px;margin-top:3px}
+.cy-edges .quote{margin-top:7px;background:var(--surface)}
+@media (max-width:860px){
+  .cy-h{grid-template-columns:auto minmax(0,1fr)}
+  .cy-see{grid-column:1 / -1;max-width:none}
+  .cy-cols{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:540px){
+  .cy-st{padding:14px 14px}
+  .cy-n{width:36px;height:36px;font-size:16px}
+}
 /* Print: one mission or quest, every step written out in full. */
 .print-only{display:none}
 @media print{
@@ -512,6 +548,11 @@ table.pw{border-collapse:separate;border-spacing:0;width:100%;min-width:800px}
   .pr-step ul{margin:0;padding-left:18px}
   .pr-foot{margin-top:14px;font-size:10pt;color:var(--muted)}
   .ui{box-shadow:none}
+  .cy-nav,.cy-tools,.cy-cta,.cy-see{display:none!important}
+  .cy-st{box-shadow:none;border-radius:0;border:0;border-top:2px solid var(--ink);padding:12px 0 0;margin-top:16px}
+  .cy-path li,.cy-edges li{break-inside:avoid}
+  .cy-path.mine li{opacity:1!important}
+  .cy-edges li{background:none;border-left-width:2px}
 }
 @media (max-width:540px){
   .stats{grid-template-columns:repeat(2,auto)}
@@ -1641,6 +1682,305 @@ const QUESTS = [
   also:['The bell in the top bar lists your own notifications, e.g. a change to your role’s powers.','`Disclaimer` in Quick Connect says what the facility is not for.','On the portal, every step of this Playbook has a “Report a problem” link: it opens the Feedback page with the step filled in.'] },
 ];
 
+/* ───────────────────────── data: the complete cycle ─────────────────────────
+   The whole desk on one page: each stage's normal path, then every way it can
+   go differently and what the platform does then. Labels, refusals and
+   statuses are the platform's own, as in the missions; `see` opens the mission
+   or side quest that plays the stage step by step. */
+const CPHASES = [['setup','Once per deal'],['month','Every month'],['wrong','When a buyer defaults'],['year','Each quarter and year'],['always','Any day']];
+const CYCLE = [
+{ phase:'setup', t:'Onboard the companies (KYC)', ends:'Company {APPROVED}, bank account verified', see:['m1'],
+  path:[
+    ['M','`+ Onboard Stakeholder`: name, PAN, GSTIN, address, signatory, contact and bank. The company is {PENDING}.'],
+    ['M','Fill the regulatory checklist (8 items for a seller, 4 for a buyer): reference, issuer, dates, document. Each item {SUBMITTED}. The company can upload its own evidence from its portal.'],
+    ['C','Decide each item: {VERIFIED}, {REJECTED} or not applicable.'],
+    ['C','`Standard Approval`: the company is {APPROVED}, and its bank account is verified with it.'],
+  ],
+  edges:[
+    { if:'A PAN or GSTIN is in the wrong shape', then:'A popup says so as soon as you leave the field. One already on another company is refused.' },
+    { if:'The checker approves while an item is not verified', then:'Refused. The popup lists every item still pending.', refuse:'Approval was refused' },
+    { if:'The person who onboarded the company tries to approve it', then:'Refused, administrators included: four eyes on every company.' },
+    { if:'The checker types a reference, issuer, date or document itself', then:'Refused: the checker decides on what the maker recorded. It rejects the item with a note, the maker corrects it, then the checker decides.', refuse:'The checker cannot change …’s reference, issuer, dates or document. Reject it with a note so the REIA maker corrects them, then decide on what they record.' },
+    { if:'A document is rejected', then:'The item is {REJECTED} with the checker’s note. The maker (or the company) submits it again.' },
+    { if:'A document’s validity has lapsed', then:'It cannot be verified. The item goes {EXPIRED} and the maker records the renewed document.' },
+    { if:'The company should not be approved', then:'`Reject`, with a reason: the company is {REJECTED}.' },
+    { if:'The bank account was not verified with the approval', then:'`Confirm against bank proof` › `Confirm account`, by the checker.' },
+    { if:'An approved company changes its details, contacts or bank', then:'It goes back to {PENDING} until the checker approves it again.' },
+    { if:'A company’s KYC is not approved yet', then:'Its log-ins reach only the onboarding screens and messages. Every other screen, and the API behind it, refuses; its home page shows the notice and no figures.', refuse:'Your company’s KYC is pending. This opens once SJVN has approved it.' },
+    { if:'A company must be barred', then:'Blacklisting: the REIA checker or SJVN Admin.' },
+  ] },
+
+{ phase:'setup', t:'Give the companies their log-ins', ends:'Each company signed in, with its own team', see:['m2'],
+  path:[
+    ['A','`Add Team Member` › `Add to team`: the company’s first log-in, at Level 3, with a temporary password.'],
+    ['S','First sign-in: a popup forces a new password. The buyer does the same.'],
+    ['S','Level 3 adds its own Level 1 makers and Level 2 checkers under My Team.'],
+  ],
+  edges:[
+    { if:'The REIA desk wants to create a company user', then:'It cannot: only SJVN Admin (or IT Super Admin) manages company log-ins.' },
+    { if:'A company’s Level 1 maker prepares something', then:'It never goes to SJVN alone: its own Level 2 or 3 sends it. A bill waits at {PENDING_L2}, a payment intimation at {PENDING_CHECKER}.' },
+    { if:'A Level 1 maker tries to sign a reconciliation', then:'Not allowed: Level 2, Level 3 or the Company Admin signs.' },
+    { if:'A Level 3 approver must be added or changed', then:'Only the Company Admin or SJVN does it.' },
+    { if:'The Company Admin is locked out or leaves', then:'Only SJVN resets or switches off a company’s Admin account.' },
+    { if:'A company looks for another company’s records', then:'It never sees them: contracts, bills, payments, disputes, names and messages are its own company’s only. Asking the API for another company’s is refused.' },
+  ] },
+
+{ phase:'setup', t:'Contracts: PPA, PSA and the mapping', ends:'PPA and PSA {ACTIVE}, the PSA mapped to the PPA', see:['m3','q11','q12'],
+  path:[
+    ['M','`+ New Contract` › `Create Draft Contract`, once for the PPA (seller → SJVN) and once for the PSA (SJVN → buyer). Both {DRAFT}.'],
+    ['M','`+ Map PSA to this PPA` › `Save Map`: allocation % and Effective From.'],
+    ['M','`Update Lifecycle Stage`: {UNDER_NEGOTIATION}.'],
+    ['C','{SIGNED} once the signed agreement is on file, then {ACTIVE} from the tenure start.'],
+  ],
+  edges:[
+    { if:'The maker tries to sign or activate', then:'The maker moves a contract only between DRAFT and UNDER_NEGOTIATION.', refuse:'Moving a contract to SIGNED is the REIA checker’s decision.' },
+    { if:'The checker makes it live before the tenure starts', then:'Refused: it stays {SIGNED}, and nothing is billed on it, until that date.', refuse:'PPA/… starts on 2026-09-01. It stays SIGNED until then and can be made ACTIVE from that date.' },
+    { if:'A renewable PPA has no minimum CUF', then:'It cannot go live until the CUF is entered.', refuse:'PPA/… has no minimum CUF. Enter the CUF the PPA guarantees (Edit Draft or amendment) before making it ACTIVE.' },
+    { if:'A regulator’s approval is awaited', then:'{SIGNED} → {PENDING_REGULATORY_APPROVAL} → {ACTIVE}.' },
+    { if:'The PSA sells below the PPA tariff', then:'The mapping asks for a recorded reason.' },
+    { if:'The mapping is saved after supply has begun', then:'Effective From starts as the day both contracts are in force, not today, so a PPA and PSA from 1 September mapped in October still bill September. Change it only on purpose.' },
+    { if:'A PSA holds no share for a month', then:'That month cannot be billed on it.', refuse:'This PSA holds no allocation for … — its share of the PPA had ended or had not yet started.' },
+    { if:'A PSA draws from several PPAs and one has no energy for the month', then:'Refused: a PSA is billed for its whole supply or not at all.' },
+    { if:'A draft contract has a mistake', then:'`Edit Draft` › `Save Draft Changes`: corrected in place, no new version.' },
+    { if:'A live contract’s terms change', then:'`Amend Contract`: a new version from a date that is a real day, not before the contract began. The checker makes it {ACTIVE}; the old one becomes {AMENDED}.', refuse:'The amendment changes none of the contract terms — nothing to submit.' },
+    { if:'A month falls on both sides of an amendment', then:'The month is billed on the version in force on its first day, whichever version is picked. A tariff change dated inside the month is priced part by part, by each part’s energy (by days where the 15-minute data is not in), and each part shows on the bill.' },
+    { if:'A contract must stop', then:'Hold: the maker, checker, HOD or Management. Only the HOD or Management lifts a hold a breach put on, for 30 days at most. Terminate, close and renew: the checker.' },
+    { if:'The tenure is ending', then:'{NEARING_EXPIRY}, then {EXPIRED}; the checker renews ({RENEWED}) or closes it.' },
+  ] },
+
+{ phase:'setup', t:'Payment security: the buyer’s LC', ends:'LC {ACTIVE}, bank confirmation received', see:['m4','q15'],
+  path:[
+    ['M','`+ Instrument` › `Save`: mechanism, limit, the bank’s LC number, validity. The LC is {ACTIVE}; its SFMS column reads Pending.'],
+    ['C','`Record bank confirmation` › `Confirm`: the SFMS reference (MT700 / MT707 for an LC, MT760 / MT767 for a guarantee).'],
+  ],
+  edges:[
+    { if:'The validity ends before it starts', then:'Refused by the form as soon as the date is typed, and by the server.', refuse:'The validity cannot end before it starts' },
+    { if:'The instrument has already expired', then:'Refused: it cannot be recorded.', refuse:'This instrument has already expired' },
+    { if:'The SFMS message is dated in the future', then:'Refused.', refuse:'The SFMS message date cannot be in the future' },
+    { if:'The buyer submits its own instrument from its portal', then:'It arrives {DRAFT}; the checker accepts it ({ACTIVE}) or refuses it.' },
+    { if:'The cover is short of what is required', then:'The coverage ratio falls below 1. The HOD or Management can treat it as adequate for up to 90 days, with a reason.' },
+    { if:'The instrument nears its expiry', then:'Reminders go out. The maker renews it; the maker or the buyer tops it up.' },
+    { if:'The company wants its security back', then:'Only with no dues and no open dispute: the company, the maker or Finance asks, Finance signs off, the checker releases. Whoever asked or signed off does not release it.', refuse:'You asked for this release; another officer decides it.' },
+    { if:'The buyer stops paying', then:'The security is invoked: see “When a buyer defaults” below.' },
+  ] },
+
+{ phase:'month', t:'Energy for the month', ends:'Energy {LOCKED}: ready to bill', see:['m5','q17'],
+  path:[
+    ['M','`+ Record Energy Data` › `Save`: the PPA, the month, Provisional or Final, the source (JMR / REA) and the MWh. {DRAFT}.'],
+    ['C','`Validate`: {VALIDATED}. The seller sees the figure from here on.'],
+    ['S','`Accept` › `Accept the figure`: {ACCEPTED}.'],
+    ['C','`Lock`: {LOCKED}. Only a locked figure is billed.'],
+  ],
+  edges:[
+    { if:'The figure disagrees with another source for the month', then:'Validation sends it to {DISPUTED}. Re-record it, or lock it with a recorded reason.' },
+    { if:'The seller does not agree', then:'It objects with the MWh it claims, a note and a file ({OBJECTED}). The checker rules: {UPHELD} (the maker records the corrected figure, which replaces the old one) or {REJECTED} (the figure stands).' },
+    { if:'Locking a figure that failed validation, or whose objection is unanswered or unmet', then:'A reason is required.', refuse:'This period failed validation and cannot be locked without a recorded reason.' },
+    { if:'Someone bills a month that is not over', then:'Refused, naming the latest month that can be billed.', refuse:'Cannot bill …: the month has not ended yet. The latest month that can be billed is ….' },
+    { if:'Someone bills energy that is not locked', then:'Refused.', refuse:'Energy for … is …, not LOCKED. Validate and lock it on the Energy Data desk before billing.' },
+    { if:'A FINAL bill is asked for with only provisional energy', then:'Refused: provisional and final stay separate.' },
+    { if:'The buyer could not take some of the energy', then:'Bank it. A cycle takes entries (bank and draw) until the end of the month after it ends; a draw is billed at the full tariff; what is never drawn settles in cash at 75% of tariff once the cycle closes.', refuse:'The cycle ended on … and took entries until …; energy cannot be banked into a closed cycle.' },
+    { if:'The contract was amended after the energy was recorded', then:'The energy still counts: it belongs to the plant, whichever version is billed.' },
+    { if:'The grid curtailed the plant', then:'The maker records the certified curtailment hours on the month’s figure.' },
+  ] },
+
+{ phase:'month', t:'Bills and their approval', ends:'Both bills {APPROVED}, the buyer’s bill {SENT}', see:['m6','q8'],
+  path:[
+    ['M','`+ Generate Invoice` on the PSA: SJVN’s bill on the buyer, {DRAFT}. Then the same on the PPA: SJVN’s own figure, which stays DRAFT as the yardstick.'],
+    ['S','`+ Create Invoice` › `Submit to SJVN`: the seller’s own bill, {SUBMITTED}.'],
+    ['M','`Validate vs System` (MATCHED), the Verification Checklist (`Save Verification`), then `Submit for SJVN Approval` on both bills: {UNDER_APPROVAL}.'],
+    ['C','`Approve Level 1`. Above ₹1 lakh Finance signs `Approve Level 2`; above ₹10 lakh the HOD (or Management) signs `Approve Level 3`. The bill is {APPROVED}.'],
+    ['M','`Send Email to Buyer`: {SENT}. The bill is presented, and its due date and dispute window start.'],
+  ],
+  edges:[
+    { if:'The month is already billed on this contract', then:'Refused, across every version of the contract. A bill raised in error is cancelled first; a correction is a supplementary.', refuse:'… already has a … bill for … — … (…). Cancel that one first, or raise a Supplementary for a correction.' },
+    { if:'The contract is not live, is on hold, or the month is outside its term or before its COD', then:'Refused, saying which.', refuse:'Cannot bill a contract in status … — it must be ACTIVE first.' },
+    { if:'A seller’s Level 1 maker raises the bill', then:'It waits at {PENDING_L2} for the company’s own checker, who sends it on.' },
+    { if:'The seller’s bill does not match SJVN’s figure (PARTIAL or MISMATCH)', then:'Settled before approval: the checker sends it back to the seller, or waives the gap with a reason.' },
+    { if:'The seller’s bill is sent back', then:'It is {REJECTED} with what to fix. The seller presses `Revise the bill` › `Resubmit to SJVN`: back to {SUBMITTED}, and the maker verifies it again.' },
+    { if:'Someone submits SJVN’s own PPA figure once the developer has billed', then:'Refused: the developer’s bill is the one that goes up.', refuse:'… is the developer’s own bill for 2026-09; submit that one for approval.' },
+    { if:'The build-up carries a change-in-law amount', then:'Change in Law Verified cannot be marked NA: verify the claim, or fail it with the reason.' },
+    { if:'The build-up does not come to what the bill says', then:'If the gap is only the liquidated damages: save, then Draft LD note. Otherwise the checker sends the bill back.' },
+    { if:'The maker who verified the bill tries Level 1', then:'Refused: someone else approves it.', refuse:'You verified INV-…, so someone else approves its first level.' },
+    { if:'Someone other than the officer a level is pending with sends the bill back', then:'Refused: a level is decided, both ways, by the role it belongs to. Tell that officer what is wrong.', refuse:'Level … is with …. Only they can send the bill back from it; tell them what is wrong.' },
+    { if:'A level rejects the bill', then:'{REJECTED}. The maker fixes it and submits it again.' },
+    { if:'A bill was raised in error', then:'Cancel it (maker or checker) while it is DRAFT, SUBMITTED, REJECTED, PENDING_L2 or UNDER_APPROVAL.' },
+    { if:'No mail server is set up', then:'The email is written to the outbox and marked SIMULATED.' },
+    { if:'The bill is paid before it is sent', then:'It can no longer be sent: send before payment.' },
+    { if:'The due date falls on a closed day', then:'The contract’s payment terms run in calendar days from presentation; a last day on the payer’s weekly off or holiday moves to its next working day. The payer’s calendar: the buyer’s state on SJVN’s bill, Himachal Pradesh on a seller’s bill. A restricted holiday closes nothing.' },
+  ] },
+
+{ phase:'month', t:'Disputes', ends:'Dispute {CLOSED}, a credit note issued if accepted', see:['m7'],
+  path:[
+    ['B','`Raise a dispute on this bill` › `Submit Dispute`: amount, charge line, reason, evidence. The dispute is {RAISED}; the bill shows {DISPUTED}.'],
+    ['C','`Acknowledge`, then `Start Review`: {UNDER_REVIEW}.'],
+    ['H','`Confirm Resolution`: accepted in full or part ({RESOLVED_ACCEPTED}, a draft credit note made), or rejected.'],
+    ['C','`Approve & issue` the credit note: {ISSUED}. The bill’s balance falls.'],
+    ['B','`Accept resolution` › `Accept and close`: {CLOSED}.'],
+  ],
+  edges:[
+    { if:'More than 15 days have passed since the bill was presented', then:'The bill is conclusive: no dispute can be raised.', refuse:'This bill is now conclusive — the 15-day dispute window (from …) has passed.' },
+    { if:'SJVN does not acknowledge in 2 days, or resolve in 15', then:'The dispute is {ESCALATED} and Management is alerted.' },
+    { if:'SJVN needs more from the party', then:'`Request Info` (at least 10 characters): {INFO_REQUESTED}. The party answers and it returns to {UNDER_REVIEW}.' },
+    { if:'The claim is rejected', then:'{RESOLVED_REJECTED}: no note, the disputed amount is due.' },
+    { if:'The party does not accept the outcome', then:'It contests, naming the forum (SJVN senior management, conciliation, arbitration, the Regulatory Commission) and the amount. The maker keeps the record of hearings and the end.' },
+    { if:'The party does not answer within 15 days', then:'The checker may `Close Dispute`.' },
+    { if:'The buyer pays the part not in dispute', then:'The bill stays {DISPUTED}, so the disputed part can still be collected. When the dispute closes, what has been paid by then decides the status.' },
+    { if:'The buyer wins part of the dispute', then:'The credit counts from the bill’s due date: no surcharge runs on the part it won.' },
+    { if:'The dispute’s credit note is later cancelled', then:'The dispute goes back to {UNDER_REVIEW} and its amount is held again, not demanded.' },
+    { if:'The seller disputes, or the party asked the desk to', then:'The seller disputes its side the same way; the maker can raise one on a party’s behalf, or from a reconciliation line inside the window.' },
+    { if:'The HOD is away', then:'Management decides instead.' },
+  ] },
+
+{ phase:'month', t:'Correct a bill already out: notes, arrears, supplementaries', ends:'Note {ISSUED}, or the new bill {SENT}', see:['q2','q3'],
+  path:[
+    ['M','`+ Raise Note` › `Save as draft`: debit (owes more) or credit (owes less), reason, taxable value, tax. {DRAFT}. Finance can raise notes too.'],
+    ['C','`Approve & issue` in Notes for Approval: {ISSUED}. A debit note becomes its own supplementary bill; a credit note is set against the bill.'],
+    ['M','For a past month: `+ Arrear Bill` › `Raise Arrear`, or `+ Supplementary` › `Create Supplementary`. It climbs the same ladder by amount and is sent like any bill.'],
+  ],
+  edges:[
+    { if:'The bill is still a draft, in approval or sent back', then:'Not issued yet, so it is corrected itself, not by a note.', refuse:'The invoice is still a draft — correct the draft instead of raising a note' },
+    { if:'A negative amount, or one that rounds to nothing', then:'Refused, not turned round: a credit is raised as a credit.', refuse:'A positive taxable amount is required' },
+    { if:'The same note is raised twice while the first is live', then:'Refused: same bill, type, amount and reason.', refuse:'This note is already raised against … — same type, amount and reason.' },
+    { if:'A credit note takes back more tax than the bill charged', then:'Refused: at most the bill’s tax less what is already credited. After 30 November following the supply’s financial year, tax cannot be credited at all (CGST Act s.34).', refuse:'Raise the credit for the value alone, without tax.' },
+    { if:'The note is dated wrongly', then:'Its issue date must be a real day, not after today and not before the bill it adjusts was issued.' },
+    { if:'Whoever raised the note tries to approve it', then:'Refused.', refuse:'Segregation of duties: whoever raised this note cannot approve it. It needs a different approver.' },
+    { if:'An issued note must be withdrawn', then:'`Cancel`, with a reason, by the checker or Finance: its effect is reversed.', refuse:'Say why the note is cancelled — it was issued' },
+    { if:'A credit note is bigger than the bill can absorb', then:'The rest stays on the note: `Apply credit` to another open bill of the same contract and side.' },
+    { if:'The company wants its note', then:'`PDF` on the bill: the company the note was issued to downloads it too.' },
+    { if:'An arrear would be negative', then:'Refused: money owed back is a credit note or a negative supplementary.' },
+    { if:'An arrear or supplementary is for a month not yet come, or outside the contract’s term', then:'Refused.', refuse:'… has not come yet; an arrear recovers a month already supplied.' },
+    { if:'A tariff revision reaches back over a month already billed', then:'Arrear, Amount: `From a tariff revision`. Worked out from the month’s final bill: energy × (the rate now due − the rate last charged), less earlier revision arrears. A month with only a provisional is settled by its final bill instead; a revision downwards is a credit note, which the refusal suggests.' },
+    { if:'A Change in Law claim', then:'A supplementary with the date the law took effect (Law in force from). A month that ended before it is refused. No early-payment rebate on it.' },
+  ] },
+
+{ phase:'month', t:'The buyer pays: rebate and surcharge', ends:'Bill {PAID}', see:['m8','q1','q4'],
+  path:[
+    ['B','`Intimate payment to SJVN` › `Send to SJVN Finance`: amount, date, mode, UTR. {SUBMITTED}.'],
+    ['F','`Confirm receipt` › `Confirm and record the payment`, at the value date in SJVN’s bank: {PAID}. Only Finance says money arrived.'],
+  ],
+  edges:[
+    { if:'The buyer’s Level 1 maker sends the intimation', then:'It waits at {PENDING_CHECKER}; the buyer’s checker sends it on or returns it ({RETURNED_BY_CHECKER}).' },
+    { if:'The buyer changes its mind', then:'It withdraws the intimation until Finance acts: {WITHDRAWN}.' },
+    { if:'The money is not in SJVN’s bank', then:'Finance does not confirm it: {REJECTED}.' },
+    { if:'Part of the bill is paid', then:'{PARTIALLY_PAID}. A credit note applied reads “Partially paid — credit applied”: a note is not money.' },
+    { if:'The buyer pays more than the bill has left', then:'The bill takes what it can; the rest is the buyer’s advance ({OPEN}), applied to a later bill of the same buyer ({APPLIED}) or refunded with a reason ({REFUNDED}).' },
+    { if:'The buyer pays early', then:'It earns the rebate its PSA sets. The window runs in calendar days from presentation and, ending on the buyer’s closed day, moves to its next working day.' },
+    { if:'The bill is a surcharge bill or a change-in-law bill', then:'No early-payment rebate on it.' },
+    { if:'The buyer pays late', then:'Surcharge runs from the day after the due date, every calendar day the money is late: the base rate, plus 0.5% for each month of default, capped at 3% above the base. The base rate is the contract’s own, else 15% a year from the masters, or that financial year’s rate where the masters keep a yearly schedule.' },
+    { if:'The contract gives grace days', then:'A bill settled inside them earns no surcharge.' },
+    { if:'A surcharge bill is itself paid late', then:'No surcharge on surcharge.' },
+    { if:'Surcharge has built up', then:'Once a month, `Raise LPS bills` on the Month-Close Board: one LPS bill per buyer contract, each bill’s surcharge billed once. Cancelling an LPS bill gives it back.' },
+    { if:'One lump receipt covers several bills', then:'Surcharge first, oldest bill first, then the oldest principal (PSA Art. 6.3), worked out as of the day the money came, not today.', refuse:'The payment date must be a real date not in the future' },
+    { if:'The maker or checker tries to confirm a receipt', then:'Not on their screens: the desk that raises a bill never marks it paid.' },
+  ] },
+
+{ phase:'month', t:'Pay the seller: pay-when-paid', ends:'Seller’s bill {PAID}', see:['m9','q5'],
+  path:[
+    ['F','Developer Release Planner: what buyers paid that is each generator’s energy share, what has gone out, what can be released now.'],
+    ['C','`Release to Generator`: net amount, TDS, fund source, date and reference. The seller’s bill is {PAID}. Finance can release too.'],
+    ['S','Sees the money under Latest payments from SJVN, with no other company named.'],
+  ],
+  edges:[
+    { if:'The release asks for more than is available', then:'Refused: never more than the buyer realised, nor more than the bill less the rebate SJVN earns.', refuse:'₹2,17,80,000 is more than the ₹2,14,53,300 left on … (₹2,17,80,000 owed, less the 1.50% early-payment rebate it earns if paid today).' },
+    { if:'SJVN pays early', then:'SJVN earns 1.5% within 5 days of the bill and 1% within 30, unless the PPA sets its own. The window closes on SJVN’s calendar (Himachal Pradesh), moved to the next working day.' },
+    { if:'The seller has been paid over ₹50 lakh in the year', then:'TDS u/s 194Q: 0.1% of the bill above ₹50 lakh. Net + TDS + rebate = the bill, exactly.' },
+    { if:'The buyer has not paid yet', then:'Nothing of it is releasable. A release from SJVN’s own fund or the payment security fund is recorded as such.' },
+    { if:'The maker looks for the release', then:'The release section does not appear.' },
+  ] },
+
+{ phase:'month', t:'Reconcile the month', ends:'Statement {CLOSED}, signed by both sides', see:['m10'],
+  path:[
+    ['X','Every hour: last month’s statement for each ACTIVE contract, {PENDING_SIGN_OFF} (or {NEEDS_REVIEW} where a line differs).'],
+    ['C','`Override` a line that differs, with why the variance is accepted.'],
+    ['F','`Concur for Finance` on a statement above ₹1 crore billed.'],
+    ['C','`✓ SJVN Agree & Sign-Off`. The buyer and the seller each press `I agree — sign off`: {CLOSED}.'],
+  ],
+  edges:[
+    { if:'The statement was made before payments landed', then:'`Regenerate statement (Re-sync)`.' },
+    { if:'Someone runs one for a month already open', then:'Refused: open it and regenerate, or finish it first.', refuse:'R… is already open for 2026-09. Open it and use "Regenerate statement" to refresh its figures, or finish it first.' },
+    { if:'SJVN signs a statement above ₹1 crore before Finance', then:'Refused.', refuse:'R… covers ₹2,23,34,400 billed, above the ₹1,00,00,000 limit. Finance concurs before SJVN signs.' },
+    { if:'A line is still open', then:'SJVN cannot sign until it is overridden or settled.' },
+    { if:'Tax or SAP lines read NOT_CONNECTED', then:'Expected unless a figure is supplied.' },
+    { if:'A company’s Level 1 maker tries to sign', then:'Not allowed: Level 2, Level 3 or the Company Admin.' },
+    { if:'A closed statement turns out wrong', then:'A party or the desk asks to reopen; Finance or the checker decides: {REOPENED}.' },
+    { if:'A line shows a bill is wrong', then:'The maker raises a dispute from the line, inside the dispute window.' },
+  ] },
+
+{ phase:'month', t:'Close the month: Finance, SAP, CERC and DSM', ends:'Posting {POSTED}, Form-IV {SUBMITTED}', see:['q7','q9','q22','q10'],
+  path:[
+    ['M','Month-Close Board: `Generate all ready (n)` raises every ready bill; `Raise LPS bills` raises the month’s surcharge.'],
+    ['M','Finance Posting (FI): `Prepare the posting` for the month and what is booked: {PREPARED}.'],
+    ['C','`Push to SAP`, then `Read back from SAP`: {POSTED} on SAP’s FI documents. A posting not sent to SAP is booked with `Post` and Finance’s voucher.'],
+    ['M','CERC Form-IV: `Prepare Form-IV` › `Create Filing` from the month’s bills: {DRAFT}.'],
+    ['C','`Mark Submitted to CERC` › `Confirm and submit` on CERC’s reference, by the 15th: {SUBMITTED}, then locked.'],
+    ['M','Each week, DSM: `Upload official NRPC DSA`, `Raise from NRPC statement`, `Generate supplementary bill`; the bill climbs the ladder.'],
+  ],
+  edges:[
+    { if:'A row on the board cannot be raised', then:'The popup says why. A month that has not ended cannot be picked.' },
+    { if:'A document was cancelled or changed after the posting was prepared', then:'Booking is refused: withdraw it and prepare the month again.', refuse:'Changed since this posting was prepared: …. Withdraw it and prepare the month again.' },
+    { if:'Whoever prepared the posting tries to book it', then:'Refused.', refuse:'You prepared this posting, so someone else books it.' },
+    { if:'An invoice is already in SAP', then:'It is not sent again. A push SAP never answered is held until a read back settles it, so nothing is sent twice.' },
+    { if:'The posting has gone to SAP', then:'No voucher can be typed in for it and no reversal is made here: SAP books it.' },
+    { if:'SAP cannot be reached or is not set up', then:'`Test SAP connection` checks the link; the screen says when SAP is not configured.' },
+    { if:'A posting was wrong', then:'`Reverse`, with a reason of at least 10 characters ({REVERSED}). One still PREPARED is withdrawn instead.' },
+    { if:'Nothing was billed in the month', then:'A NIL Form-IV return is still owed.' },
+    { if:'A Form-IV line has no price, or is over the cap without a reason', then:'The filing stops. A bill changed since: `Regenerate from bills`. A return filed before the platform held it: `Already filed outside the platform?`.' },
+    { if:'A DSM row is a manual estimate', then:'It cannot be billed: only NRPC’s published figure is.', refuse:'This row is a manual estimate, not the published settlement, so it cannot be billed.' },
+    { if:'NRPC reissues a week’s statement', then:'The old one is marked superseded: import the current one. NRPC prints Paid (+) / Received (−), the reverse of the platform’s sign.' },
+  ] },
+
+{ phase:'wrong', t:'When a buyer defaults', ends:'Invocation {FUNDS_RECEIVED}, or the power sold elsewhere and {RECOVERED}', see:['q14','q16','q12'],
+  path:[
+    ['M','`Invoke waterfall` › `Confirm invocation` on the PSA, for everything 30 days or more past due: {NOTICE_ISSUED}, the buyer told.'],
+    ['C','`Claimed` › `Save` when the claim reaches the bank ({CLAIMED}); `Funds in` when it pays ({FUNDS_RECEIVED}).'],
+    ['M','Or `+ Record Diversion` › `Record`: the power sold elsewhere ({RECORDED}), then `Recover against dues` ({RECOVERED}).'],
+  ],
+  edges:[
+    { if:'Which security pays first', then:'The buyer’s LC, then the payment security fund, then the corpus fund. A seller’s guarantee answers only for the seller.' },
+    { if:'The bank does not answer within 7 days', then:'The claim is flagged as late.' },
+    { if:'The bank refuses', then:'`Bank refused`, with the date: the invocation is {REJECTED}.' },
+    { if:'The notice went out by mistake', then:'It cannot be undone from this screen.' },
+    { if:'Diversion is recorded as a payment default with no bill past due', then:'Refused: record it as power not requisitioned if that is what happened.', refuse:'… has no bill past its due date, so the buyer is not in payment default. If the buyer did not schedule the power, record it as not requisitioned.' },
+    { if:'The diversion fetched more than the buyer owes', then:'The surplus is held as the buyer’s advance.' },
+    { if:'The power sold for less than it cost', then:'`Bill the deficit`: a debit note on the buyer’s latest bill.' },
+    { if:'No more bills should go out on the contract', then:'Put it on hold: new SJVN bills on it are refused until the hold is released.' },
+  ] },
+
+{ phase:'year', t:'Each quarter and each year', ends:'Certificates filed, CUF trued up, the year’s returns and rates in place', see:['q6','q13','q22','q25'],
+  path:[
+    ['F','Each quarter: `+ File a certificate` (Form 16A) for each seller, then reconcile TDS against Form 16A.'],
+    ['M','Each contract year: `Raise true-up note` where the CUF fell short. The checker approves it in Notes for Approval.'],
+    ['M','By 30 April: `Roll up annual` on Form-IV once the twelve monthlies are filed; the checker files it.'],
+    ['A','Each April, the year’s LPS base rate as a new row in the masters’ schedule; each new year, the holiday calendar.'],
+  ],
+  edges:[
+    { if:'A month of the contract year is not locked', then:'The CUF waits: Waiting on locked energy.' },
+    { if:'No bill was presented in the year', then:'There is nothing to set the true-up note against.' },
+    { if:'The LPS base rate changes in April', then:'Add the year’s row; changing the single master rate instead would re-price every open bill back to its due date. A contract with its own rate keeps it.' },
+    { if:'A holiday is declared after bills were raised', then:'Bills already raised keep their due dates. Holidays are withdrawn, never deleted. A weekly off needs no entry.', refuse:'… is already a weekly off, so it does not need a holiday entry.' },
+    { if:'A buyer has deducted TDS from its payments', then:'It files its own certificate from its portal, so SJVN can claim the credit.' },
+  ] },
+
+{ phase:'always', t:'People and access, any day', ends:'The work goes on, under each officer’s own name', see:['q18','q19','q20','q24','q26','q21','q23'],
+  path:[
+    ['A','Additional charge: `Record a charge` for an officer away (up to 90 days): {IN_FORCE}. The holder acts as them under their own name.'],
+    ['M','Break-glass when nobody holding a role can act: `Ask for break-glass`, opened on two approvals, one from Management.'],
+    ['A','Project Assignments and Role Powers: who works on which project, and which role may do what.'],
+    ['M','Every day: the Notification Board, Quick Connect and the Reports tab.'],
+    ['X','Every action is logged: who, when, and the value before and after. SJVN Admin reads it in the Audit Trail and checks nothing was altered (`Verify full chain`).'],
+  ],
+  edges:[
+    { if:'An officer would hold their own charge, or an administrator a desk charge', then:'Not allowed.' },
+    { if:'Break-glass is asked for again while one is open', then:'Refused. A grant closes by itself, and everything done under it is flagged in the audit trail.', refuse:'You already have a request or an open grant for that role' },
+    { if:'A project has nobody to act at a tier', then:'SJVN Admin is alerted daily.' },
+    { if:'A power change would let a maker also check, an administrator transact, or leave a power with nobody', then:'Never allowed. Nobody changes their own role’s powers.' },
+    { if:'Someone serves a notice, a dispute or a bill on Quick Connect', then:'It does not count: those follow the PPA or PSA.' },
+    { if:'A report runs past 50,000 rows', then:'The file says only the first rows are in it: narrow the filters.' },
+    { if:'Someone asks who did what, or acted for whom', then:'The Audit Trail has it: a change made while acting for someone is its own entry, and duty conflicts are counted at the top (`Review them`).' },
+    { if:'A record in the trail was altered', then:'The chain check names the broken link: `Open the broken record`.' },
+  ] },
+];
+
 /* ───────────────────────── helpers ───────────────────────── */
 const KEY = 'reia-playbook-v1';
 const P = (() => { let v = {}; try { v = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { v = {}; } return Object.assign({ done:{}, best:0, theme:'', lastM:0 }, v); })();
@@ -1793,7 +2133,7 @@ const xpNow = () => [...MISSIONS, ...QUESTS].reduce((a, m) => a + (isDone(m) ? m
 const rankOf = (x) => { let r = RANKS[0][1]; RANKS.forEach(([t, n]) => { if (x / MAXXP >= t - 1e-9) r = n; }); return r; };
 
 /* ───────────────────────── shell ───────────────────────── */
-const TABS = [['map','Map'],['find','Find a step'],['missions','Missions'],['players','Players'],['powers','Powers'],['lifecycles','Lifecycles'],['relay','Log-in relay'],['money','Money'],['quests','Side quests'],['quiz','Quiz']];
+const TABS = [['map','Map'],['cycle','Full cycle'],['find','Find a step'],['missions','Missions'],['players','Players'],['powers','Powers'],['lifecycles','Lifecycles'],['relay','Log-in relay'],['money','Money'],['quests','Side quests'],['quiz','Quiz']];
 const app = $('#app'); const drawer = $('#drawer'); const scrim = $('#scrim'); const hud = $('#hud'); const sw = $('#switch');
 let current = 'map';
 
@@ -1813,7 +2153,7 @@ function paintTabs() {
 
 function go(token, push = true) {
   if (token === 'missions') token = 'm' + (P.lastM || (MISSIONS.find((m) => !isDone(m)) || MISSIONS[0]).n);
-  const views = { map:viewMap, find:viewFind, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
+  const views = { map:viewMap, cycle:viewCycle, find:viewFind, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
   const playable = /^[mq]\d+$/.test(token);
   if (!playable && !views[token]) token = 'map';
   if (playable && !BOOK[token]) token = token[0] === 'q' ? 'quests' : 'm1';
@@ -1891,6 +2231,7 @@ function viewMap() {
         <div class="me-n"><b>${doneN}</b> of ${MISSIONS.length} missions done · <b>${questsN}</b> of ${QUESTS.length} side quests · best quiz <b>${P.best || 0}</b>/10 · ${x} XP</div>
         <button class="btn primary" type="button" data-go="m${next ? next.n : 1}">${ICON.play} ${next ? `Next: ${esc(next.short)}` : 'Replay mission 1'}</button>
       </div>
+      <p class="cy-cta"><button class="btn" type="button" data-go="cycle">The whole cycle on one page, every exception included →</button></p>
     </div>
     <div class="stats">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>
   </section>
@@ -2391,6 +2732,52 @@ function paintFind() {
   out.innerHTML = html;
 }
 
+/* ───────────────────────── view: the full cycle ───────────────────────── */
+// Every stage on one page: the normal path, then every exception. The filter
+// narrows the exceptions; a stage whose title matches keeps all of its own.
+const CY = { q:'' };
+const CY_STEPS = CYCLE.reduce((a, c) => a + c.path.length, 0);
+const CY_EDGES = CYCLE.reduce((a, c) => a + c.edges.length, 0);
+const phaseName = (p) => CPHASES.find(([k]) => k === p)[1];
+const seeName = (id) => `${BOOK[id].kind === 'Quest' ? 'Side quest' : 'Mission'} ${BOOK[id].n} · ${BOOK[id].short}`;
+const edgeHay = (e) => plain([e.if, e.then, e.refuse].join(' ')).toLowerCase();
+function viewCycle() {
+  const stats = [[CYCLE.length,'stages'],[CY_STEPS,'steps'],[CY_EDGES,'exceptions'],[8,'players']];
+  return `<section class="intro">
+    <div><p class="eyebrow">Full cycle · one page</p><h1>The whole REIA cycle, with every exception</h1>
+    <p class="lede">From the first KYC document to the year’s returns, in the order a deal lives. Each stage gives the normal path, who acts and what it ends in, then every way it can go differently and what the platform does then, with the message it shows when it refuses. Play any stage step by step from its links.</p></div>
+    <div class="stats">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>
+  </section>
+  <nav class="cy-nav" aria-label="Stages">${CPHASES.map(([p, name]) => `<div class="cy-ph"><small>${esc(name)}</small><div>${CYCLE.map((c, i) => c.phase === p ? `<button class="chip" type="button" data-cy="${i + 1}">${i + 1} · ${esc(c.t)}</button>` : '').join('')}</div></div>`).join('')}</nav>
+  <div class="tools cy-tools"><input class="search" id="cy-q" type="search" placeholder="Filter the exceptions, e.g. late, cancel, KYC" value="${esc(CY.q)}" aria-label="Filter the exceptions" autocomplete="off"><button class="btn" type="button" data-print>Print or save as PDF</button></div>
+  ${P.me ? `<p class="me-bar-m">${rb(P.me,'sm')}Your steps as ${esc(R[P.me].short)} are lit. <button class="lnk" type="button" data-me="">Show everyone’s</button></p>` : ''}
+  <div id="cy-out" aria-live="polite">${cycleStages()}</div>`;
+}
+function cycleStages() {
+  const q = CY.q.trim(); const ws = q ? words(q) : [];
+  const res = ws.map((w) => new RegExp(`(^|[^a-z0-9])${reEsc(w)}`));
+  const hit = (hay) => res.every((re) => re.test(hay));
+  let shown = 0; let edges = 0;
+  const html = CYCLE.map((c, i) => {
+    const all = ws.length && hit(plain(c.t + ' ' + phaseName(c.phase)).toLowerCase());
+    const es = !ws.length || all ? c.edges : c.edges.filter((e) => hit(edgeHay(e)));
+    if (ws.length && !es.length) return '';
+    shown++; edges += es.length;
+    const who = [...new Set(c.path.map(([k]) => k))];
+    return `<section class="cy-st" id="cy-${i + 1}">
+      <header class="cy-h"><span class="cy-n">${i + 1}</span><div class="cy-hd"><p class="eyebrow">${esc(phaseName(c.phase))}</p><h2>${esc(c.t)}</h2>
+        <p class="cy-meta"><span class="cy-who">${who.map((k) => rb(k,'sm')).join('')}</span><span>Ends: ${fmt(c.ends)}</span></p></div>
+        <div class="cy-see"><small>Play it</small>${c.see.map((id) => `<button class="lnk" type="button" data-go="${id}">${esc(seeName(id))} →</button>`).join('')}</div></header>
+      <div class="cy-cols">
+        <div><h3>The normal path</h3><ol class="cy-path${P.me ? ' mine' : ''}">${c.path.map(([k, t]) => `<li class="${k === P.me ? 'me' : ''}">${rb(k,'sm')}<span><b>${esc(R[k].short)}</b> ${fmt(t)}</span></li>`).join('')}</ol></div>
+        <div><h3>If it goes differently <span class="cy-c">${es.length}${es.length < c.edges.length ? ` of ${c.edges.length}` : ''}</span></h3>
+          <ul class="cy-edges">${es.map((e) => `<li><b>${fmt(e.if)}</b><p>${fmt(e.then)}</p>${e.refuse ? `<p class="quote">“${esc(e.refuse)}”</p>` : ''}</li>`).join('')}</ul></div>
+      </div></section>`;
+  }).join('');
+  if (!ws.length) return html;
+  return `<p class="fd-sum">${edges} exception${edges === 1 ? '' : 's'} in ${shown} stage${shown === 1 ? '' : 's'} matching “${esc(q)}”</p>` + (shown ? html : `<p class="empty">No exception matches. Try one word.</p>`);
+}
+
 /* ───────────────────────── view: quiz ───────────────────────── */
 // Roles that could also fairly answer a step's question, kept out of its options.
 // 'skip' leaves the step out (both companies do it the same way).
@@ -2454,6 +2841,8 @@ document.addEventListener('click', (e) => {
   if (pwq) { PW.q = pwq.dataset.pwq; PW.mod = 'All'; go('powers'); return; }
   const meEl = t.closest('[data-me]');
   if (meEl) { P.me = meEl.dataset.me; save(); if (current === 'find') paintFind(); else go(current, false); return; }
+  const cyEl = t.closest('[data-cy]');
+  if (cyEl) { const el = $('#cy-' + cyEl.dataset.cy); if (el) el.scrollIntoView({ block:'start' }); return; }
   if (t.closest('[data-print]')) { closeDrawer(true); exitPlay(); window.print(); return; }
   const stepEl = t.closest('[data-step]');
   if (stepEl) { const [id, k] = stepEl.dataset.step.split(':'); const i = Number(k); if (play && play.id === id) { play.i = i; showStep(); } openDrawer(id, i); return; }
@@ -2504,6 +2893,7 @@ document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.id === 'pw-q') { PW.q = t.value; paintPowers(); return; }
   if (t.id === 'fd-q') { FD.q = t.value; paintFind(); return; }
+  if (t.id === 'cy-q') { CY.q = t.value; $('#cy-out').innerHTML = cycleStages(); return; }
   if (t.id && t.id.startsWith('mv-')) {
     const k = t.id.slice(3);
     if (k === 'tds') MV.tds = t.checked; else MV[k] = Number(t.value);
