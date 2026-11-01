@@ -1439,6 +1439,10 @@ export const api = {
     prepare: (body) => p('/reia-fi/prepare', body),
     post: (id, body) => p(`/reia-fi/${id}/post`, body || {}),
     reverse: (id, reason) => p(`/reia-fi/${id}/reverse`, { reason }),
+    sapHealth: () => g('/reia-fi/sap/health'),
+    sapPushes: (id) => g(`/reia-fi/${id}/sap`),
+    sapPush: (id) => p(`/reia-fi/${id}/sap-push`),
+    sapCheck: (id) => p(`/reia-fi/${id}/sap-check`),
   },
   marketAnalytics: {
     getRates: (params) => g('/market-analytics/rates', params),

@@ -6,6 +6,8 @@ import {
   CATEGORIES, CATEGORY_LABELS, bookableDocuments, totalsOf,
   preparePosting, postToFinance, reversePosting, getPosting, listPostings,
 } from '../services/reiaFiPosting.js';
+import { ping as sapPing } from '../services/sapOdata.js';
+import { pushPosting, checkPosting, listPushes } from '../services/reiaSapPush.js';
 
 // REIA's month-end handover to corporate Finance. The hydro equivalent lives at
 // /hydro-billing/fi; the rules are the same, see services/reiaFiPosting.js.
@@ -19,6 +21,8 @@ const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMP
 // Phase B.2: the maker prepares a posting; posting it to the ledger, or reversing it, is the checker's.
 const WRITE = [...ROLE_GROUPS.REIA_MAKE];
 const POST = [...ROLE_GROUPS.REIA_CHECK];
+// Reading back from SAP: the REIA desk, maker or checker.
+const SAP_DESK = [...ROLE_GROUPS.REIA_WRITE];
 
 const month = (v) => (/^\d{4}-\d{2}$/.test(String(v || '')) ? String(v) : null);
 const fail = (res, err) => res.status(err.status || 400).json({ error: err.message });
@@ -55,6 +59,55 @@ router.get('/checklist', requireRole(...READ), (req, res) => {
   const period = String(req.query.period_month || '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: 'period_month must be YYYY-MM' });
   res.json(postingChecklist(period));
+});
+
+// GET /reia-fi/sap/health — can this server reach the SAP service? Reads only.
+router.get('/sap/health', requireRole(...READ), async (req, res) => {
+  try {
+    res.json(await sapPing());
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// GET /reia-fi/:postingId/sap — what was sent to SAP, as last recorded here.
+router.get('/:postingId/sap', requireRole(...READ), (req, res) => {
+  res.json({ pushes: listPushes(req.params.postingId) });
+});
+
+// POST /reia-fi/:postingId/sap-push — send the posting's invoices to SAP.
+// The checker's step, in place of typing Finance's voucher (see reiaSapPush.js).
+router.post('/:postingId/sap-push', requireRole(...POST), async (req, res) => {
+  try {
+    const result = await pushPosting(req.params.postingId, {
+      pushedBy: req.user?.name || req.user?.email || null,
+      pushedById: req.user?.id || null,
+    });
+    secureLogAudit(req, {
+      action: 'REIA_FI_SAP_PUSH',
+      module: 'REIA',
+      entityType: 'reia_fi_postings',
+      entityId: req.params.postingId,
+      afterValue: {
+        posting_no: result.posting_no, timestamp: result.timestamp,
+        sent: result.sent, failed: result.failed, unknown: result.unknown,
+        belnr: result.results.map((r) => `${r.doc_no}=${r.belnr}:${r.status}`),
+      },
+    });
+    res.json(result);
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// POST /reia-fi/:postingId/sap-check — ask SAP what became of what was sent.
+// It records SAP's answer and decides nothing, so maker and checker both may.
+router.post('/:postingId/sap-check', requireRole(...SAP_DESK), async (req, res) => {
+  try {
+    res.json({ pushes: await checkPosting(req.params.postingId) });
+  } catch (err) {
+    fail(res, err);
+  }
 });
 
 router.get('/:postingId', requireRole(...READ), (req, res) => {

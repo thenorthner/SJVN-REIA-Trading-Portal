@@ -3916,6 +3916,9 @@ function migrateDecisions20261017() {
     }
   };
   widenCheck('reia_fi_postings', "CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE'))", "CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE','POOL'))");
+  // A push SAP never answered is UNKNOWN (28-Oct-2026); the first SAP build
+  // created the table without it.
+  widenCheck('reia_sap_pushes', "CHECK (status IN ('SENT','FAILED','BOOKED'))", "CHECK (status IN ('UNKNOWN','SENT','FAILED','BOOKED'))");
 
   const MARK = 'decisions_2026_10_17_defaults';
   const done = db.prepare('SELECT 1 FROM system_parameters WHERE param_key = ?').get(MARK);

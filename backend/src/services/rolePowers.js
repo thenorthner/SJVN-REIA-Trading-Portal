@@ -188,7 +188,7 @@ export const POWERS = [
     routes: ['POST /api/reia-fi/prepare'], pages: ['/reia/finance-posting'] },
   { key: 'fin.sap.post', area: 'Finance & SAP', kind: 'check', sod: 'REIA', label: 'Post to SAP and reverse',
     does: 'Post the prepared FI document to SAP, or reverse a posting.',
-    routes: ['POST /api/reia-fi/:postingId/post', 'POST /api/reia-fi/:postingId/reverse'],
+    routes: ['POST /api/reia-fi/:postingId/post', 'POST /api/reia-fi/:postingId/reverse', 'POST /api/reia-fi/:postingId/sap-push'],
     pages: ['/reia/finance-posting'] },
 
   // ── Counterparties ────────────────────────────────────────────────────────

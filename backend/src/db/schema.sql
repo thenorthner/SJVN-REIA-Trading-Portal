@@ -3987,6 +3987,33 @@ CREATE TABLE IF NOT EXISTS reia_fi_posting_lines (
 CREATE INDEX IF NOT EXISTS idx_reia_fi_lines_posting ON reia_fi_posting_lines (posting_id);
 CREATE INDEX IF NOT EXISTS idx_reia_fi_lines_source ON reia_fi_posting_lines (source_id);
 
+-- An invoice of a REIA posting sent to SAP (services/reiaSapPush.js).
+--
+-- One row per attempt. The row is written before the call as UNKNOWN and
+-- settled after it (SENT / FAILED). One SAP never answered stays UNKNOWN until
+-- a read back settles it, so an invoice SAP may hold is never sent again.
+-- seq feeds Belnr (RE + 8 digits), the number SAP files the invoice under.
+CREATE TABLE IF NOT EXISTS reia_sap_pushes (
+  id TEXT PRIMARY KEY,
+  posting_id TEXT NOT NULL REFERENCES reia_fi_postings(id),
+  posting_line_id TEXT NOT NULL,
+  doc_no TEXT NOT NULL,                  -- the platform's invoice number
+  sap_invoice_no TEXT NOT NULL,          -- as sent, at most 16 characters
+  seq INTEGER NOT NULL UNIQUE,
+  belnr TEXT NOT NULL,
+  sap_timestamp TEXT NOT NULL,           -- YYYYMMDDHHMMSS IST, SAP's run id
+  status TEXT NOT NULL CHECK (status IN ('UNKNOWN','SENT','FAILED','BOOKED')),
+  lines_json TEXT NOT NULL,              -- exactly what was sent
+  error TEXT,                            -- why SAP refused it
+  sap_fi_doc TEXT,                       -- FI document, once SAP has posted
+  sap_fi_year TEXT,
+  sap_message TEXT,                      -- what SAP says on a later check
+  checked_at TEXT,
+  pushed_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_reia_sap_pushes_posting ON reia_sap_pushes (posting_id);
+
 -- Power trading (PTC) bills raised off a hydro station.
 --
 -- A trading bill is not a tariff bill: there is no availability, no design

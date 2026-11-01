@@ -264,6 +264,38 @@ export function preparePosting({ periodMonth, category = 'SALE', notes = null, c
   return getPosting(id);
 }
 
+/**
+ * What is booked is what was prepared: a document cancelled or changed since
+ * would be booked at an amount it no longer has. Throws 409 naming them.
+ */
+export function assertUnchanged(p) {
+  const lines = db.prepare('SELECT * FROM reia_fi_posting_lines WHERE posting_id = ?').all(p.id);
+  const changed = [];
+  for (const l of lines) {
+    if (l.source_type === 'INVOICE') {
+      const inv = db.prepare('SELECT status, total_amount FROM invoices WHERE id = ?').get(l.source_id);
+      const ok = inv && (p.category === 'SALE' ? SALE_STATUSES : PURCHASE_STATUSES).includes(inv.status)
+        && Math.abs(money(inv.total_amount) - (p.category === 'POOL' ? Math.abs(l.total_amount) : l.total_amount)) < 0.01;
+      if (!ok) changed.push(l.doc_no);
+    } else {
+      const n = db.prepare('SELECT status, amount FROM debit_credit_notes WHERE id = ?').get(l.source_id);
+      if (!n || !['ISSUED', 'SETTLED'].includes(n.status) || Math.abs(money(n.amount) + l.total_amount) >= 0.01) changed.push(l.doc_no);
+    }
+  }
+  if (changed.length) {
+    throw Object.assign(new Error(`Changed since this posting was prepared: ${changed.join(', ')}. Withdraw it and prepare the month again.`), { status: 409 });
+  }
+}
+
+// 1 once any invoice of the posting has gone to SAP, or may have (no answer yet).
+const IN_SAP = `EXISTS (
+  SELECT 1 FROM reia_sap_pushes s WHERE s.posting_id = p.id AND s.status IN ('SENT', 'BOOKED', 'UNKNOWN')
+)`;
+
+function inSap(postingId) {
+  return !!db.prepare(`SELECT ${IN_SAP} AS v FROM reia_fi_postings p WHERE p.id = ?`).get(postingId)?.v;
+}
+
 /** Book a prepared posting, recording the voucher Finance returned. */
 export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null, postedById = null }) {
   const p = db.prepare('SELECT * FROM reia_fi_postings WHERE id = ?').get(postingId);
@@ -285,24 +317,13 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null,
     throw Object.assign(new Error(`${p.posting_no} has been reversed — prepare the month again`), { status: 400 });
   }
 
-  // What is booked is what was prepared: a document cancelled or changed since
-  // would be booked at an amount it no longer has.
-  const lines = db.prepare('SELECT * FROM reia_fi_posting_lines WHERE posting_id = ?').all(postingId);
-  const changed = [];
-  for (const l of lines) {
-    if (l.source_type === 'INVOICE') {
-      const inv = db.prepare('SELECT status, total_amount FROM invoices WHERE id = ?').get(l.source_id);
-      const ok = inv && (p.category === 'SALE' ? SALE_STATUSES : PURCHASE_STATUSES).includes(inv.status)
-        && Math.abs(money(inv.total_amount) - (p.category === 'POOL' ? Math.abs(l.total_amount) : l.total_amount)) < 0.01;
-      if (!ok) changed.push(l.doc_no);
-    } else {
-      const n = db.prepare('SELECT status, amount FROM debit_credit_notes WHERE id = ?').get(l.source_id);
-      if (!n || !['ISSUED', 'SETTLED'].includes(n.status) || Math.abs(money(n.amount) + l.total_amount) >= 0.01) changed.push(l.doc_no);
-    }
+  // Once its invoices went to SAP, SAP's posting run books them and the read
+  // back records SAP's FI document; a voucher typed in here would book them twice.
+  if (inSap(postingId)) {
+    throw Object.assign(new Error(`${p.posting_no} has gone to SAP; its FI document comes from "Read back from SAP", not a voucher typed in here.`), { status: 409 });
   }
-  if (changed.length) {
-    throw Object.assign(new Error(`Changed since this posting was prepared: ${changed.join(', ')}. Withdraw it and prepare the month again.`), { status: 409 });
-  }
+
+  assertUnchanged(p);
 
   db.prepare(`
     UPDATE reia_fi_postings
@@ -331,6 +352,11 @@ export function reversePosting(postingId, { reason, reversedBy = null }) {
   }
   if (p.reverses_posting_id) {
     throw Object.assign(new Error(`${p.posting_no} is itself a reversal`), { status: 400 });
+  }
+  // A reversal here would leave SAP's booking standing, and sending the
+  // reversal to SAP is not built yet.
+  if (inSap(postingId)) {
+    throw Object.assign(new Error(`${p.posting_no} has gone to SAP, and sending a reversal to SAP is not built yet, so it cannot be reversed here.`), { status: 409 });
   }
   // A batch never booked is withdrawn, not reversed: a counter-entry for an
   // entry Finance never made would sit in its record as if it had.
@@ -374,7 +400,7 @@ export function reversePosting(postingId, { reason, reversedBy = null }) {
 /** A posting with the documents it booked. */
 export function getPosting(id) {
   const p = db.prepare(`
-    SELECT p.*, r.posting_no AS reverses_posting_no
+    SELECT p.*, r.posting_no AS reverses_posting_no, ${IN_SAP} AS in_sap
     FROM reia_fi_postings p
     LEFT JOIN reia_fi_postings r ON r.id = p.reverses_posting_id
     WHERE p.id = ?
@@ -389,7 +415,7 @@ export function getPosting(id) {
 /** Postings, newest month first. */
 export function listPostings({ periodMonth = null, category = null, status = null } = {}) {
   return db.prepare(`
-    SELECT * FROM reia_fi_postings
+    SELECT p.*, ${IN_SAP} AS in_sap FROM reia_fi_postings p
     WHERE (? IS NULL OR period_month = ?)
       AND (? IS NULL OR category = ?)
       AND (? IS NULL OR status = ?)

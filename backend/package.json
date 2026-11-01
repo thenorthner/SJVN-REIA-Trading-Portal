@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed": "node src/db/seed.js",
+    "sap:test": "node src/scripts/sapPushTest.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -67,6 +67,9 @@ export default function ReiaFinance() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  // SAP: the posting whose pushes are open, and what was sent for it.
+  const [sapFor, setSapFor] = useState(null);
+  const [sapPushes, setSapPushes] = useState([]);
 
   const load = useCallback(() => {
     api.reiaFi.postings()
@@ -127,6 +130,59 @@ export default function ReiaFinance() {
     if (r) { setReversing(null); setReason(''); }
   }
 
+  function openSap(r) {
+    setSapFor(r);
+    setSapPushes([]);
+    api.reiaFi.sapPushes(r.id).then((x) => setSapPushes(x?.pushes || [])).catch(() => setSapPushes([]));
+  }
+
+  async function doSapHealth() {
+    await run(
+      () => api.reiaFi.sapHealth(),
+      (r) => `SAP is reachable: ${r.host}${r.client ? `, client ${r.client}` : ''}, service answers (${(r.entity_sets || []).join(', ')}).`,
+    );
+  }
+
+  async function doSapPush() {
+    const r = await run(
+      () => api.reiaFi.sapPush(sapFor.id),
+      (res) => `${res.posting_no}: ${res.sent} invoice(s) sent to SAP.`,
+    );
+    // Anything not sent is a problem to look at, not a success.
+    if (r && (r.failed || r.unknown)) {
+      setNotice('');
+      setError(`${r.posting_no}: ${r.sent} sent to SAP${r.failed ? `, ${r.failed} refused by SAP` : ''}${r.unknown ? `, ${r.unknown} got no answer from SAP — use "Read back from SAP" before pushing again` : ''}. The list shows why.`);
+    }
+    // Refresh even when refused: a refusal can follow a push that half went.
+    api.reiaFi.sapPushes(sapFor.id).then((x) => setSapPushes(x?.pushes || [])).catch(() => {});
+    api.reiaFi.posting(sapFor.id).then(setSapFor).catch(() => {});
+  }
+
+  async function doSapCheck() {
+    const r = await run(() => api.reiaFi.sapCheck(sapFor.id), (res) => {
+      const n = (s) => (res.pushes || []).filter((p) => p.status === s).length;
+      return `Read back from SAP: ${n('BOOKED')} booked, ${n('SENT')} waiting for SAP's posting run${n('FAILED') ? `, ${n('FAILED')} not in SAP` : ''}.`;
+    });
+    if (r) {
+      setSapPushes(r.pushes || []);
+      // Once SAP has posted every invoice the posting itself is POSTED.
+      api.reiaFi.posting(sapFor.id).then(setSapFor).catch(() => {});
+    }
+  }
+
+  // Every invoice of the open posting already sent (or perhaps sent): nothing left to push.
+  const allInSap = !!sapFor && new Set(sapPushes.filter((p) => p.status !== 'FAILED').map((p) => p.posting_line_id)).size >= sapFor.docs_count;
+
+  const sapColumns = [
+    { key: 'doc_no', header: 'Invoice', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.doc_no}</span> },
+    { key: 'belnr', header: 'SAP Belnr' },
+    { key: 'sap_timestamp', header: 'Sent (SAP run id)' },
+    { key: 'lines', header: 'Lines' },
+    { key: 'status', header: 'Status', render: (r) => <Badge status={{ FAILED: 'REJECTED', BOOKED: 'APPROVED', SENT: 'SENT', UNKNOWN: 'PENDING' }[r.status]} label={r.status === 'UNKNOWN' ? 'NO ANSWER' : r.status} /> },
+    { key: 'sap_fi_doc', header: 'FI document', render: (r) => (r.sap_fi_doc ? `${r.sap_fi_doc} / ${r.sap_fi_year || ''}` : '—') },
+    { key: 'message', header: 'SAP says', render: (r) => r.error || r.sap_message || '' },
+  ];
+
   const columns = [
     { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15 }}>{r.posting_no}</span> },
     { key: 'period_month', header: 'Month' },
@@ -153,16 +209,25 @@ export default function ReiaFinance() {
           <button type="button" className="btn-link" onClick={() => api.reiaFi.posting(r.id).then(setOpen)}>
             View
           </button>
+          {r.category === 'SALE' && !r.reverses_posting_id && (
+            <button type="button" className="btn-link" onClick={() => openSap(r)}>
+              SAP
+            </button>
+          )}
+          {/* Once in SAP, SAP books it: no typed voucher, and no reversal from here. */}
+          {!!r.in_sap && r.status === 'PREPARED' && (
+            <span className="audit-muted">in SAP — &ldquo;Read back&rdquo; brings the FI document</span>
+          )}
           {/* Whoever prepared a batch does not also book it. */}
-          {canPost && r.status === 'PREPARED' && r.created_by !== user?.id && (
+          {!r.in_sap && canPost && r.status === 'PREPARED' && r.created_by !== user?.id && (
             <button type="button" className="btn-link" onClick={() => { setPosting(r); setVoucher(''); }}>
               Post
             </button>
           )}
-          {canWrite && r.status === 'PREPARED' && r.created_by === user?.id && (
+          {!r.in_sap && canWrite && r.status === 'PREPARED' && r.created_by === user?.id && (
             <span className="audit-muted">prepared by you — the checker posts it</span>
           )}
-          {canPost && r.status !== 'REVERSED' && !r.reverses_posting_id && (
+          {!r.in_sap && canPost && r.status !== 'REVERSED' && !r.reverses_posting_id && (
             <button type="button" className="btn-link" onClick={() => { setReversing(r); setReason(''); }}>
               {r.status === 'PREPARED' ? 'Withdraw' : 'Reverse'}
             </button>
@@ -228,9 +293,44 @@ export default function ReiaFinance() {
         )}
       </Card>
 
-      <Card title="Postings">
+      <Card
+        title="Postings"
+        actions={(
+          <button type="button" className="btn" disabled={busy} onClick={doSapHealth}>
+            Test SAP connection
+          </button>
+        )}
+      >
         <Table columns={columns} rows={postings} emptyMessage="Nothing from REIA has been handed to Finance yet." />
       </Card>
+
+      <Modal open={!!sapFor} onClose={() => setSapFor(null)} title={sapFor ? `${sapFor.posting_no} in SAP` : ''} width={1100}>
+        {sapFor && (
+          <div>
+            <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13.5 }}>
+              Each invoice goes to SAP as one document: the receivable on key 40 and its parts on
+              key 50. SAP&apos;s posting run books it; &ldquo;Read back from SAP&rdquo; then shows the FI document.
+              An invoice already in SAP is not sent again. Pushing books the posting, so it is the
+              checker&apos;s step, as recording Finance&apos;s voucher is; once SAP has posted every invoice the
+              posting shows as posted, under SAP&apos;s FI documents.
+            </p>
+            {notice && <div className="alert alert-success" role="status" style={{ marginBottom: 12 }}>{notice}</div>}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {canPost && sapFor.status === 'PREPARED' && sapFor.created_by !== user?.id && !allInSap && (
+                <button type="button" className="btn btn-primary" disabled={busy} onClick={doSapPush}>
+                  Push to SAP
+                </button>
+              )}
+              {(canWrite || canPost) && (
+                <button type="button" className="btn" disabled={busy || !sapPushes.some((p) => p.status !== 'FAILED')} onClick={doSapCheck}>
+                  Read back from SAP
+                </button>
+              )}
+            </div>
+            <Table columns={sapColumns} rows={sapPushes} emptyMessage="Nothing of this posting has been sent to SAP yet." />
+          </div>
+        )}
+      </Modal>
 
       <Modal open={!!open} onClose={() => setOpen(null)} title={open ? open.posting_no : ''} width={980}>
         {open && (
