@@ -26,8 +26,10 @@ export async function run({ src } = {}) {
   if (!src.includes('data: roles')) src = await (await fetch(`${$('script[src]')?.src || 'index.html'}?${Date.now()}`, { cache: 'no-store' })).text();
   const cut = (a, b) => { const i = src.indexOf(a); return src.slice(i, src.indexOf(b, i)); };
   // eslint-disable-next-line no-new-func
-  const D = new Function(`${cut('/* ───────────────────────── data: roles', '/* ───────────────────────── helpers')}\nreturn { R, QUESTS, QZONES };`)();
-  const { R, QUESTS, QZONES } = D;
+  const D = new Function(`${cut('/* ───────────────────────── data: roles', '/* ───────────────────────── helpers')}\nreturn { R, MISSIONS, QUESTS, QZONES };`)();
+  const { R, MISSIONS, QUESTS, QZONES } = D;
+  // The portal copy links each step to its screen and to the feedback form; the offline one does not.
+  const PORTAL = /\/reia-playbook\//.test(location.pathname);
   const plain = (s) => String(s).replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\{([A-Z][A-Z0-9_]*)\}/g, (m, t) => t.replace(/_/g, ' '));
   // A drawer section's words after its heading; a hand-off's words without its badge.
   const body = (x) => (x ? x.textContent.slice($('h4', x).textContent.length).replace(/\s+/g, ' ').trim() : '');
@@ -90,6 +92,14 @@ export async function run({ src } = {}) {
       ok($$('.quote', sec['If it refuses, you see'] || document.createElement('i')).length === (s.refuse || []).length, `${sa}: refusals`);
       ok(!!sec['Blocked for the wrong role'] === !!s.block, `${sa}: block section`);
       Object.entries(s.lists || {}).forEach(([h, items]) => ok($$('li', sec[h] || document.createElement('i')).length === items.length, `${sa}: list “${h}”`));
+      const sid = sec['Something wrong with this step?'];
+      ok(txt($('code', sid || document.createElement('i'))) === `Q${n}.${i + 1}`, `${sa}: step number “${txt($('code', sid || document.createElement('i')))}”`);
+      const go = $('.golink', sec.Where || document.createElement('i')); const report = $('.golink', sid || document.createElement('i'));
+      if (PORTAL) {
+        ok(!go || /^\/[a-z]/.test(go.getAttribute('href')), `${sa}: screen link “${go?.getAttribute('href')}”`);
+        ok(s.who !== 'X' || !go, `${sa}: an automatic step has a screen link`);
+        ok(!!report && report.getAttribute('href').startsWith('/feedback?from=') && report.getAttribute('href').includes(encodeURIComponent(`Q${n}.${i + 1}`)), `${sa}: report link “${report?.getAttribute('href')}”`);
+      } else ok(!go && !report, `${sa}: the offline copy links to a portal it does not have`);
       const next = q.steps[i + 1];
       const nextWant = next ? `${next.who !== s.who ? (next.who === 'X' ? 'The platform takes over: ' : `Hand over to ${R[next.who].name}: `) : 'Same person: '}${plain(next.t)}`
         : n < QUESTS.length ? `Quest complete. Next side quest: ${QUESTS[n].name}.` : 'That was the last side quest. The board shows which are still open.';
@@ -155,10 +165,11 @@ export async function run({ src } = {}) {
   await click('[data-done="q3"]');
 
   // Routing
-  for (const [h, want] of [['#q0', 'quests'], ['#q24', 'quests'], ['#q999', 'quests'], ['#qx', 'map'], ['#q23', 'q23']]) {
+  const last = `#q${QUESTS.length}`;
+  for (const [h, want] of [['#q0', 'quests'], [`#q${QUESTS.length + 1}`, 'quests'], ['#q999', 'quests'], ['#qx', 'map'], [last, 'last']]) {
     await route(h);
     const cur = $('#tabs [aria-current="page"]')?.dataset.go;
-    ok(cur === (want === 'q23' ? 'quests' : want) && (want !== 'q23' || txt($('h1')) === QUESTS[22].name), `route ${h} lands on ${cur} “${txt($('h1'))}”`);
+    ok(cur === (want === 'last' ? 'quests' : want) && (want !== 'last' || txt($('h1')) === QUESTS[QUESTS.length - 1].name), `route ${h} lands on ${cur} “${txt($('h1'))}”`);
   }
   await route('#q5'); await route('#q6'); history.back(); await sleep(150);
   ok(txt($('h1')) === QUESTS[4].name, `back from q6 shows “${txt($('h1'))}”`);
@@ -183,6 +194,44 @@ export async function run({ src } = {}) {
   }
   const chip = $('#p-F [data-go^="q"]'); const target = chip?.dataset.go;
   if (chip) { await click(chip); ok(location.hash === '#' + target, `players: chip went to ${location.hash}`); }
+
+  // Find a step: every step is found by its own title and its quest's name, and opens.
+  await route('#find');
+  // The box is drawn afresh with the view, so it is looked up each time.
+  const search = async (v) => { const box = await need('#fd-q'); box.value = v; box.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20); };
+  for (const [qi, q] of QUESTS.entries()) {
+    for (const [i, s] of q.steps.entries()) {
+      await search(`${plain(s.t)} ${q.short}`);
+      ok(!!$(`[data-find="q${qi + 1}:${i}"]`), `find: “${plain(s.t)}” (Q${qi + 1}.${i + 1}) is not among the results`);
+    }
+  }
+  await search('Make a role');
+  await click('[data-find="q24:4"]'); await sleep(60);
+  ok(location.hash === '#q24' && txt($('#drawer h2')) === plain(QUESTS[23].steps[4].t), `find: a result opened ${location.hash} “${txt($('#drawer h2'))}”`);
+  await key('Escape');
+  await route('#find'); await search('zzzz qqqq');
+  ok(!!$('#fd-out .empty') && !$('#fd-out [data-find]'), 'find: nonsense found something');
+  await search('');
+  // My steps: each role lists exactly its own steps, and lights them in the lanes.
+  const mine = (k) => [...MISSIONS, ...QUESTS].reduce((a, m) => a + m.steps.filter((s) => s.who === k || (s.alt || []).includes(k)).length, 0);
+  for (const k of ['M', 'C', 'H', 'F', 'G', 'A', 'S', 'B']) {
+    await click(`[data-me="${k}"]`);
+    ok(txt($('.fd-sum')).startsWith(`${mine(k)} step`) && $$('#fd-out [data-find]').length === mine(k), `my steps: ${R[k].short} lists “${txt($('.fd-sum'))}”, ${$$('#fd-out [data-find]').length} items, expected ${mine(k)}`);
+  }
+  await click('[data-me="A"]'); await route('#q24');
+  const adminSteps = QUESTS[23].steps.filter((s) => s.who === 'A' || (s.alt || []).includes('A')).length;
+  ok(!!$('.lanes.mine') && $$('.cell.me').length === adminSteps, `my steps: q24 lights ${$$('.cell.me').length} of Admin’s ${adminSteps} steps`);
+  ok(stored().me === 'A', 'my steps: the role was not saved');
+  await click('.me-bar-m [data-me=""]');
+  ok(!$('.lanes.mine') && stored().me === '', 'my steps: “Show everyone’s” did not clear it');
+  // Print: the printed copy writes out every step.
+  await route('#m6');
+  ok(!!$('[data-print]') && $$('.print-only .pr-step').length === MISSIONS[5].steps.length, `print: ${$$('.print-only .pr-step').length} steps in the printed copy of mission 6`);
+  await route('#q26');
+  ok($$('.print-only .pr-step').length === QUESTS[25].steps.length, 'print: quest 26');
+  // "/" goes to the search, ready to type.
+  await route('#map'); await key('/'); await sleep(60);
+  ok(location.hash === '#find' && document.activeElement?.id === 'fd-q', `keyboard: / went to ${location.hash}, focus on ${document.activeElement?.id}`);
 
   window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr);
   ok(!errors.length, `page errors: ${errors.join(' | ')}`);

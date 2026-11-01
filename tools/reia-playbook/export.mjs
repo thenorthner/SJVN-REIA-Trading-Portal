@@ -19,7 +19,9 @@ const PORTAL = path.resolve(HERE, '../../frontend/public/reia-playbook');
 const HEAD = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n';
 const TAIL = '\n</html>\n';
 
-const src = fs.readFileSync(path.join(HERE, 'index.html'), 'utf8');
+// index.html opens with its own charset line, for previews that send none;
+// both copies get theirs in HEAD.
+const src = fs.readFileSync(path.join(HERE, 'index.html'), 'utf8').replace(/^<meta charset="utf-8">\n/, '');
 fs.writeFileSync(path.join(HERE, 'REIA-Playbook-offline.html'), HEAD + src + TAIL);
 
 const scripts = [...src.matchAll(/<script>\n?([\s\S]*?)<\/script>/g)];

@@ -95,6 +95,8 @@ export default function PrivacyRequests() {
               { key: 'created_at', header: 'Received', render: (r) => fmtDateTime(r.created_at) },
               { key: 'name', header: 'From', render: (r) => `${r.name} (${r.email})` },
               { key: 'category', header: 'About', render: (r) => FB_CATEGORY[r.category] || r.category },
+              // The page it came from — a Playbook report names its step (e.g. "REIA Playbook Q24.6 · …").
+              { key: 'page_url', header: 'Page', render: (r) => r.page_url || '—' },
               { key: 'message', header: 'Feedback', render: (r) => (r.message.length > 90 ? `${r.message.slice(0, 90)}…` : r.message) },
               { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
             ]}

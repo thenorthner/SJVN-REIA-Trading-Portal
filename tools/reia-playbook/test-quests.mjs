@@ -14,7 +14,7 @@ export const PINNED = [
   'Ledgers & TDS', 'Month-Close Board', 'Invoice Verification', 'Finance posting (SAP)', 'Deviation (DSM)',
   'Contract changes', 'Compliance & holds', 'CUF true-up', 'Invoke security', 'Release security',
   'Power diversion', 'Energy banking', 'Additional charge', 'Break-glass', 'Project access',
-  'Audit trail', 'CERC Form-IV', 'Reports',
+  'Audit trail', 'CERC Form-IV', 'Reports', 'Role Powers', 'Holidays & due dates', 'Alerts & messages',
 ];
 
 // Each "Side quest N" / "Mission N" the text cites, by the words around it, and

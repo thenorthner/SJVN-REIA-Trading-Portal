@@ -47,7 +47,8 @@ function validate(f) {
 export default function PublicFeedback() {
   const { t, lang } = useGigw();
   const location = useLocation();
-  const from = location.state?.from || '';
+  // A page outside the app (the REIA Playbook) names itself in ?from=.
+  const from = location.state?.from || String(new URLSearchParams(location.search).get('from') || '').trim().slice(0, 200);
   const blank = { name: '', email: '', category: 'content', area: from ? 'here' : '', message: '', consent: false };
   const [form, setForm] = useState(blank);
   const [errors, setErrors] = useState({});

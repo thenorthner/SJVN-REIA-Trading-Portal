@@ -212,7 +212,9 @@ function History({ groups }) {
 export default function NotificationBoard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const canPost = ROLE_GROUPS.REIA_WRITE.includes(user?.role) || ROLE_GROUPS.HYDRO_THERMAL_WRITE?.includes(user?.role);
+  // As the server's BOARD_WRITE: the desks' makers and checkers, and the platform administrators.
+  const canPost = ROLE_GROUPS.REIA_WRITE.includes(user?.role) || ROLE_GROUPS.HYDRO_THERMAL_WRITE?.includes(user?.role)
+    || ['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
 
   const [tab, setTab] = useState('LIVE');
   const [board, setBoard] = useState({ broadcasts: [], alerts: [], summary: {}, groups: {} });
@@ -317,6 +319,9 @@ export default function NotificationBoard() {
             <button className="btn" onClick={() => setShowPrefs(true)} title="Choose which alerts are also sent to you by email or SMS">
               <Settings size={14} style={{ marginRight: 6, verticalAlign: -2 }} />Alert settings
             </button>
+            {canPost && (
+              <button className="btn btn-primary" onClick={() => { setForm(EMPTY_BROADCAST); setShowCompose(true); }}>+ Post Message</button>
+            )}
           </>
         )}
       />

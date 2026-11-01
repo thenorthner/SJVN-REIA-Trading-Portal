@@ -124,7 +124,7 @@ function printThread(thread, printedBy) {
     .body td, .body th { border: 1px solid #000; padding: 3px 8px; }
     footer { margin-top: 12px; font: 9pt Arial, sans-serif; color: #444; }
   </style></head><body>
-    <header><small>SJVN — RE Commercial &amp; Trading Platform · Quick Connect (Informal Operational Facility)</small><h1>${esc(subject)}</h1></header>
+    <header><small>SJVN — ${REIA_BETA ? 'REIA Commercial Portal' : 'RE Commercial &amp; Trading Platform'} · Quick Connect (Informal Operational Facility)</small><h1>${esc(subject)}</h1></header>
     ${messages}
     <footer>
       <div style="margin: 12px 0 6px; padding: 8px 12px; border: 1px dashed #777; font-size: 10.5pt; color: #444; background: #fafafa; border-radius: 4px;">

@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>REIA Playbook</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Interactive guide to the REIA desk: every mission, role, hand-off, status and rule.">
@@ -467,6 +468,50 @@ table.pw{border-collapse:separate;border-spacing:0;width:100%;min-width:800px}
   .map-svg{display:none}
   .ll{display:block}
   .pgrid,.sq{grid-template-columns:minmax(0,1fr)}
+}
+/* Open this screen, report a problem: on the portal copy only, where the app is one click away. */
+.golink{display:inline-flex;align-items:center;gap:7px;margin-top:9px;color:var(--brand);font:800 15px var(--font-display);text-decoration:none}
+.golink:hover{text-decoration:underline}
+.golink small{font:700 12.5px var(--font-mono);color:var(--muted)}
+.dsec .hint{font-size:14.5px;color:var(--muted);margin-top:6px}
+.hb.go{text-decoration:none;display:inline-flex;align-items:center}
+.sid{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.sid code{font:700 14px var(--font-mono);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+/* Find a step, and "my steps" */
+.fd-roles{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}
+.fd-roles .chip .rb{margin-left:-4px}
+.fd-sum{font:700 13px var(--font-mono);color:var(--muted);margin:0 0 10px}
+.fd-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.fd-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px;cursor:pointer;box-shadow:var(--shadow)}
+.fd-item:hover{border-color:var(--ink)}
+.fd-item .rb{grid-row:span 3;align-self:start}
+.fd-item small{font:700 12.5px var(--font-mono);color:var(--muted)}
+.fd-item b{font:800 16px/1.3 var(--font-display)}
+.fd-item .fd-where{font-size:14.5px;color:var(--muted)}
+.fd-item mark{background:var(--signal);color:var(--on-signal);border-radius:3px;padding:0 2px}
+.fd-group{margin:22px 0 8px;font:800 18px var(--font-display)}
+.me-bar-m{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;font-size:15px;color:var(--muted)}
+.lanes.mine .cell:not(.me) .step{opacity:.38}
+.lanes.mine .cell:not(.me) .step:hover,.lanes.mine .cell:not(.me) .step.cur{opacity:1}
+/* Print: one mission or quest, every step written out in full. */
+.print-only{display:none}
+@media print{
+  @page{margin:14mm 12mm}
+  html:root,html:root:not([data-theme="light"]),html:root[data-theme="dark"]{color-scheme:light;--bg:#fff;--surface:#fff;--surface-2:#F1F3F8;--ink:#111;--muted:#444;--line:#BFC6D4;--brand:#162F6A;--shadow:none}
+  body{background:#fff;color:#111;font-size:12pt}
+  .top,.mnav,.lanes-wrap,.mact,.mfoot,.hud,.switch,.dlayer,.scrim,.me-bar-m,.blk,.panel.blk{display:none!important}
+  main{padding:0;max-width:none}
+  .mhead{display:block}
+  .mmeta{margin-top:12px;break-inside:avoid}
+  .print-only{display:block}
+  .pr-step{break-inside:avoid;border-top:1px solid var(--line);padding:10px 0}
+  .pr-step h3{font-size:13.5pt;margin-bottom:4px}
+  .pr-step dl{display:grid;grid-template-columns:110px 1fr;gap:3px 10px;margin:6px 0 0;font-size:11pt}
+  .pr-step dt{font-weight:700;color:var(--muted)}
+  .pr-step dd{margin:0}
+  .pr-step ul{margin:0;padding-left:18px}
+  .pr-foot{margin-top:14px;font-size:10pt;color:var(--muted)}
+  .ui{box-shadow:none}
 }
 @media (max-width:540px){
   .stats{grid-template-columns:repeat(2,auto)}
@@ -973,7 +1018,7 @@ const RULES = [
 /* ───────────────────────── data: side quests ─────────────────────────
    The screens beyond the ten missions, each played the same way: lanes, steps,
    log-out / log-in switches and a details drawer. Labels are the platform's own. */
-const QZONES = [['money','Money in and out'],['close','Closing the month'],['risk','Contracts and risk'],['platform','Platform'],['reports','Reports']];
+const QZONES = [['money','Money in and out'],['close','Closing the month'],['risk','Contracts and risk'],['platform','Platform'],['reports','Reports'],['alerts','Alerts and messages']];
 const QUESTS = [
 { zone:'money', short:'Late payment surcharge', name:'Bill the late payment surcharge', screen:'REIA Billing & Settlement › Others › Month-Close Board',
   goal:'When a buyer pays after the due date, demand the surcharge its overdue bills have earned, once a month, as a bill of its own.',
@@ -1500,6 +1545,100 @@ const QUESTS = [
       rules:['The same tab as the seller’s, cut to the buyer’s own contracts.'] },
   ],
   also:['`Download PDF Snapshot` on the dashboard’s Overview tab gives the whole dashboard as one PDF.','Every screen keeps its own downloads too, e.g. a statement from Counterparty Ledgers & TDS (Side quest 6).'] },
+
+{ zone:'platform', short:'Role Powers', name:'Change what a role may do, or make a role', screen:'Platform › Role Powers',
+  goal:'Read which SJVN role holds which power, give or take one away with a reason on the record, and make a new role from any combination the rules allow.',
+  start:'An office order changes who does what', end:'The change in force, its users told, the reason on the record',
+  steps:[
+    { who:'A', t:'Read who holds which power', where:'Platform › Role Powers', press:['Powers by role'],
+      fill:['Search powers…','All areas, or one area','`Changed only`: the cells an administrator changed'],
+      rules:['A tick is a power the role holds, a half-tick part of it, a cross one it does not. Who holds what by default is read from the platform’s own access rules.','A locked cell is one that can never change; click it to see which rule holds it.','The compliance auditor reads the same page and its history, and changes nothing.'],
+      block:'Maker, checker, HOD, Finance and Management: Role Powers is not on their menu.' },
+    { who:'A', t:'Give or take away a power', where:'Role Powers › click the cell', press:['Give the power','Take the power away'],
+      fill:['Reason: a sentence, at least 15 characters','Office order / note reference (optional)'],
+      res:{o:'Cell', text:'Changed by an administrator'},
+      rules:['It applies at once, on every screen and action of the power, and the change, its reason and who made it go on the audit trail.','Never allowed: a maker also checking, an administrator transacting, the auditor changing data, a power left with nobody.','Nobody changes their own role’s powers: another administrator has to.'],
+      refuse:['Write the reason in a sentence — at least 15 characters.'] },
+    { who:'M', noquiz:true, t:'Hear that your role changed', where:'The bell in the top bar › System Alerts',
+      rules:['Every active user of the role is told: who changed it, and the reason. “It applies at once; reload the portal to see your menu change.”','A screen the role lost says “The SJVN Administrator has taken this power away from your role.”'] },
+    { who:'A', opt:true, t:'Undo a change', where:'Role Powers › click the changed cell', press:['Return to the platform default'],
+      fill:['Reason'],
+      res:{o:'Cell', text:'As the platform gives it'} },
+    { who:'A', t:'Make a role', where:'Role Powers', press:['Make a role','Next: its powers','Make the role'],
+      fill:['Name, e.g. Solar Bill Checker','What it is for, in a sentence','Works like: the platform role it starts from','Reason, and the office order reference','Then tick its powers: it starts with what the role it works like holds'],
+      res:{o:'Role', text:'A new column, “Made here”'},
+      rules:['Each tick beyond the starting role is held to the same rules as a single change: the summary says “Within the rules” or how many rules are broken.','A power that works from another power’s screens ticks that one too, and says so.'],
+      refuse:['Give the role a name of at least 3 characters.'] },
+    { who:'A', t:'Give the made role to an officer', where:'Platform › SJVN Users › the officer › Role',
+      rules:['Changing someone’s role signs them out, and the new role applies from their next sign-in.'] },
+    { who:'A', opt:true, t:'Retire a made role', where:'Role Powers › click the role’s name', press:['Retire it'],
+      fill:['Reason'],
+      res:{o:'Role', text:'Retired'},
+      rules:['Retired, never deleted: nobody can be given it afterwards, and its record stays in the history.','While officers hold it, it cannot be retired: give each another role on SJVN Users first.'] },
+    { who:'A', noquiz:true, t:'Read the change history', where:'Role Powers', press:['Change history'],
+      rules:['When, by whom, the power, the role and its users, the change, the reason and the reference.','`Export` gives the matrix as a CSV.'] },
+  ],
+  also:['The audit trail keeps every change too (Platform › Audit Trail).','A made role does the work of the role it works like wherever the matrix lists no power.'] },
+
+{ zone:'platform', short:'Holidays & due dates', name:'Keep the holiday calendar that dates every bill', screen:'Platform › Master Data › Holidays & Working Calendar',
+  goal:'Every bill falls due, and every rebate window closes, on a day the payer’s office is open. The holiday calendar decides which days those are, state by state.',
+  start:'A new year’s gazette, or a state declaring a holiday', end:'The calendar right, and the due date checked before the bill is raised',
+  steps:[
+    { who:'M', alt:['C','H','F','G'], noquiz:true, t:'Check a due date before raising a bill', where:'Master Data › Holidays & Working Calendar › Live Due-Date & Working-Days Simulator',
+      fill:['Bill Presentation Date','Credit Terms (Days)','Beneficiary / Buyer State, or National Only (No State Override)'],
+      res:{o:'Calculated Due Date (Target)', text:'Shown with the days skipped'},
+      rules:['Counted in calendar days, then moved to the next working day if the last day is a weekly off or a holiday (Counting Mode: CALENDAR_ROLL_FORWARD).','The payer’s calendar governs: the buyer’s state on SJVN’s bill to a buyer; SJVN’s own state, Himachal Pradesh, on a seller’s bill to SJVN.','The early-payment rebate window moves the same way. Surcharge counts every day the money is late.'] },
+    { who:'M', alt:['C','H','F','G'], noquiz:true, t:'Read a state’s holidays', where:'Holidays & Working Calendar', press:['State-wise calendar','Holiday register'],
+      fill:['Year, Scope (NATIONAL or STATE) and State'],
+      rules:['Non-working days are the weekly offs, the national holidays and the payer’s own state’s holidays: one date can be open for one buyer and closed for another.'] },
+    { who:'A', t:'Add a holiday', where:'Holidays & Working Calendar', press:['+ Add Holiday','Save Holiday'],
+      fill:['Holiday Date','Scope: NATIONAL (Applies to all entities) or STATE (Applies to specific state)','Holiday Name, and the State / UT for a state holiday','Holiday Type: PUBLIC, BANK, RESTRICTED or LOCAL','Remarks / Circular Ref, e.g. the gazette circular'],
+      res:{o:'Holiday', text:'Active'},
+      rules:['A RESTRICTED (optional) holiday does not close the day.','A bill already raised keeps the due date it was given.'],
+      refuse:['… is already a weekly off, so it does not need a holiday entry.'],
+      block:'Maker, checker, HOD, Finance and Management: no `+ Add Holiday`; the administrators keep the calendar.' },
+    { who:'A', opt:true, t:'Load a year’s holidays at once', where:'Holidays & Working Calendar', press:['Bulk Import','Import Holidays'],
+      fill:['One line each: YYYY-MM-DD, Holiday Name, Scope (NATIONAL/STATE), State (optional), Type (PUBLIC/BANK)'],
+      rules:['A weekly off, or a day already on the calendar, is skipped and listed with why.'] },
+    { who:'A', opt:true, t:'Withdraw a holiday', where:'Holiday register › the holiday', press:['Withdraw','Confirm Withdrawal'],
+      fill:['Reason, e.g. State govt cancelled gazetted off'],
+      res:{o:'Holiday', text:'Withdrawn'},
+      rules:['Withdrawn, never deleted: a bill already raised was dated against it, and the row is the evidence. `Include Withdrawn / Inactive` shows it again.'] },
+  ],
+  also:['Billing Params in Master Data hold the payment terms used when a contract states none.','The same calendar is behind the surcharge run on the Month-Close Board.'] },
+
+{ zone:'alerts', short:'Alerts & messages', name:'Read the alerts, and message the desk', screen:'Alerts › Notification Board, and Alerts › Quick Connect',
+  goal:'What needs attention right now, worked out live from the books, on one board; and a quick in-portal message to a colleague or a counterparty, which is never a formal notice.',
+  start:'Any working day', end:'The alert dealt with, the question answered',
+  steps:[
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Read what needs attention', where:'Alerts › Notification Board', press:['Live board'],
+      fill:['Search alerts…','Severity chips: Critical, Attention, For information'],
+      rules:['Worked out live: overdue payments, payments due this week, invoices awaiting approval, expiring or short security, escalated and open disputes, reconciliation exceptions.','SJVN’s officers share one board; each seller and buyer company has its own, from its own contracts only.'] },
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Clear an alert off your board', where:'Notification Board › the alert', press:['Acknowledge'],
+      rules:['It leaves your board only, nobody else’s, and comes back if it gets worse. `Put back` returns it.','`History` keeps every alert from when it first showed to when it cleared, with how long it lasted.'] },
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Choose which alerts reach you', where:'Notification Board', press:['Alert settings','Save'],
+      fill:['Email me: Every alert, Critical and Attention alerts, Critical alerts only, or Nothing — I will look at the board','SMS me: the same choices'],
+      rules:['Every alert is always on the board; this only chooses which are also sent when they first appear.'] },
+    { who:'M', alt:['C','A'], noquiz:true, t:'Pin a message for everyone', where:'Notification Board', press:['+ Post Message','Post to Board'],
+      fill:['Title, e.g. Quarter-end billing freeze on 31st','Message','Priority: For information, Attention or Critical','Who should see it: Everyone, SJVN internal team only, Sellers only or Buyers only','Show until (optional)'],
+      res:{o:'Message', text:'Pinned at the top of the board'},
+      rules:['The message is pinned at the top of the Notification Board for the chosen audience.','`Remove` takes it off for everyone; `Acknowledge` only off your own board.'],
+      block:'HOD, Finance and Management: no `+ Post Message`.' },
+    { who:'M', alt:['C','H','F','G','A'], noquiz:true, t:'Message someone on the portal', where:'Alerts › Quick Connect', press:['New Message','Send Message'],
+      fill:['To: Type a name, email or company','Subject, and the message','Cc, Bcc and attachments if needed'],
+      rules:['Informal operational facility — not a legal/contractual communication mode.','SJVN’s officers can write to anyone with an active login.'],
+      refuse:['A message needs a subject'] },
+    { who:'S', noquiz:true, t:'Ask SJVN a question', where:'Seller Portal › Quick Connect', press:['New Message','Send Message'],
+      rules:['A company writes to SJVN’s officers and its own colleagues only, never to another company, whose names it never sees.','A formal notice, a dispute intimation or a bill must NOT be served via Quick Connect: it follows the PPA or PSA.'] },
+    { who:'B', noquiz:true, t:'Read its own board', where:'Buyer Portal › Notification Board',
+      rules:['Its own contracts only: its overdue bills, its payments due this week, its security and its disputes.'] },
+    { who:'C', alt:['A'], noquiz:true, t:'Answer what testers reported', where:'Account menu › Public feedback', press:['Save'],
+      fill:['Click the report','Status: Replied, or Closed without reply','Reply sent to the visitor'],
+      res:{o:'Feedback', text:'Replied, or Closed without reply'},
+      rules:['Every report from the portal’s Feedback page lands here, with the page it came from. A report sent from this Playbook names its step, e.g. “REIA Playbook Q24.6”.','SJVN Admin finds the same list under Data requests & declarations.'],
+      block:'Maker, HOD, Finance and Management: no `Public feedback` in their account menu.' },
+  ],
+  also:['The bell in the top bar lists your own notifications, e.g. a change to your role’s powers.','`Disclaimer` in Quick Connect says what the facility is not for.','On the portal, every step of this Playbook has a “Report a problem” link: it opens the Feedback page with the step filled in.'] },
 ];
 
 /* ───────────────────────── helpers ───────────────────────── */
@@ -1553,6 +1692,86 @@ const loginsIn = (m) => m.steps.filter((s, i) => s.who !== 'X' && humanBefore(m,
 const loginHint = (k) => k === 'X' ? 'No log-in: the platform does this on its own.'
   : R[k].side === 'SJVN' ? `Sign-in page › Quick Demo Login › “${R[k].demo}”.`
   : `Sign in with the ${R[k].short.toLowerCase()} company’s own email and password.`;
+// The screens a step names, as the portal's own menu addresses them
+// (frontend/src/components/Layout.jsx). The portal copy links each step to its
+// screen and to the feedback form; the offline copy has no portal to open.
+const ON_PORTAL = /\/reia-playbook\//.test(location.pathname);
+const SCREENS = {
+  SJVN: {
+    'REIA Dashboard':'/reia', 'Reports':'/reia?tab=reports', 'Stakeholders & KYC Desk':'/reia/entities', 'Company Users':'/reia/company-users',
+    'Contracts (PPA/PSA)':'/reia/contracts', 'Payment Security':'/reia/payment-security', 'Energy Data & Validation':'/reia/energy-data',
+    'Billing & Invoicing':'/reia/invoices', 'Notes for Approval':'/reia/note-approvals', 'Dispute Management':'/reia/disputes',
+    'Payment Monitoring':'/reia/payment-monitoring', 'Reconciliation':'/reia/reconciliation', 'Compliance Desk':'/reia/compliance',
+    'Contract Compliance':'/reia/contract-compliance', 'CERC Regulatory Compliance':'/reia/cerc-compliance', 'Form-IV':'/reia/form-iv',
+    'Month-Close Board':'/reia/billing-readiness', 'Developer Release Planner':'/reia/release-planner', 'Invoice Verification':'/reia/verification',
+    'Counterparty Ledgers & TDS':'/reia/seller-ledgers', 'Generation Performance':'/reia/generation-performance', 'Power Diversion':'/reia/power-diversion',
+    'Advances & Unapplied Receipts':'/reia/advances', 'Energy Banking':'/reia/energy-banking', 'Deviation Settlement (DSM)':'/reia/deviation',
+    'Finance Posting (FI)':'/reia/finance-posting', 'Project Assignments':'/admin/project-assignments', 'Additional Charge & Break-glass':'/settings/delegations',
+    'Audit Trail':'/audit-logs', 'Role Powers':'/admin/role-powers', 'SJVN Users':'/admin/users', 'Master Data':'/masters',
+    'Holidays & Working Calendar':'/masters?tab=holidays', 'Notification Board':'/notification-board', 'Quick Connect':'/mail', 'Sign-in page':'/login',
+    'Public feedback':'/settings/privacy-requests',
+  },
+  S: {
+    'Seller Portal':'/seller', 'My Dashboard':'/seller', 'My Team':'/seller/team', 'My Contracts (PPAs)':'/seller/contracts', 'Energy Data':'/seller/energy-data',
+    'My Invoices':'/seller/invoices', 'Payments & Ledger':'/seller/payments', 'My Disputes':'/seller/disputes', 'Payment Security':'/seller/payment-security',
+    'Reconciliation':'/seller/reconciliation', 'Reports':'/seller/reports', 'Notification Board':'/notification-board', 'Quick Connect':'/mail',
+  },
+  B: {
+    'Buyer Portal':'/buyer', 'My Dashboard':'/buyer', 'My Team':'/buyer/team', 'My PSAs':'/buyer/contracts', 'Energy Allocation':'/buyer/energy-data',
+    'Billing & Payments':'/buyer/invoices', 'My Disputes':'/buyer/disputes', 'Payment Security':'/buyer/payment-security',
+    'Reconciliation':'/buyer/reconciliation', 'Reports':'/buyer/reports', 'Notification Board':'/notification-board', 'Quick Connect':'/mail',
+  },
+};
+const PORTAL_OF = { S:'Seller Portal', B:'Buyer Portal' };
+// Pages the Compliance Desk opens as its own tabs.
+const WITHIN = { '/reia/contract-compliance':'/reia/compliance', '/reia/cerc-compliance':'/reia/compliance', '/reia/form-iv':'/reia/compliance' };
+const EVERYWHERE = /^(The bell|Top bar|The banner in the top bar)/;
+// The first screen a place names, read left to right ("Month-Close Board ›
+// Reconciliation" is the board), sharpened by a later one at the same address
+// ("Master Data › Holidays & Working Calendar" is the holidays tab). "The LPS
+// bill" and the like are bills, on Billing & Invoicing. Something in the top
+// bar is on every screen, so it has no link: { none:true }.
+function placeLink(place) {
+  const parts = String(place || '').split(/ › |, then |, and /).map((p) => p.trim());
+  if (EVERYWHERE.test(parts[0])) return { none:true };
+  const side = parts.includes('Seller Portal') ? 'S' : parts.includes('Buyer Portal') ? 'B' : 'SJVN';
+  const map = SCREENS[side];
+  let hit = null;
+  for (const part of parts) {
+    let name = [part, ...part.split(' / ')].find((n) => map[n]);
+    if (!name && side === 'SJVN' && !hit && /^(The|Each)\b.*\bbill$/.test(part)) name = 'Billing & Invoicing';
+    if (!name && part === 'Every REIA screen') name = 'REIA Dashboard';
+    const firm = hit && hit.name !== PORTAL_OF[side];
+    if (!name) { if (firm) break; continue; }
+    const url = map[name];
+    if (!firm || url.startsWith(hit.url + '?') || url.startsWith(hit.url + '/') || WITHIN[url] === hit.url) hit = { side, name, url };
+    else break;
+  }
+  return hit;
+}
+/** Where step s of m is on the portal: its own place, else the mission's screen, else the company's portal. */
+function stepLink(m, s) {
+  if (s.who === 'X') return null;
+  const side = s.who === 'S' || s.who === 'B' ? s.who : 'SJVN';
+  const own = placeLink(s.where);
+  if (own && own.none) return null;
+  if (own && (own.side === side || own.url === '/login')) return own;
+  const main = placeLink(m.screen);
+  if (main && !main.none && main.side === side) return main;
+  return side === 'SJVN' ? null : { side, name:PORTAL_OF[side], url:SCREENS[side][PORTAL_OF[side]] };
+}
+const stepId = (m, i) => `${m.kind === 'Quest' ? 'Q' : 'M'}${m.n}.${i + 1}`;
+function feedbackUrl(m, s, i) {
+  const from = `REIA Playbook ${stepId(m, i)} · ${m.short} · ${s.t}`.slice(0, 200);
+  return '/feedback?from=' + encodeURIComponent(from);
+}
+// Who logs in for step i, as the drawer and the printed copy say it.
+function loginLine(m, i) {
+  const s = m.steps[i]; const before = humanBefore(m, i);
+  return s.who === 'X' ? loginHint('X') : before === s.who ? 'Same log-in as the step before.' : `${before ? `Log out of ${R[before].short}. ` : ''}${loginHint(s.who)}`;
+}
+// "My steps": the role a tester picked, kept with their progress.
+const isMine = (s) => !!P.me && (s.who === P.me || (s.alt || []).includes(P.me));
 function sessions(filter) {
   const out = [];
   MISSIONS.forEach((m) => {
@@ -1574,7 +1793,7 @@ const xpNow = () => [...MISSIONS, ...QUESTS].reduce((a, m) => a + (isDone(m) ? m
 const rankOf = (x) => { let r = RANKS[0][1]; RANKS.forEach(([t, n]) => { if (x / MAXXP >= t - 1e-9) r = n; }); return r; };
 
 /* ───────────────────────── shell ───────────────────────── */
-const TABS = [['map','Map'],['missions','Missions'],['players','Players'],['powers','Powers'],['lifecycles','Lifecycles'],['relay','Log-in relay'],['money','Money'],['quests','Side quests'],['quiz','Quiz']];
+const TABS = [['map','Map'],['find','Find a step'],['missions','Missions'],['players','Players'],['powers','Powers'],['lifecycles','Lifecycles'],['relay','Log-in relay'],['money','Money'],['quests','Side quests'],['quiz','Quiz']];
 const app = $('#app'); const drawer = $('#drawer'); const scrim = $('#scrim'); const hud = $('#hud'); const sw = $('#switch');
 let current = 'map';
 
@@ -1594,7 +1813,7 @@ function paintTabs() {
 
 function go(token, push = true) {
   if (token === 'missions') token = 'm' + (P.lastM || (MISSIONS.find((m) => !isDone(m)) || MISSIONS[0]).n);
-  const views = { map:viewMap, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
+  const views = { map:viewMap, find:viewFind, players:viewPlayers, powers:viewPowers, lifecycles:viewLife, relay:viewRelay, money:viewMoney, quests:viewSide, quiz:viewQuiz };
   const playable = /^[mq]\d+$/.test(token);
   if (!playable && !views[token]) token = 'map';
   if (playable && !BOOK[token]) token = token[0] === 'q' ? 'quests' : 'm1';
@@ -1612,6 +1831,7 @@ function go(token, push = true) {
 function after(token) {
   if (token === 'powers') paintPowers();
   if (token === 'money') paintMoney();
+  if (token === 'find') paintFind();
   if (/^[mq]\d+$/.test(token)) fitLanes();
 }
 // Side-by-side lanes need about 200px a role; narrower, the cards stack and keep their lane as a stagger.
@@ -1754,13 +1974,15 @@ function viewMission(id) {
       cells.push(`<div class="hand ${b > a ? 'fwd' : 'back'}" style="--a:${lo};--b:${hi + 1};--k:${hi - lo + 1};--l0:${lo - 1};--h0:${hi - 1};--row:${row}"><span class="ln"></span><span class="pill ${h.cls}" title="${esc(loginHint(s.who))}">${h.html}</span></div>`);
       row++;
     }
-    cells.push(`<div class="cell" style="--col:${colOf(s.who)};--i:${colOf(s.who) - 1};--row:${row}">${stepCard(m, s, i)}</div>`);
+    cells.push(`<div class="cell${isMine(s) ? ' me' : ''}" style="--col:${colOf(s.who)};--i:${colOf(s.who) - 1};--row:${row}">${stepCard(m, s, i)}</div>`);
     row++;
   });
   const heads = cols.map((k, i) => `<div class="lhead" style="--col:${i + 1}">${rb(k,'lg')}<b>${esc(R[k].short)}</b><small>${esc(R[k].side === 'Company' ? 'company log-in' : R[k].side === 'System' ? 'no log-in' : 'SJVN log-in')}</small></div>`).join('');
   const rails = cols.map((k, i) => `<span class="rail" style="--col:${i + 1};--i:${i};--end:${row};--c:var(--c-${R[k].c})"></span>`).join('');
   const blocks = m.steps.filter((s) => s.block);
   const done = isDone(m);
+  const mine = P.me && m.steps.some(isMine);
+  const main = ON_PORTAL ? placeLink(m.screen) : null;
   return `
   <nav class="mnav" aria-label="${m.kind === 'Quest' ? 'Side quests' : 'Missions'}">
     ${m.kind === 'Quest' ? '<button class="lnk" type="button" data-go="quests">← All side quests</button>' : ''}
@@ -1783,20 +2005,36 @@ function viewMission(id) {
       <div class="mact">
         <button class="btn primary" type="button" data-play="${m.id}">${ICON.play} Play this ${word}</button>
         <button class="btn${done ? ' ok' : ''}" type="button" data-done="${m.id}" aria-pressed="${done}">${ICON.check} ${done ? 'Done' : 'Mark as done'}</button>
+        <button class="btn" type="button" data-print>Print or save as PDF</button>
       </div>
     </div>
     <dl class="mmeta">
       <div><dt>Starts when</dt><dd>${fmt(m.start)}</dd></div>
       <div><dt>Ends with</dt><dd>${fmt(m.end)}</dd></div>
-      <div><dt>Main screen</dt><dd>${esc(m.screen)}</dd></div>
+      <div><dt>Main screen</dt><dd>${esc(m.screen)}${main && !main.none ? `<br><a class="golink" href="${esc(main.url)}" target="_blank" rel="noopener">Open it ↗</a>` : ''}</dd></div>
     </dl>
   </section>
-  <div class="lanes-wrap" data-cols="${cols.length}"><p class="lane-key">Lanes, left to right: ${cols.map((k) => `<span>${rb(k,'xs')}${esc(R[k].short)}</span>`).join('')}</p><div class="lanes" style="--cols:${cols.length};--nn:${Math.max(1, cols.length - 1)}">${rails}${heads}${cells.join('')}</div></div>
+  ${P.me ? `<p class="me-bar-m">${rb(P.me,'sm')}${mine ? `Your steps as ${esc(R[P.me].short)} are lit; the rest are faded.` : `${esc(R[P.me].short)} has no step in this ${word}.`} <button class="lnk" type="button" data-me="">Show everyone’s</button></p>` : ''}
+  <div class="lanes-wrap" data-cols="${cols.length}"><p class="lane-key">Lanes, left to right: ${cols.map((k) => `<span>${rb(k,'xs')}${esc(R[k].short)}</span>`).join('')}</p><div class="lanes${mine ? ' mine' : ''}" style="--cols:${cols.length};--nn:${Math.max(1, cols.length - 1)}">${rails}${heads}${cells.join('')}</div></div>
   <section class="mfoot">
     ${blocks.length ? `<div class="panel"><h3>${ICON.lock} What the platform blocks here</h3><ul class="blist">${blocks.map((s) => `<li>${rb(s.who,'sm')}<span>${fmt(s.block)}</span></li>`).join('')}</ul></div>` : ''}
     <div class="panel"><h3>Also on this desk</h3><ul class="alist">${m.also.map((a) => `<li>${fmt(a)}</li>`).join('')}</ul></div>
   </section>
-  ${missionExtra(m)}`;
+  ${missionExtra(m)}
+  ${printSteps(m)}`;
+}
+// What the printed copy says of each step: everything the drawer says, in order.
+function printSteps(m) {
+  const row = (h, v) => (v ? `<dt>${h}</dt><dd>${v}</dd>` : '');
+  const list = (a, f = fmt) => (a && a.length ? `<ul>${a.map((x) => `<li>${f(x)}</li>`).join('')}</ul>` : '');
+  const ui = (a) => (a ? a.map((p) => `<span class="ui">${esc(p)}</span>`).join(' › ') : '');
+  return `<section class="print-only"><h2 style="margin:18px 0 6px">Step by step</h2>
+    ${m.steps.map((s, i) => `<div class="pr-step"><h3>${stepId(m, i)} · ${esc(R[s.who].name)}${s.alt ? ` (or ${s.alt.map((k) => esc(R[k].short)).join(', ')})` : ''}${s.opt ? ' · if needed' : ''}: ${fmt(s.t)}</h3><dl>
+      ${row('Log-in', esc(loginLine(m, i)))}${row('Where', esc(s.where || ''))}${row('Press', ui(s.press))}${row('Fill in', list(s.fill))}
+      ${s.lists ? Object.entries(s.lists).map(([h, items]) => row(esc(h), list(items, esc))).join('') : ''}
+      ${row('Result', s.res ? resHtml(s.res) : '')}${row('Applies', list(s.rules))}${row('If it refuses', list(s.refuse, (x) => `“${esc(x)}”`))}${row('Blocked', s.block ? fmt(s.block) : '')}
+    </dl></div>`).join('')}
+    <p class="pr-foot">REIA Playbook · ${m.kind === 'Quest' ? 'Side quest' : 'Mission'} ${m.n}: ${esc(m.name)} · printed ${new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}. Every label is as the platform shows it.</p></section>`;
 }
 function tierTable(k) {
   return `<div class="tbl-wrap" style="border:0"><table class="tier"><thead><tr><th>What</th><th>L1<br>Maker</th><th>L2<br>Checker</th><th>L3<br>Approver</th><th>Company<br>Admin</th></tr></thead><tbody>
@@ -1812,14 +2050,14 @@ function lastWord(m) {
 function openDrawer(id, i) {
   const m = BOOK[id]; if (!m) return; const s = m.steps[i]; if (!s) return; const n = m.n;
   const next = m.steps[i + 1];
-  const before = humanBefore(m, i);
-  const login = s.who === 'X' ? loginHint('X') : before === s.who ? 'Same log-in as the step before.' : `${before ? `Log out of ${R[before].short}. ` : ''}${loginHint(s.who)}`;
+  const login = loginLine(m, i);
+  const link = ON_PORTAL ? stepLink(m, s) : null;
   const lists = s.lists ? Object.entries(s.lists).map(([h, items]) => `<div class="dsec"><h4>${esc(h)}</h4><ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('') : '';
   drawer.innerHTML = `
     <div class="d-top">${rb(s.who,'lg')}<div><small>${m.kind === 'Quest' ? 'Side quest' : 'Mission'} ${n} · step ${i + 1} of ${m.steps.length}${s.opt ? ' · if needed' : ''}</small><b>${esc(R[s.who].name)}${s.alt ? ` <span style="font-weight:400;color:var(--muted)">or ${s.alt.map((k) => esc(R[k].name)).join(', ')}</span>` : ''}</b></div><button class="dclose" type="button" data-close aria-label="Close">✕</button></div>
     <h2>${fmt(s.t)}</h2>
     <div class="dsec"><h4>Log-in</h4><div class="dlog">${s.who === 'X' ? ICON.auto : ICON.login}<span>${esc(login)}</span></div></div>
-    ${s.where ? `<div class="dsec"><h4>Where</h4><p>${esc(s.where)}</p></div>` : ''}
+    ${s.where || link ? `<div class="dsec"><h4>Where</h4>${s.where ? `<p>${esc(s.where)}</p>` : ''}${link ? `<a class="golink" href="${esc(link.url)}" target="_blank" rel="noopener">${link.name === PORTAL_OF[s.who] ? `Open the ${esc(link.name)}` : 'Open this screen'} ↗ <small>${esc(link.url)}</small></a><p class="hint">Opens in a new tab, as whoever is signed in there: ${R[s.who].side === 'SJVN' ? `sign in as the ${esc(R[s.who].short)} first` : `sign in with the ${esc(R[s.who].short.toLowerCase())} company’s log-in first`}.</p>` : ''}</div>` : ''}
     ${s.press ? `<div class="dsec"><h4>Press</h4><div class="row">${s.press.map((p) => `<span class="ui">${esc(p)}</span>`).join('<span class="sep">›</span>')}</div></div>` : ''}
     ${s.fill ? `<div class="dsec"><h4>Fill in</h4><ul>${s.fill.map((x) => `<li>${fmt(x)}</li>`).join('')}</ul></div>` : ''}
     ${lists}
@@ -1828,6 +2066,7 @@ function openDrawer(id, i) {
     ${s.refuse ? `<div class="dsec"><h4>If it refuses, you see</h4>${s.refuse.map((x) => `<p class="quote">“${esc(x)}”</p>`).join('')}</div>` : ''}
     ${s.block ? `<div class="dsec"><h4>Blocked for the wrong role</h4><div class="row" style="color:var(--bad)">${ICON.lock}<span>${fmt(s.block)}</span></div></div>` : ''}
     <div class="dsec"><h4>Next</h4><p>${next ? `${next.who !== s.who ? (next.who === 'X' ? 'The platform takes over: ' : `Hand over to ${esc(R[next.who].name)}: `) : 'Same person: '}${fmt(next.t)}` : lastWord(m)}</p></div>
+    <div class="dsec"><h4>Something wrong with this step?</h4><div class="sid"><code>${stepId(m, i)}</code>${ON_PORTAL ? `<a class="golink" style="margin:0" href="${esc(feedbackUrl(m, s, i))}" target="_blank" rel="noopener">Report a problem ↗</a>` : '<span class="hint" style="margin:0">Quote this step’s number when you report it.</span>'}</div>${ON_PORTAL ? '<p class="hint">The feedback form opens with this step filled in as the page it is about.</p>' : ''}</div>
     <div class="dnav"><button class="btn" type="button" data-open="${id}:${i - 1}"${i === 0 ? ' disabled' : ''}>← Previous step</button><button class="btn" type="button" data-open="${id}:${i + 1}"${!next ? ' disabled' : ''}>Next step →</button></div>`;
   if (!drawer.classList.contains('open')) lastFocus = document.activeElement;
   drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); scrim.hidden = false;
@@ -1858,7 +2097,11 @@ function showStep() {
   hud.hidden = false;
   hud.innerHTML = `<div class="hud-dots">${m.steps.map((x, k) => `<span class="${k === play.i ? 'on' : k < play.i ? 'past' : ''}"></span>`).join('')}</div>
     <div class="hud-row">${rb(s.who,'md')}<div class="hud-txt"><small>Step ${play.i + 1} of ${m.steps.length} · ${esc(R[s.who].name)}${s.opt ? ' · if needed' : ''}</small><b>${fmt(s.t)}</b></div>
-    <div class="hud-btns"><button class="hb" type="button" data-hud="prev"${play.i === 0 ? ' disabled' : ''} aria-label="Previous step">←</button><button class="hb" type="button" data-hud="info">Details</button><button class="hb primary" type="button" data-hud="next">${play.i === m.steps.length - 1 ? 'Finish' : 'Next →'}</button><button class="hb" type="button" data-hud="exit" aria-label="Stop playing">✕</button></div></div>`;
+    <div class="hud-btns"><button class="hb" type="button" data-hud="prev"${play.i === 0 ? ' disabled' : ''} aria-label="Previous step">←</button>${hudLink(m, s)}<button class="hb" type="button" data-hud="info">Details</button><button class="hb primary" type="button" data-hud="next">${play.i === m.steps.length - 1 ? 'Finish' : 'Next →'}</button><button class="hb" type="button" data-hud="exit" aria-label="Stop playing">✕</button></div></div>`;
+}
+function hudLink(m, s) {
+  const l = ON_PORTAL ? stepLink(m, s) : null;
+  return l ? `<a class="hb go" href="${esc(l.url)}" target="_blank" rel="noopener" title="Open ${esc(l.name)} in a new tab">Open screen ↗</a>` : '';
 }
 function stepPlay(d) {
   if (!play) return;
@@ -2090,6 +2333,64 @@ function viewSide() {
     ${QZONES.map(([z, label]) => `<h2 class="side-h">${esc(label)}</h2><div class="sq">${QUESTS.filter((q) => q.zone === z).map(card).join('')}</div>`).join('')}`;
 }
 
+/* ───────────────────────── view: find a step ───────────────────────── */
+// One search over every step of every mission and side quest, and "my steps":
+// a role picked here lights that role's steps in every lane view too.
+if (P.me && !ROLE_ORDER.includes(P.me)) P.me = '';
+const FD = { q:'' };
+let FIND_INDEX = null;
+const plain = (x) => String(x ?? '').replace(/`|\*\*/g, '').replace(/\{([A-Z][A-Z0-9_]*)\}/g, (m, t) => t.replace(/_/g, ' '));
+function findIndex() {
+  if (FIND_INDEX) return FIND_INDEX;
+  FIND_INDEX = [];
+  [...MISSIONS, ...QUESTS].forEach((m) => m.steps.forEach((s, i) => {
+    const lists = s.lists ? Object.entries(s.lists).flat(2) : [];
+    const res = s.res ? [s.res.o, s.res.text, s.res.f, s.res.t].filter(Boolean).map((x) => String(x).replace(/_/g, ' ')) : [];
+    FIND_INDEX.push({ m, s, i,
+      title:plain(s.t).toLowerCase(), press:(s.press || []).join(' ').toLowerCase(),
+      hay:[s.t, s.where, ...(s.press || []), ...(s.fill || []), ...(s.rules || []), ...(s.refuse || []), s.block, ...lists, ...res, m.name, m.short, m.screen, R[s.who].name, ...(s.alt || []).map((k) => R[k].name)].map(plain).join(' \u0001 ').toLowerCase() });
+  }));
+  return FIND_INDEX;
+}
+// Words a question carries that no step does, in English and Hindi as testers type them.
+const STOP = new Set('a an the is are of to in on for do does how where what who which when can i my me we it this that and or kahan kaha kahaan hai hain kaise kaisa kya ka ki ke ko mein me se par karna karte karein karo hota hoti kab kaun konsa'.split(' '));
+const words = (q) => { const all = q.toLowerCase().split(/[\s,?!.]+/).filter(Boolean); const w = all.filter((x) => !STOP.has(x)); return w.length ? w : all; };
+const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const mark = (text, ws) => { let h = esc(plain(text)); if (!ws.length) return h; return h.replace(new RegExp(`(^|[^a-z0-9])(${ws.map((w) => reEsc(esc(w))).join('|')})`, 'gi'), '$1<mark>$2</mark>'); };
+function viewFind() {
+  return `<section><p class="eyebrow">Find a step</p><h1>Where is it, and who does it?</h1>
+    <p class="lede">Search every mission and side quest at once: a button, a screen, a status, a word from a message. Pick your role to see your own steps here, and to light them up in every mission.</p></section>
+    <div class="tools"><input class="search" id="fd-q" type="search" placeholder="e.g. Raise LPS bills, Form 16A, LOCKED" value="${esc(FD.q)}" aria-label="Search every step" autocomplete="off"></div>
+    <div class="fd-roles" role="group" aria-label="My role">${['', ...ROLE_ORDER].map((k) => `<button class="chip" type="button" data-me="${k}" aria-pressed="${(P.me || '') === k}">${k ? `${rb(k,'xs')}${esc(R[k].short)}` : 'Everyone'}</button>`).join('')}</div>
+    <div id="fd-out" aria-live="polite"></div>`;
+}
+function paintFind() {
+  const out = $('#fd-out'); if (!out) return;
+  $$('[data-me]', app).forEach((b) => b.setAttribute('aria-pressed', String((P.me || '') === b.dataset.me)));
+  const q = FD.q.trim(); const ws = q ? words(q) : [];
+  // From the start of a word: "lock" finds LOCKED, not "blocked".
+  const res = ws.map((w) => new RegExp(`(^|[^a-z0-9])${reEsc(w)}`));
+  let hits = findIndex().filter((x) => !P.me || isMine(x.s));
+  if (ws.length) {
+    hits = hits.filter((x) => res.every((re) => re.test(x.hay)))
+      .map((x) => ({ x, score:res.reduce((a, re) => a + (re.test(x.title) ? 3 : 0) + (re.test(x.press) ? 2 : 0) + 1, 0) }))
+      .sort((a, b) => b.score - a.score).map((h) => h.x);
+  }
+  if (!ws.length && !P.me) { out.innerHTML = `<p class="empty">Type what you are looking for, or pick your role to list your steps.</p>`; return; }
+  const item = (x) => `<li><button class="fd-item" type="button" data-find="${x.m.id}:${x.i}">${rb(x.s.who,'md')}<small>${stepId(x.m, x.i)} · ${esc(x.m.kind === 'Quest' ? 'Side quest' : 'Mission')} ${x.m.n}: ${esc(x.m.short)}${x.s.alt ? ` · or ${x.s.alt.map((k) => esc(R[k].short)).join(', ')}` : ''}</small><b>${mark(x.s.t, ws)}</b><span class="fd-where">${x.s.where ? mark(x.s.where, ws) : ''}${x.s.press ? ` · ${x.s.press.map((p) => `<span class="ui">${mark(p, ws)}</span>`).join(' ')}` : ''}</span></button></li>`;
+  const powers = ws.length ? MX.filter((r) => res.every((re) => re.test(plain(r.a + ' ' + (r.note || '') + ' ' + r.mod).toLowerCase()))).slice(0, 6) : [];
+  let html = `<p class="fd-sum">${hits.length} step${hits.length === 1 ? '' : 's'}${P.me ? ` for ${esc(R[P.me].short)}` : ''}${ws.length ? ` matching “${esc(q)}”` : ''}</p>`;
+  if (!hits.length) html += `<p class="empty">No step matches${P.me ? ` for ${esc(R[P.me].short)}` : ''}. Try one word, or pick Everyone.</p>`;
+  else if (ws.length) html += `<ol class="fd-list">${hits.slice(0, 60).map(item).join('')}</ol>${hits.length > 60 ? '<p class="fd-sum" style="margin-top:10px">Showing the best 60. Add a word to narrow it.</p>' : ''}`;
+  else {
+    // My steps, mission by mission, in the order a month runs.
+    const books = [...new Set(hits.map((x) => x.m))];
+    html += books.map((m) => `<h2 class="fd-group">${esc(m.kind === 'Quest' ? 'Side quest' : 'Mission')} ${m.n} · ${esc(m.name)}</h2><ol class="fd-list">${hits.filter((x) => x.m === m).map(item).join('')}</ol>`).join('');
+  }
+  if (powers.length) html += `<h2 class="fd-group">In the powers matrix</h2><ul class="fd-list">${powers.map((r) => `<li><button class="fd-item" type="button" data-pwq="${esc(plain(r.a))}"><span></span><small>Powers · ${esc(r.mod)}</small><b>${mark(r.a, ws)}</b></button></li>`).join('')}</ul>`;
+  out.innerHTML = html;
+}
+
 /* ───────────────────────── view: quiz ───────────────────────── */
 // Roles that could also fairly answer a step's question, kept out of its options.
 // 'skip' leaves the step out (both companies do it the same way).
@@ -2147,6 +2448,13 @@ document.addEventListener('click', (e) => {
   const t = e.target;
   const goEl = t.closest('[data-go]');
   if (goEl) { e.preventDefault(); go(goEl.dataset.go); return; }
+  const findEl = t.closest('[data-find]');
+  if (findEl) { const [id, k] = findEl.dataset.find.split(':'); go(id); openDrawer(id, Number(k)); return; }
+  const pwq = t.closest('[data-pwq]');
+  if (pwq) { PW.q = pwq.dataset.pwq; PW.mod = 'All'; go('powers'); return; }
+  const meEl = t.closest('[data-me]');
+  if (meEl) { P.me = meEl.dataset.me; save(); if (current === 'find') paintFind(); else go(current, false); return; }
+  if (t.closest('[data-print]')) { closeDrawer(true); exitPlay(); window.print(); return; }
   const stepEl = t.closest('[data-step]');
   if (stepEl) { const [id, k] = stepEl.dataset.step.split(':'); const i = Number(k); if (play && play.id === id) { play.i = i; showStep(); } openDrawer(id, i); return; }
   const openEl = t.closest('[data-open]');
@@ -2195,6 +2503,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.id === 'pw-q') { PW.q = t.value; paintPowers(); return; }
+  if (t.id === 'fd-q') { FD.q = t.value; paintFind(); return; }
   if (t.id && t.id.startsWith('mv-')) {
     const k = t.id.slice(3);
     if (k === 'tds') MV.tds = t.checked; else MV[k] = Number(t.value);
@@ -2206,6 +2515,7 @@ document.addEventListener('keydown', (e) => {
   if (e.target.matches && e.target.matches('input, textarea, select')) return;
   if (!sw.hidden) { if (swNext && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'Escape')) { e.preventDefault(); swNext(); } else if (e.key === 'Escape') exitPlay(); return; }
   if (e.key === 'Escape') { if (drawer.classList.contains('open')) closeDrawer(); else if (play) exitPlay(); return; }
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (current !== 'find') go('find'); const f = $('#fd-q'); if (f) f.focus(); return; }
   if (play && !drawer.classList.contains('open')) {
     if (e.key === 'ArrowRight') { e.preventDefault(); stepPlay(1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); stepPlay(-1); }

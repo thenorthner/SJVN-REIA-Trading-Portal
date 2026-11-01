@@ -1,6 +1,6 @@
 # REIA Playbook: side quest test plan
 
-Scope: all 23 side quests (`QUESTS` in `index.html`, ids `q1`..`q23`), the engine
+Scope: all 26 side quests (`QUESTS` in `index.html`, ids `q1`..`q26`), the engine
 they play on, and the three shipped copies (source, offline file, portal copy).
 
 ## Layer 1 — Structure and data (automated: `node tools/reia-playbook/test-quests.mjs`)
@@ -30,26 +30,53 @@ row caps, report counts) matches the code, and status transitions are the code's
 
 ## Layer 4 — In the browser (automated DOM run: `e2e-quests.js` in the page)
 
-Run it on `REIA-Playbook-offline.html`, which declares UTF-8, with saved progress cleared before the
-page loads. The raw `index.html` has no charset (Artifact format) and a plain static server sends
-none, so the browser can read it as Windows-1252 and the data markers no longer match.
+Run it on `index.html` (the `reia-playbook` preview) or `REIA-Playbook-offline.html`, with saved
+progress cleared before the page loads. `index.html` opens with its own `<meta charset="utf-8">`
+line, since a plain static server sends no charset; `export.mjs` drops that line from both copies,
+which carry their own in the head.
 
-For each of the 23 quests:
+For each of the side quests:
 - `#qN` opens it; lanes = distinct players; one card per step; hand-off pills = role changes.
 - Each step card opens the drawer: title, Log-in line, Where, Press, Fill, Result, Rules, Refuse,
   Block, Next (the next step's title, or the closing line), Previous/Next buttons enabled correctly.
 - Play: every step in order, a "Switch player" dialog exactly at each change to a human role,
   Finish dialog with the right step / log-in counts and XP; "Mark done and go to the next" saves
   `q<n>` and opens the next quest; the last quest returns to the board.
-- Board: 23 cards under 5 zone headings, done counts, Play and Open buttons; chip nav 1–23.
-- Routing: `#q0`, `#q24`, `#qx` fall back safely; back/forward; keyboard (→ ← Esc Enter).
+- Board: one card per quest under each zone heading, done counts, Play and Open buttons; chip nav 1–N.
+- Routing: `#q0`, `#q<N+1>`, `#qx` fall back safely; back/forward; keyboard (→ ← Esc Enter).
 - Players page: each role's quest chips open the right quest. Quiz pool includes quest steps.
 - Phone width (375px): lanes stack, no horizontal page scroll. Dark theme. No console errors.
+- Each drawer shows the step's number (`Q24.6`). On the portal copy it also links the step's screen
+  (none for an automatic step) and `/feedback?from=…` naming the step; the offline copy links neither.
+- Find a step: every quest step is found by its title and its quest's name, and the result opens
+  it; nonsense finds nothing. My role: each role lists exactly its own steps (missions and quests,
+  `alt` counted), lights them in the lanes, is saved, and "Show everyone’s" clears it.
+- Print: the print-only copy writes out every step of a mission and of a quest. `/` opens the search.
+
+The portal copy has no e2e file of its own: copy `e2e-quests.js` into `frontend/public/reia-playbook/`
+for the run, and delete it after.
 
 ## Layer 5 — Shipped copies
 
 `export.mjs` writes the offline file and the portal copy; the portal copy runs under the portal's
 CSP (script from `/reia-playbook/playbook.js`, no inline script) and matches the source.
+
+## Results, 1-Nov-2026
+
+Three quests added (q24 Role Powers, q25 Holidays & due dates, q26 Alerts & messages), and the
+search, my-role, screen-link, report and print features.
+
+| Layer | Run | Result |
+|---|---|---|
+| 1 Data | `test-quests.mjs`: 26 quests, 122 steps | all pass |
+| 2 Labels | `check-labels.mjs`: 308 labels | all found |
+| 4 Browser | `e2e-quests.js` on `index.html` (offline): 3,395 checks | all pass |
+| 4 Browser | `e2e-quests.js` on the portal copy (beta build, port 5180) | 3,639 checks, all pass (screen and report links included) |
+| 4 Links | every step's screen link resolved and read by hand | 3 wrong fallbacks fixed (bill steps, top-bar steps, Compliance Desk tabs) |
+| 4 Sign-in | `/masters?tab=holidays` signed out → sign in → lands on the holidays tab | as linked |
+| 4 Print | print rules forced on screen, light and dark | dark theme printed dark panels: fixed |
+
+Not run: the browser's own print dialog (page breaks are left to it).
 
 ## Results, 31-Oct-2026
 
