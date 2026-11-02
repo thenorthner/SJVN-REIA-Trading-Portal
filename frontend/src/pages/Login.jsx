@@ -138,9 +138,17 @@ export default function Login() {
           height: '100%',
           maxHeight: '100vh',
           boxSizing: 'border-box',
-          // The REIA-only sign-in drops the dam photograph: it is not REIA.
+          // Cinematic REIA solar & wind landscape for REIA, hydro background for the full trading console.
           background: reiaOnly
-            ? 'radial-gradient(circle at 85% 20%, rgba(250, 204, 21, 0.28) 0%, rgba(250, 204, 21, 0) 40%), linear-gradient(120deg, #041f4b 0%, #0b3a7a 60%, #0e6b5c 100%)'
+            ? `
+            linear-gradient(
+              135deg,
+              rgba(4, 31, 75, 0.84) 0%,
+              rgba(11, 58, 122, 0.65) 45%,
+              rgba(14, 107, 92, 0.80) 100%
+            ),
+            url("/images/reia-solar-wind-hero.jpg") center / cover no-repeat
+          `
             : `
             linear-gradient(
               135deg,
@@ -163,7 +171,17 @@ export default function Login() {
           </div>
 
           {/* Middle Content */}
-          <div className="login-left-pitch" style={{ margin: 'auto 0', maxWidth: 480 }}>
+          <div className="login-left-pitch" style={{
+            margin: 'auto 0',
+            maxWidth: 510,
+            padding: '28px 30px',
+            background: 'rgba(15, 23, 42, 0.42)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            borderRadius: 16,
+            border: '1px solid rgba(255, 255, 255, 0.14)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.35)',
+          }}>
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
