@@ -701,11 +701,12 @@ const MISSIONS = [
   start:'Seller and buyer {APPROVED}', end:'PPA and PSA {ACTIVE}, PSA mapped to the PPA',
   steps:[
     { who:'M', t:'Draft the PPA (seller → SJVN)', where:'REIA Billing & Settlement › Contracts (PPA/PSA)', press:['+ New Contract','Create Draft Contract'],
-      fill:['Contract no., type PPA, the seller','Project type: Solar, Wind, Hybrid or FDRE','Total capacity (MW)','Tariff type and base tariff (₹/kWh), e.g. 2.75','Billing cycle, tenure start and end','Minimum / guaranteed CUF (%)','The signed agreement (PDF)'],
+      fill:['Contract no., type PPA, the seller','Project type: Solar, Wind, Hybrid or FDRE','Total capacity (MW)','Tariff type and base tariff (₹/kWh), e.g. 2.75','Billing cycle, tenure start and end','Min / Guaranteed CUF (%) and the CUF shortfall compensation (% of tariff), e.g. 50, as the PPA says','Peak availability obligation, only if the PPA has one: peak window, minimum (%), penalty (₹/MWh)','The signed agreement (PDF)'],
       res:{o:'Contract', t:'DRAFT'},
+      rules:['The CUF and peak sections show for Solar, Wind, Hybrid and FDRE projects.','Compensation left blank takes the master figure: the full tariff unless SJVN sets another.'],
       block:'Checker: no `+ New Contract`.' },
     { who:'M', t:'Draft the PSA (SJVN → buyer)', where:'REIA Billing & Settlement › Contracts (PPA/PSA)', press:['+ New Contract','Create Draft Contract'],
-      fill:['Contract no., type PSA, the buyer','Capacity, tariff (e.g. 2.82), billing cycle, tenure','SJVN margin (₹/MWh), optional, e.g. 70','The signed agreement (PDF)'],
+      fill:['Contract no., type PSA, the buyer','Capacity, tariff (e.g. 2.82), billing cycle, tenure','SJVN margin (₹/MWh), optional, e.g. 70','Min / Guaranteed CUF (%): blank takes the master default for the project type','Peak availability obligation, if the PSA sells peak power','The signed agreement (PDF)'],
       res:{o:'Contract', t:'DRAFT'} },
     { who:'M', t:'Map the PSA to the PPA', where:'Open the PPA › Projects Mapped', press:['+ Map PSA to this PPA','Save Map'],
       fill:['Select PSA','Allocation %','Effective from'],
@@ -1371,16 +1372,16 @@ const QUESTS = [
   steps:[
     { who:'X', noquiz:true, t:'Assess the contract year', where:'Generation Performance › Contract-year CUF and the year-end true-up',
       res:{o:'Assessment', text:'True-up due'},
-      rules:['CUF is assessed over the contract year (from the tenure start, from the COD in the first year), not month by month.','States: Year in progress, Waiting on locked energy, CUF met, True-up due, Note raised.'] },
+      rules:['CUF is assessed over the contract year (from the tenure start, from the COD in the first year), not month by month.','The minimum is the contract’s Min / Guaranteed CUF (%). A PSA left blank takes the master default for its type: Solar 22%, Wind 30%, Hybrid and FDRE 25%.','Deemed generation counts towards the year’s energy; where curtailment hours are certified, it is not added twice.','States: Year in progress, Waiting on locked energy, CUF met, True-up due, Note raised.'] },
     { who:'M', alt:['F'], t:'Raise the true-up note', where:'Generation Performance › the contract year', press:['Raise true-up note'],
       res:{o:'Credit note', t:'DRAFT'},
-      rules:['Raised on the year’s last bill, for the shortfall’s value.','With no bill presented in the year, there is nothing to set it against.'],
+      rules:['Raised on the year’s last bill, for the shortfall’s value.','Value = shortfall MWh × tariff (₹/kWh × 1,000) × the contract’s CUF shortfall compensation (% of tariff). Left blank, the master figure applies: the full tariff unless SJVN sets another.','e.g. 50 MW solar, 22% guaranteed, 20% achieved over a 365-day year: 4,38,000 MWh possible, 8,760 MWh short; at ₹2.75 and 50%, ₹1,20,45,000.','On a PPA, SJVN owes the generator less. On a PSA, the shortfall passes through: the buyer owes SJVN less.','With no bill presented in the year, there is nothing to set it against.'],
       block:'Checker: no `Raise true-up note`.' },
     { who:'C', alt:['F'], t:'Approve it', where:'REIA Billing & Settlement › Notes for Approval', press:['Approve & issue'],
       res:{o:'Credit note', f:'DRAFT', t:'ISSUED'},
       rules:['The queue shows it as “CUF true-up”.','Whoever raised it cannot approve it.'] },
   ],
-  also:['By project: energy accounted, CUF over the period, months below the contract CUF.','Narrow it with From (month) and To (month).'] },
+  also:['By project: energy accounted, CUF over the period, months below the contract CUF.','Narrow it with From (month) and To (month).','A monthly bill deducts nothing for CUF: it shows the year-to-date position only. A month’s shortfall priced on its own could come to more than the bill.','The peak-window shortfall is a different penalty, charged month by month.'] },
 
 { zone:'risk', short:'Invoke security', name:'Invoke the payment security', screen:'REIA Billing & Settlement › Payment Security',
   goal:'When a buyer stops paying, draw on its security in waterfall order and follow the claim until the money arrives.',
@@ -1699,6 +1700,27 @@ const QUESTS = [
       block:'Maker, HOD, Finance and Management: no `Public feedback` in their account menu.' },
   ],
   also:['The bell in the top bar lists your own notifications, e.g. a change to your role’s powers.','`Disclaimer` in Quick Connect says what the facility is not for.','On the portal, every step of this Playbook has a “Report a problem” link: it opens the Feedback page with the step filled in.'] },
+
+{ zone:'risk', short:'Peak availability', name:'The peak availability penalty', screen:'REIA Billing & Settlement › Contracts (PPA/PSA)',
+  goal:'A peak-power or FDRE contract buys energy when the system needs it: charge, month by month, for the availability it failed to hold inside its peak window.',
+  start:'A contract that states a peak window and a minimum availability', end:'The month’s bill, the shortfall deducted',
+  steps:[
+    { who:'M', t:'Set the peak obligation', where:'Contracts (PPA/PSA) › the contract › 4c. Peak Availability Obligation', press:['+ New Contract','Create Draft Contract'],
+      fill:['Peak window from, e.g. 18:00','Peak window to, e.g. 22:00','Min peak availability (%), e.g. 90','Peak shortfall penalty (₹/MWh), as the contract says'],
+      res:{o:'Contract', t:'DRAFT'},
+      rules:['Leave the minimum blank and the contract carries no peak obligation: nothing is ever charged on it.','A window may cross midnight, e.g. 22:00 to 02:00.','Penalty left blank: the master rate, else the tariff (₹/kWh × 1,000).','On a live contract the terms change by amendment.'],
+      refuse:['A peak availability obligation needs its peak window (from and to).','The peak window cannot start and end at the same time.'],
+      block:'Checker: no `+ New Contract`.' },
+    { who:'M', t:'Record the peak-window availability', where:'REIA Billing & Settlement › Energy Data & Validation', press:['+ Record Energy Data','Save'],
+      fill:['Contract: the PPA','Period (month)','Energy (MWh)','Peak-window Availability (%), as the energy account reports the peak window, e.g. 86'],
+      res:{o:'Energy', t:'DRAFT'},
+      rules:['It is validated and locked with the month’s energy.','It is recorded whether or not the contract has a peak obligation; only one that has is billed on it.','A PSA fed by several plants takes their figures weighted by the MW it takes from each. If one plant reports none, nothing is charged.'],
+      block:'Checker: no `+ Record Energy Data`.' },
+    { who:'X', noquiz:true, t:'The bill deducts the shortfall', where:'The month’s bill, on `+ Generate Invoice`',
+      res:{o:'Bill line', text:'Peak availability shortfall'},
+      rules:['Shortfall MWh = (minimum − reported) % × capacity (MW) × the window’s hours × days in the month.','Penalty = shortfall MWh × the contract’s peak shortfall penalty, taken off the bill’s gross amount.','e.g. 90% required, 86% held, 50 MW, 18:00–22:00 in September: 4% × 50 × 4 h × 30 = 240 MWh; at ₹2,820/MWh, ₹6,76,800 off the bill.','Met: the bill notes “Peak availability met”. Not reported: it says so and charges nothing.'] },
+  ],
+  also:['Not the CUF: CUF is energy over the contract year, trued up once at the year end; this is availability inside the peak window, charged on each month’s bill.','The energy register shows the month’s figure as Peak Avail. %.'] },
 ];
 
 // The REIA sidebar's Others menu, in its order, and the side quests that play
@@ -1818,7 +1840,7 @@ const CYCLE = [
     { if:'The grid curtailed the plant', then:'The maker records the certified curtailment hours on the month’s figure.' },
   ] },
 
-{ phase:'month', t:'Bills and their approval', ends:'Both bills {APPROVED}, the buyer’s bill {SENT}', see:['m6','q8'],
+{ phase:'month', t:'Bills and their approval', ends:'Both bills {APPROVED}, the buyer’s bill {SENT}', see:['m6','q8','q27'],
   path:[
     ['M','Raise SJVN’s bills','`+ Generate Invoice` on the PSA: SJVN’s bill on the buyer, {DRAFT}. Then the same on the PPA: SJVN’s own figure, which stays DRAFT as the yardstick.'],
     ['S','The seller submits its own bill','`+ Create Invoice` › `Submit to SJVN`: the seller’s own bill, {SUBMITTED}.'],
@@ -1841,6 +1863,8 @@ const CYCLE = [
     { if:'A bill was raised in error', then:'Cancel it (maker or checker) while it is DRAFT, SUBMITTED, REJECTED, PENDING_L2 or UNDER_APPROVAL.' },
     { if:'No mail server is set up', then:'The email is written to the outbox and marked SIMULATED.' },
     { if:'The bill is paid before it is sent', then:'It can no longer be sent: send before payment.' },
+    { if:'A peak-power or FDRE contract held less than its peak availability', then:'The month’s bill deducts shortfall % × capacity × peak hours × the contract’s penalty rate. A contract with no peak obligation is charged nothing.' },
+    { if:'The month’s CUF is below the contract’s', then:'Nothing is deducted: the bill shows the year-to-date CUF, and any shortfall is trued up at the year end.' },
     { if:'The due date falls on a closed day', then:'The contract’s payment terms run in calendar days from presentation; a last day on the payer’s weekly off or holiday moves to its next working day. The payer’s calendar: the buyer’s state on SJVN’s bill, Himachal Pradesh on a seller’s bill. A restricted holiday closes nothing.' },
   ] },
 
@@ -1993,6 +2017,7 @@ const CYCLE = [
   edges:[
     { if:'A month of the contract year is not locked', then:'The CUF waits: Waiting on locked energy.' },
     { if:'No bill was presented in the year', then:'There is nothing to set the true-up note against.' },
+    { if:'The year’s CUF fell short', then:'The note is shortfall MWh × tariff × the contract’s CUF shortfall compensation %. On a PPA, SJVN owes the generator less; on a PSA, the buyer owes SJVN less.' },
     { if:'The LPS base rate changes in April', then:'Add the year’s row; changing the single master rate instead would re-price every open bill back to its due date. A contract with its own rate keeps it.' },
     { if:'A holiday is declared after bills were raised', then:'Bills already raised keep their due dates. Holidays are withdrawn, never deleted. A weekly off needs no entry.', refuse:'… is already a weekly off, so it does not need a holiday entry.' },
     { if:'A buyer has deducted TDS from its payments', then:'It files its own certificate from its portal, so SJVN can claim the credit.' },
