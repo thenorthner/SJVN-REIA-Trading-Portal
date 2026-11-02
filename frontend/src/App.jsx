@@ -206,6 +206,7 @@ const BuyerDisputes = lazy(() => import('./pages/buyer/BuyerDisputes.jsx'));
 const BuyerReconciliation = lazy(() => import('./pages/buyer/BuyerReconciliation.jsx'));
 const BuyerPaymentSecurity = lazy(() => import('./pages/buyer/BuyerPaymentSecurity.jsx'));
 const BuyerReports = lazy(() => import('./pages/buyer/BuyerReports.jsx'));
+const MyReports = lazy(() => import('./pages/shared/MyReports.jsx'));
 
 const AuditLogs = lazy(() => import('./pages/AuditLogs.jsx'));
 const MastersHub = lazy(() => import('./pages/masters/MastersHub.jsx'));
@@ -604,6 +605,8 @@ export default function App() {
         <Route path="master/portfolio-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PortfolioRegistry /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />
+        {/* The auditor reads the REIA desk's reports without the desk's dashboard (2-Nov-2026). */}
+        <Route path="audit-reports" element={<ProtectedRoute roles={['COMPLIANCE_AUDITOR']}><MyReports subtitle="The REIA desk's bills, money, energy, contracts, approvals and audit trail, read-only, on screen or as CSV, Excel and PDF" /></ProtectedRoute>} />
 
         {/* Screens ISET has that we have not written yet. Routed so the menu can
             carry ISET's full structure, each landing on a placeholder that says it

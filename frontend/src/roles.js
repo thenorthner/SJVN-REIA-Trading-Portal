@@ -79,6 +79,7 @@ const PATH_ROLES = [
   ['/seller', [...ROLE_GROUPS.SELLER_ALL, 'SJVN_ADMIN']],
   ['/buyer', [...ROLE_GROUPS.BUYER_ALL, 'SJVN_ADMIN']],
   ['/audit-logs', ROLE_GROUPS.AUDITOR],
+  ['/audit-reports', ['COMPLIANCE_AUDITOR']],
 ].sort((a, b) => b[0].length - a[0].length);
 
 export function canRoleOpenPath(role, path) {

@@ -1579,6 +1579,19 @@ input[type="file"]::file-selector-button:hover {
   .topbar-title { display: none; }
   .topbar-actions { gap: 10px; }
 }
+/* A phone: the actions ran to 570px on a 375px bar, the search pill sat over
+   "Portal Home" and the user chip went off the edge (2-Nov-2026). The bar keeps
+   the menu, search and the icons; the logo, crumb, Portal Home link and the
+   user's name are in the sidebar and the user menu. */
+@media (max-width: 640px) {
+  .topbar { gap: 8px; }
+  .topbar-left { flex: 0 1 auto; gap: 8px; }
+  .topbar-logo, .topbar-search-kbd, .user-meta { display: none; }
+  /* These two carry an inline display in Layout.jsx, so only !important hides them. */
+  .topbar-breadcrumb, .topbar-actions > .link-btn { display: none !important; }
+  .topbar-actions { gap: 6px; flex-shrink: 1; min-width: 0; }
+  .user-chip { padding: 2px; }
+}
 
 /* ---------------- Badges ---------------- */
 .badge {

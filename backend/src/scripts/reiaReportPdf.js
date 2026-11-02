@@ -19,8 +19,34 @@ export function pdfSafe(text) {
   return [...s].map((ch) => (ch.codePointAt(0) < 0x100 || WINANSI_EXTRA.has(ch) ? ch : '?')).join('');
 }
 
-// Relative width a column wants on the page.
-const WEIGHT = { text: 1.6, enum: 1.25, money: 1.15, mwh: 1, number: 0.9, int: 0.7, days: 0.7, percent: 0.75, rate: 0.85, mw: 0.85, date: 0.95, datetime: 1.2, month: 0.8 };
+// The width a column wants on the page, in points as the font draws them: its
+// widest figure, and its heading's longest word (a heading wraps by words), so
+// an amount stays on one line and a name or remark wraps instead. Fixed weights
+// by type broke "Rs 2,23,34,400" over two lines on a 17-column P&L (2-Nov-2026).
+const CELL_PAD = 8;
+const TEXT_MAX = 150;
+function wantedWidth(doc, c, rows, fontSize) {
+  let most = 0;
+  for (const r of rows) {
+    // A heading's or total's label wraps in the first column; its figures count.
+    if (r.__kind && c.agg !== 'sum') continue;
+    const v = r[c.key];
+    if (v === null || v === undefined) continue;
+    doc.font(r.__kind ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
+    most = Math.max(most, doc.widthOfString(pdfSafe(printed(c, v))));
+  }
+  doc.font('Helvetica-Bold').fontSize(fontSize);
+  const word = Math.max(...pdfSafe(c.label).split(/\s+/).map((w) => doc.widthOfString(w)));
+  const want = Math.max(most, word) + CELL_PAD + 1;
+  return c.type === 'text' || c.type === 'enum' ? Math.min(want, Math.max(TEXT_MAX, word + CELL_PAD + 1)) : want;
+}
+
+/** Each column's width: what it wants, the spare room shared out, or all of it scaled down to fit. */
+export function columnWidths(doc, cols, rows, fontSize, width) {
+  const want = cols.map((c) => wantedWidth(doc, c, rows, fontSize));
+  const total = want.reduce((a, b) => a + b, 0);
+  return want.map((w) => (w / total) * width);
+}
 
 export function generateReiaReportPdf(report, res, filename) {
   const cols = report.columns;
@@ -39,7 +65,8 @@ export function generateReiaReportPdf(report, res, filename) {
   const sums = cols.filter((c) => c.agg === 'sum').slice(0, 3);
   y = kpiBand(doc, y, [
     { label: 'Rows', value: report.count.toLocaleString('en-IN') },
-    ...sums.map((c) => ({ label: pdfSafe(`Total ${c.label}`), value: pdfSafe(printed(c, report.totals[c.key] ?? 0)) })),
+    // "Total settled" is already a total, not "Total Total settled".
+    ...sums.map((c) => ({ label: pdfSafe(/^total\b/i.test(c.label) ? c.label : `Total ${c.label}`), value: pdfSafe(printed(c, report.totals[c.key] ?? 0)) })),
   ]);
   const lines = [
     ...report.criteria.map((t) => `Criteria — ${t}`),
@@ -50,21 +77,6 @@ export function generateReiaReportPdf(report, res, filename) {
   ];
   if (lines.length) y = notes(doc, y, lines.map(pdfSafe)) + 6;
 
-  const width = contentW(doc);
-  const weights = cols.map((c) => WEIGHT[c.type] || 1);
-  const sum = weights.reduce((a, b) => a + b, 0);
-  const pdfCols = cols.map((c, i) => ({
-    label: pdfSafe(c.label),
-    w: (weights[i] / sum) * width,
-    align: NUMERIC.has(c.type) ? 'right' : 'left',
-    // A heading or total line fills the cells it has nothing for with a space,
-    // not the dash the table prints for a missing value.
-    value: (r) => {
-      if (r.__kind && i === 0) return pdfSafe(r.__label);
-      if (r.__kind) return c.agg === 'sum' && r.__kind !== 'group' ? pdfSafe(printed(c, r[c.key])) : ' ';
-      return pdfSafe(printed(c, r[c.key]));
-    },
-  }));
   const fontSize = cols.length > 12 ? 6 : 7;
   const style = (r) => (r.__kind === 'subtotal' ? { bold: true, fill: NAVY_SOFT } : r.__kind === 'total' ? { bold: true, fill: '#dde6f3' } : r.__kind === 'group' ? { bold: true, span: true } : null);
   const sumRow = (label, totals, count, kind) => ({
@@ -86,6 +98,20 @@ export function generateReiaReportPdf(report, res, filename) {
     rows.push(...report.rows);
   }
   rows.push(sumRow('Total', report.totals, report.count, 'total'));
+
+  const widths = columnWidths(doc, cols, rows, fontSize, contentW(doc));
+  const pdfCols = cols.map((c, i) => ({
+    label: pdfSafe(c.label),
+    w: widths[i],
+    align: NUMERIC.has(c.type) ? 'right' : 'left',
+    // A heading or total line fills the cells it has nothing for with a space,
+    // not the dash the table prints for a missing value.
+    value: (r) => {
+      if (r.__kind && i === 0) return pdfSafe(r.__label);
+      if (r.__kind) return c.agg === 'sum' && r.__kind !== 'group' ? pdfSafe(printed(c, r[c.key])) : ' ';
+      return pdfSafe(printed(c, r[c.key]));
+    },
+  }));
 
   y = ensureSpace(doc, y, 60, ctx);
   table(doc, y, pdfCols, rows, ctx, { fontSize, rowStyle: style, emptyMessage: 'No records match these criteria.' });

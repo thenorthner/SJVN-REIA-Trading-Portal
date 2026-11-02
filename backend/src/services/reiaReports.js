@@ -28,6 +28,7 @@ import { ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { contractVerticalSql } from './verticals.js';
 import { presentedSql, raisedBySellerSql } from './counterpartyScope.js';
 import { OUTSTANDING_SQL, OPEN_INVOICE_SQL } from './outstanding.js';
+import { ACTIVE_STATUSES as HELD_SECURITY } from '../paymentSecurityConstants.js';
 import { invoiceBalance, invoiceLpsAsOf } from './invoiceLps.js';
 import { projectsOf } from './projectScope.js';
 import { REIA_BETA, betaRows } from './reiaBeta.js';
@@ -124,6 +125,15 @@ const AGEING = {
 const EXPIRY = {
   EXPIRED: 'Already expired', DAYS_0_30: 'Expires in 30 days', DAYS_31_60: 'Expires in 31–60 days',
   DAYS_61_90: 'Expires in 61–90 days', LATER: 'More than 90 days', NO_EXPIRY: 'No expiry recorded',
+  NOT_HELD: 'No longer held',
+};
+// How a payment was made, as the release and receipt screens name it.
+const PAYMENT_MODE = {
+  CREDIT_NOTE: 'Credit note (adjustment, not cash)',
+  POWER_DIVERSION: 'Power diversion (sale proceeds set off)',
+  'RELEASE:DISCOM_REALIZATION': 'Release to developer — from buyers\' payments',
+  'RELEASE:OWN_FUND': 'Release to developer — SJVN own fund',
+  'RELEASE:PAYMENT_SECURITY_FUND': 'Release to developer — payment security fund',
 };
 const CHARGE_LINE = (v) => (v === 'trading_margin' ? MARGIN_LABEL : String(v || '').replace(/_/g, ' ').replace(/^./, (m) => m.toUpperCase()));
 
@@ -185,7 +195,9 @@ function ageingOf(days, due) {
 const bucketCol = (key, label, bucket) => col(key, label, 'money', null, {
   agg: 'sum', compute: (r) => (ageingOf(r._days_late, r.due_date) === bucket ? r.outstanding : 0),
 });
-function expiryOf(days, end) {
+function expiryOf(days, end, status) {
+  // A closed, released or invoked instrument is not held, so it has no expiry to watch.
+  if (status && !HELD_SECURITY.includes(status)) return 'NOT_HELD';
   if (!end) return 'NO_EXPIRY';
   if (days < 0) return 'EXPIRED';
   if (days <= 30) return 'DAYS_0_30';
@@ -419,7 +431,7 @@ function buildDatasets() {
         col('billing_period', 'Billing period', 'month', 'i.billing_period', { filter: true, group: true }),
         ...contractCols(),
         ...counterpartyCols().map((c) => (c.key === 'counterparty_name' ? { ...c, default: true } : c)),
-        col('mode', 'Mode', 'enum', 'p.mode', { filter: true, group: true, default: true, labels: { CREDIT_NOTE: 'Credit note (adjustment, not cash)' } }),
+        col('mode', 'Mode', 'enum', 'p.mode', { filter: true, group: true, default: true, labels: PAYMENT_MODE }),
         col('reference', 'Reference / UTR', 'text', 'p.reference', { default: true, filter: 'search' }),
         col('amount', 'Amount', 'money', 'p.amount', { agg: 'sum', filter: true, default: true }),
         col('deduction', 'Deduction', 'money', 'p.deduction', { agg: 'sum' }),
@@ -793,6 +805,7 @@ function buildDatasets() {
       columns: [
         col('contract_id', '', 'text', 'ps.contract_id', { hidden: true }),
         col('_days_left', '', 'int', "CAST(julianday(date(ps.validity_end)) - julianday(date('now')) AS INTEGER)", { hidden: true }),
+        col('_status', '', 'text', 'ps.status', { hidden: true }),
         col('instrument_no', 'Instrument no.', 'text', 'ps.instrument_no', { default: true, filter: 'search' }),
         col('mechanism_type', 'Instrument', 'enum', 'ps.mechanism_type', { filter: true, group: true, default: true }),
         col('bg_subtype', 'BG kind', 'enum', 'ps.bg_subtype', { filter: true, group: true }),
@@ -805,8 +818,8 @@ function buildDatasets() {
         col('required_amount', 'Required by contract', 'money', 'ps.required_amount', { agg: 'sum' }),
         col('validity_start', 'Valid from', 'date', 'date(ps.validity_start)', { filter: true }),
         col('validity_end', 'Valid to', 'date', 'date(ps.validity_end)', { filter: true, default: true }),
-        col('days_to_expiry', 'Days to expiry', 'days', null, { filter: true, default: true, compute: (r) => (r.validity_end ? r._days_left : null) }),
-        col('expiry_bucket', 'Expiry', 'enum', null, { filter: true, group: true, default: true, labels: EXPIRY, options: Object.keys(EXPIRY), compute: (r) => expiryOf(r._days_left, r.validity_end) }),
+        col('days_to_expiry', 'Days to expiry', 'days', null, { filter: true, default: true, compute: (r) => (r.validity_end && HELD_SECURITY.includes(r._status) ? r._days_left : null) }),
+        col('expiry_bucket', 'Expiry', 'enum', null, { filter: true, group: true, default: true, labels: EXPIRY, options: Object.keys(EXPIRY), compute: (r) => expiryOf(r._days_left, r.validity_end, r._status) }),
         col('claim_deadline', 'Claim deadline', 'date', 'date(ps.claim_deadline)'),
         col('is_revolving', 'Revolving', 'enum', "CASE WHEN COALESCE(ps.is_revolving, 0) = 1 THEN 'YES' ELSE 'NO' END", { filter: true, labels: YES_NO }),
         col('status', 'Status', 'enum', 'ps.status', { filter: true, group: true, default: true }),
@@ -969,6 +982,9 @@ const datasets = () => (cached = cached || buildDatasets());
 // ── Predefined reports ───────────────────────────────────────────────────────
 
 const ISSUED_BILL = ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED', 'PAID'];
+// A developer's bill is in SJVN's books from the day it is submitted; a draft,
+// a rejected or a cancelled one is not, and the register's totals left them in.
+const RECEIVED_BILL = ['SUBMITTED', 'PENDING_L2', 'UNDER_APPROVAL', ...ISSUED_BILL];
 
 /**
  * One click each. A preset is only a saved spec over a dataset, so it is
@@ -992,12 +1008,12 @@ export const PRESETS = [
     spec: { dataset: 'beneficiary_pnl', columns: ['invoice_no', 'billing_period', 'bill_kind', 'energy_mwh', 'sale_value', 'cost_of_power', 'cost_basis', 'energy_spread',
       'lps_from_buyer', 'rebate_to_buyer', 'rebate_from_developer', 'lps_to_developer', 'notes_net', 'net_gain', 'funded_days', 'funding_cost', 'net_after_funding'],
     group_by: 'buyer_name' } },
-  { id: 'bills-psa', group: 'Billing', title: 'Bills register — buyer side (PSA)', blurb: 'Bills SJVN raised on buyers, with payments and balance.', counterparty: 'BUYER',
+  { id: 'bills-psa', group: 'Billing', title: 'Bills register — buyer side (PSA)', blurb: 'Bills SJVN issued to buyers, with payments and balance.', counterparty: 'BUYER',
     cp: { BUYER: { title: 'Bills from SJVN (PSA)', blurb: 'Each bill SJVN raised on you, with what was paid and what is still due.' } },
-    spec: { dataset: 'invoices', filters: [{ key: 'direction', op: 'in', value: ['SJVN_TO_BUYER'] }] } },
-  { id: 'bills-ppa', group: 'Billing', title: 'Bills register — seller side (PPA)', blurb: 'Developers\' bills to SJVN, with payments and balance.', counterparty: 'SELLER',
+    spec: { dataset: 'invoices', filters: [{ key: 'direction', op: 'in', value: ['SJVN_TO_BUYER'] }, { key: 'status', op: 'in', value: ISSUED_BILL }] } },
+  { id: 'bills-ppa', group: 'Billing', title: 'Bills register — seller side (PPA)', blurb: 'Developers\' bills SJVN has received, with payments and balance.', counterparty: 'SELLER',
     cp: { SELLER: { title: 'My bills to SJVN (PPA)', blurb: 'Each bill you raised on SJVN, with what was paid and what is still due.' } },
-    spec: { dataset: 'invoices', filters: [{ key: 'direction', op: 'in', value: ['SELLER_TO_SJVN'] }] } },
+    spec: { dataset: 'invoices', filters: [{ key: 'direction', op: 'in', value: ['SELLER_TO_SJVN'] }, { key: 'status', op: 'in', value: RECEIVED_BILL }] } },
   { id: 'billing-monthly-sales', group: 'Billing', title: 'Monthly sales billing (PSA)', blurb: 'Bills issued to buyers, totalled by billing month.', counterparty: 'BUYER',
     cp: { BUYER: { title: 'Monthly billing from SJVN (PSA)', blurb: 'The bills SJVN issued to you, totalled by billing month.' } },
     spec: { dataset: 'invoices', columns: MONTHLY_COLS,
@@ -1057,7 +1073,7 @@ export const PRESETS = [
       SELLER: { blurb: 'The security instruments on your contracts, nearest expiry first.' },
       BUYER: { blurb: 'The security instruments on your contracts, nearest expiry first.' },
     },
-    spec: { dataset: 'security', group_by: 'expiry_bucket' } },
+    spec: { dataset: 'security', group_by: 'expiry_bucket', filters: [{ key: 'status', op: 'in', value: HELD_SECURITY }] } },
   { id: 'reconciliation', group: 'Security and reconciliation', title: 'Reconciliation statements', blurb: 'Statements, exceptions and sign-offs.',
     spec: { dataset: 'reconciliation' } },
   { id: 'approvals', group: 'Governance', title: 'Approvals and maker–checker activity', blurb: 'Every approval step, grouped by who decided.',

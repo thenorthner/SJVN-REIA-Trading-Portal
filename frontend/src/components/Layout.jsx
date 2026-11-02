@@ -273,6 +273,8 @@ const NAV_INTERNAL = [
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },
+      // The desk's reports; everyone else reads them on the REIA Dashboard.
+      { to: '/audit-reports', label: 'REIA Reports', roles: ['COMPLIANCE_AUDITOR'] },
     ],
   },
 ];
