@@ -35,6 +35,9 @@ import { hasGrant } from './rolePowers.js';
 import { REASON_LABELS } from '../disputesConstants.js';
 import { newId } from '../util.js';
 import { printed } from './reiaReportExport.js';
+import { backToBack, standingPpaBill } from './backToBack.js';
+import { sourcesForPsa } from './allocations.js';
+import { getParamNumber } from '../mastersService.js';
 
 // The REIA report readers, as the existing REIA reports have them.
 const REPORT_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
@@ -191,6 +194,150 @@ function expiryOf(days, end) {
   return 'LATER';
 }
 const tableExists = (name) => !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name);
+
+// ── Profit and loss on a beneficiary ─────────────────────────────────────────
+//
+// SJVN buys under the PPA and sells the same energy under the PSA. What it
+// keeps on a beneficiary is not the margin alone: the surcharge the buyer pays
+// for paying late, the rebate SJVN allows the buyer and earns from the
+// developer, the surcharge SJVN pays the developer, notes either way, and the
+// days SJVN pays the developer out of its own funds before the buyer pays.
+// Each buyer bill is one row; the developer side of it is the source PPAs'
+// bills for the month at this PSA's allocation share.
+
+// A bill that is in the books: approved and presented, paid or not.
+const BOOKED = ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED', 'PAID'];
+const BOOKED_SQL = BOOKED.map((x) => `'${x}'`).join(',');
+const PNL_KIND = {
+  ENERGY: 'Energy bill',
+  PROVISIONAL_SUPERSEDED: 'Provisional (final raised)',
+  SUPPLEMENTARY: 'Supplementary bill',
+  LPS_BILL: 'Separate LPS bill',
+};
+const COST_BASIS = { PPA_BILLS: 'Developers\' bills', PASS_THROUGH: 'Pass-through on the bill' };
+// A provisional bill the month's final bill has since replaced: the final
+// carries the whole month's energy and margin and nets what the provisional
+// collected, so the provisional's energy is not counted twice.
+const SUPERSEDED_SQL = `(i.invoice_type = 'PROVISIONAL' AND EXISTS (SELECT 1 FROM invoices f
+  WHERE f.contract_id = i.contract_id AND f.billing_period = i.billing_period AND f.direction = i.direction
+    AND f.invoice_type = 'FINAL' AND f.status IN (${BOOKED_SQL})))`;
+const PNL_KIND_SQL = `CASE WHEN i.invoice_no LIKE 'LPS-%' THEN 'LPS_BILL' WHEN ${SUPERSEDED_SQL} THEN 'PROVISIONAL_SUPERSEDED'
+  WHEN i.invoice_type = 'SUPPLEMENTARY' THEN 'SUPPLEMENTARY' ELSE 'ENERGY' END`;
+// April to March, as "2026-27".
+const FY_SQL = (p) => `CASE WHEN CAST(substr(${p}, 6, 2) AS INTEGER) >= 4
+  THEN substr(${p}, 1, 4) || '-' || substr(CAST(CAST(substr(${p}, 1, 4) AS INTEGER) + 1 AS TEXT), 3, 2)
+  ELSE CAST(CAST(substr(${p}, 1, 4) AS INTEGER) - 1 AS TEXT) || '-' || substr(${p}, 3, 2) END`;
+// A bill wholly reversed by credit notes is no sale and no purchase (the
+// back-to-back check's rule): its energy, and the notes that undo it, are left out.
+const REVERSED_SQL = (i = 'i') => `COALESCE((SELECT SUM(n.amount) FROM debit_credit_notes n WHERE n.invoice_id = ${i}.id AND n.note_type = 'CREDIT'
+  AND n.model = 'V2' AND n.status IN ('ISSUED', 'SETTLED')), 0) >= ${i}.total_amount - 0.005`;
+const NOTES_SQL = (type, inv = 'i.id') => `COALESCE((SELECT SUM(n.amount) FROM debit_credit_notes n WHERE n.invoice_id = ${inv}
+  AND n.note_type = '${type}' AND n.status IN ('ISSUED', 'SETTLED')), 0)`;
+
+/**
+ * SJVN's cost of funds, % a year. The master sets it; left blank it is SBI's
+ * one-year MCLR, which the LPS base rate already carries (MCLR + 5%, MoP LPS
+ * Rules 2022) — the rate SJVN would borrow at to pay a developer ahead of a buyer.
+ */
+// Read as stored, so that blank stays blank (a number parameter reads blank as 0%).
+const costOfFundsRaw = db.prepare("SELECT param_value FROM system_parameters WHERE param_key = 'reia_cost_of_funds_pct' AND is_active = 1 LIMIT 1");
+export function costOfFundsPct() {
+  const raw = String(costOfFundsRaw.get()?.param_value ?? '').trim();
+  const set = Number(raw);
+  if (raw !== '' && Number.isFinite(set) && set >= 0) return set;
+  return Math.max(0, getParamNumber('lps_annual_pct', 15) - 5);
+}
+
+const ppaBillsOf = db.prepare(`
+  SELECT i.*, COALESCE((SELECT SUM(px.amount + COALESCE(px.deduction, 0)) FROM payments px WHERE px.invoice_id = i.id), 0) AS _paid,
+         COALESCE((SELECT SUM(px.rebate_amount) FROM payments px WHERE px.invoice_id = i.id), 0) AS _rebate_paid,
+         COALESCE((SELECT SUM(px.lps_component) FROM payments px WHERE px.invoice_id = i.id), 0) AS _lps_paid,
+         ${NOTES_SQL('CREDIT')} AS _credit, ${NOTES_SQL('DEBIT')} AS _debit
+  FROM invoices i
+  WHERE i.contract_id = ? AND i.billing_period = ? AND i.direction = 'SELLER_TO_SJVN'
+    AND i.invoice_no NOT LIKE 'DSM-%' AND i.status IN (${BOOKED_SQL}) AND NOT (${REVERSED_SQL()})
+`);
+const lastPaidOn = db.prepare('SELECT MAX(date(payment_date)) AS d FROM payments WHERE invoice_id = ?');
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const pnlMemo = new WeakMap();
+/** Every figure of one buyer bill's profit and loss, worked once per row. */
+function pnlOf(r) {
+  if (pnlMemo.has(r)) return pnlMemo.get(r);
+  const kind = r.bill_kind;
+  const out = {
+    energy_mwh: 0, sale_value: 0, cost_of_power: 0, cost_basis: null, margin_billed: 0,
+    lps_from_buyer: 0, lps_to_collect: 0, rebate_to_buyer: 0, notes_to_buyer: 0,
+    rebate_from_developer: 0, lps_to_developer: 0, notes_from_developer: 0,
+    outstanding: 0, funded_days: 0, funding_cost: 0,
+  };
+
+  // Money on the buyer's own bill, whatever kind of bill it is.
+  out.rebate_to_buyer = Math.max(Number(r._rebate) || 0, Number(r._rebate_paid) || 0);
+  out.notes_to_buyer = (Number(r._notes_credit) || 0) - (Number(r._notes_debit) || 0);
+  if (kind === 'LPS_BILL') {
+    out.lps_from_buyer = Math.max(Number(r._paid) || 0, Number(r._lps_paid) || 0);
+    out.lps_to_collect = r.status === 'PAID' ? 0 : Math.max(0, (Number(r._total) || 0) - out.lps_from_buyer);
+  } else {
+    out.lps_from_buyer = Number(r._lps_paid) || 0;
+    out.lps_to_collect = Math.max(0, (Number(r._lps) || 0) - out.lps_from_buyer) + unbilledLps(r);
+  }
+  if (kind !== 'PROVISIONAL_SUPERSEDED') out.outstanding = r._open ? Math.max(0, Number(r._outstanding) || 0) : 0;
+
+  // The energy: what the buyer is charged for it, what the developers are paid.
+  if (kind === 'ENERGY' || kind === 'SUPPLEMENTARY') {
+    out.energy_mwh = Number(r._mwh) || 0;
+    out.margin_billed = Number(r._margin) || 0;
+    out.sale_value = (Number(r._energy_charges) || 0) + out.margin_billed;
+    out.cost_of_power = Number(r._energy_charges) || 0;
+    out.cost_basis = 'PASS_THROUGH';
+  }
+  if (kind === 'ENERGY') {
+    const inv = invoiceRow.get(r.invoice_id);
+    const b2b = inv ? backToBack(inv) : { applicable: false };
+    if (b2b.applicable && b2b.state !== 'INCOMPLETE' && b2b.sources.every((x) => x.psa_mwh != null && x.ppa_rate_per_mwh != null)) {
+      out.cost_of_power = b2b.sources.reduce((t, x) => t + x.ppa_rate_per_mwh * x.psa_mwh, 0);
+      out.cost_basis = 'PPA_BILLS';
+    }
+
+    // The developer side, at this PSA's share of each source PPA.
+    let devPaidOn = null;
+    let devAllPaid = true;
+    const sources = sourcesForPsa(r.contract_id, r.billing_period);
+    for (const src of sources) {
+      const share = (Number(src.allocation_percent) || 0) / 100;
+      for (const b of ppaBillsOf.all(src.ppa_id, r.billing_period)) {
+        const lpsBill = String(b.invoice_no).startsWith('LPS-');
+        out.rebate_from_developer += Math.max(Number(b.rebate) || 0, Number(b._rebate_paid) || 0) * share;
+        out.lps_to_developer += (lpsBill ? Math.max(Number(b._paid) || 0, Number(b._lps_paid) || 0) : Number(b._lps_paid) || 0) * share;
+        out.notes_from_developer += ((Number(b._credit) || 0) - (Number(b._debit) || 0)) * share;
+      }
+      const standing = standingPpaBill(src.ppa_id, r.billing_period);
+      if (!standing || standing.status !== 'PAID') devAllPaid = false;
+      else {
+        const d = lastPaidOn.get(standing.id).d;
+        if (d && (!devPaidOn || d > devPaidOn)) devPaidOn = d;
+      }
+    }
+
+    // Days SJVN carried the developer's money before the buyer settled.
+    if (sources.length && devAllPaid && devPaidOn) {
+      const buyerSettled = r.status === 'PAID' && r._last_paid ? r._last_paid : todayIso();
+      out.funded_days = Math.max(0, daysBetween(devPaidOn, buyerSettled));
+      out.funding_cost = out.cost_of_power * out.funded_days * (costOfFundsPct() / 100) / 365;
+    }
+  }
+
+  out.energy_spread = out.sale_value - out.cost_of_power;
+  out.notes_net = out.notes_from_developer - out.notes_to_buyer;
+  out.net_gain = out.energy_spread + out.lps_from_buyer + out.rebate_from_developer + out.notes_from_developer
+    - out.rebate_to_buyer - out.lps_to_developer - out.notes_to_buyer;
+  out.net_after_funding = out.net_gain - out.funding_cost;
+  pnlMemo.set(r, out);
+  return out;
+}
+const pnlCol = (key, label, extra = {}) => col(key, label, 'money', null, { agg: 'sum', compute: (r) => pnlOf(r)[key], ...extra });
 
 // ── Datasets ─────────────────────────────────────────────────────────────────
 
@@ -539,6 +686,67 @@ function buildDatasets() {
       ],
     },
 
+    beneficiary_pnl: {
+      title: 'Beneficiary profit and loss',
+      blurb: 'What SJVN made or lost on each beneficiary, bill by bill: the spread on the energy, surcharge and rebate both ways, notes, and the cost of paying developers before the buyer paid.',
+      // SJVN's own book: never a counterparty's.
+      access: 'internal',
+      from: INVOICE_FROM,
+      where: [REIA(), "i.direction = 'SJVN_TO_BUYER'", "c.contract_type = 'PSA'", "i.invoice_no NOT LIKE 'DSM-%'", `i.status IN (${BOOKED_SQL})`, `NOT (${REVERSED_SQL()})`],
+      scope: () => ({ sql: '0', params: [] }),
+      projectCols: ['i.contract_id'],
+      defaultSort: [{ key: 'billing_period', dir: 'desc' }],
+      columns: [
+        col('invoice_id', '', 'text', 'i.id', { hidden: true }),
+        col('contract_id', '', 'text', 'i.contract_id', { hidden: true }),
+        col('_open', '', 'int', `CASE WHEN ${OPEN_INVOICE_SQL} THEN 1 ELSE 0 END`, { hidden: true }),
+        col('_days_late', '', 'int', DAYS_LATE('i.due_date'), { hidden: true }),
+        col('_mwh', '', 'number', 'i.energy_mwh', { hidden: true }),
+        col('_energy_charges', '', 'number', 'i.energy_charges', { hidden: true }),
+        col('_margin', '', 'number', 'i.trading_margin', { hidden: true }),
+        col('_total', '', 'number', 'i.total_amount', { hidden: true }),
+        col('_lps', '', 'number', 'i.lps', { hidden: true }),
+        col('_rebate', '', 'number', 'i.rebate', { hidden: true }),
+        col('_paid', '', 'number', PAID_SQL, { hidden: true }),
+        col('_rebate_paid', '', 'number', 'COALESCE((SELECT SUM(px.rebate_amount) FROM payments px WHERE px.invoice_id = i.id), 0)', { hidden: true }),
+        col('_lps_paid', '', 'number', 'COALESCE((SELECT SUM(px.lps_component) FROM payments px WHERE px.invoice_id = i.id), 0)', { hidden: true }),
+        col('_last_paid', '', 'date', LAST_PAID_SQL, { hidden: true }),
+        col('_notes_credit', '', 'number', NOTES_SQL('CREDIT'), { hidden: true }),
+        col('_notes_debit', '', 'number', NOTES_SQL('DEBIT'), { hidden: true }),
+        col('_outstanding', '', 'number', OUTSTANDING_SQL, { hidden: true }),
+        col('buyer_name', 'Beneficiary', 'text', 'b.name', { filter: true, group: true, default: true }),
+        col('buyer_state', 'Beneficiary state', 'text', 'b.state', { filter: true, group: true }),
+        col('contract_no', 'PSA', 'text', 'c.contract_no', { filter: true, group: true, default: true }),
+        col('project_type', 'Technology', 'enum', 'c.project_type', { filter: true, group: true }),
+        col('billing_period', 'Billing period', 'month', 'i.billing_period', { filter: true, group: true, default: true }),
+        col('financial_year', 'Financial year', 'text', FY_SQL('i.billing_period'), { filter: true, group: true }),
+        col('invoice_no', 'Bill no.', 'text', 'i.invoice_no', { filter: 'search' }),
+        col('bill_kind', 'Bill kind', 'enum', PNL_KIND_SQL, { filter: true, group: true, labels: PNL_KIND,
+          note: 'A provisional bill whose final has been raised counts for the rebate, surcharge and notes on it, not for its energy: the final carries the whole month.' }),
+        col('status', 'Bill status', 'enum', 'i.status', { filter: true, group: true }),
+        col('energy_mwh', 'Energy sold (MWh)', 'mwh', null, { agg: 'sum', default: true, compute: (r) => pnlOf(r).energy_mwh }),
+        pnlCol('sale_value', 'Sold to beneficiary', { default: true, note: 'Energy charges plus the margin on the buyer\'s bill: what the beneficiary is charged for the energy.' }),
+        pnlCol('cost_of_power', 'Bought from developers', { default: true, note: 'The energy this PSA drew from each source PPA, at the rate on that PPA\'s bill for the month (the back-to-back check). Where a developer\'s bill is not in yet, the pass-through on the buyer\'s bill.' }),
+        col('cost_basis', 'Purchase priced on', 'enum', null, { filter: true, group: true, labels: COST_BASIS, options: Object.keys(COST_BASIS), compute: (r) => pnlOf(r).cost_basis }),
+        pnlCol('margin_billed', `${MARGIN_LABEL} billed`),
+        pnlCol('energy_spread', 'Earned on energy', { default: true, note: 'Sold less bought. It should equal the margin billed; more means the buyer was charged above the margin, less means SJVN earned below it.' }),
+        pnlCol('lps_from_buyer', 'LPS received from beneficiary', { default: true }),
+        pnlCol('lps_to_collect', 'LPS still to collect', { note: 'Surcharge billed and not yet received, plus surcharge accruing on an overdue bill that has not been billed. Not counted in the net until it is received.' }),
+        pnlCol('rebate_to_buyer', 'Rebate allowed to beneficiary', { default: true }),
+        pnlCol('rebate_from_developer', 'Rebate earned from developers', { default: true, note: 'Prompt-payment rebate SJVN took on the source PPAs\' bills for the month, at this PSA\'s allocation share.' }),
+        pnlCol('lps_to_developer', 'LPS paid to developers', { default: true, note: 'Surcharge SJVN paid on the source PPAs\' bills for the month, at this PSA\'s allocation share.' }),
+        pnlCol('notes_to_buyer', 'Notes to beneficiary (credit − debit)'),
+        pnlCol('notes_from_developer', 'Notes from developers (credit − debit)'),
+        pnlCol('notes_net', 'Notes, net', { default: true, note: 'Credit notes SJVN received from developers less those it gave the beneficiary (debit notes the other way). A dispute settled in the buyer\'s favour reaches here as its credit note.' }),
+        pnlCol('net_gain', 'Net gain / (loss)', { default: true, note: 'Earned on energy + LPS received + rebate earned + notes, net − rebate allowed − LPS paid.' }),
+        pnlCol('outstanding', 'Still owed by beneficiary', { default: true }),
+        col('funded_days', 'Days SJVN funded', 'days', null, { filter: true, compute: (r) => pnlOf(r).funded_days,
+          note: 'Days from SJVN\'s last payment to the developers for the month to the beneficiary settling the bill (today while it is open). Nothing while a developer is still unpaid.' }),
+        pnlCol('funding_cost', 'Cost of funding', { default: true, note: 'What SJVN paid the developers, for the days it funded them, at its cost of funds (the reia_cost_of_funds_pct master; blank means SBI 1-year MCLR, the LPS base rate less 5%).' }),
+        pnlCol('net_after_funding', 'Net after funding cost', { default: true }),
+      ],
+    },
+
     contracts: {
       title: 'Contracts register',
       blurb: 'Every REIA PPA and PSA: parties, capacity, tariff, tenure and the commercial terms billing runs on.',
@@ -774,6 +982,16 @@ const ISSUED_BILL = ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED', 'PAID'];
 const AGEING_COLS = ['invoice_no', 'due_date', 'days_past_due', 'outstanding', 'not_due', 'days_0_30', 'days_31_60', 'days_61_90', 'days_90_plus', 'lps_accrued_unbilled'];
 const MONTHLY_COLS = ['billing_period', 'energy_mwh', 'total_amount', 'rebate', 'lps', 'paid_total', 'balance_due'];
 export const PRESETS = [
+  { id: 'pnl-beneficiary', group: 'Profit and loss', title: 'Profit and loss by beneficiary', blurb: 'One line per beneficiary: what SJVN earned, gave away and paid to fund it.',
+    spec: { dataset: 'beneficiary_pnl', group_by: 'buyer_name', summary: true } },
+  { id: 'pnl-monthly', group: 'Profit and loss', title: 'Profit and loss by month', blurb: 'All beneficiaries together, month by month.',
+    spec: { dataset: 'beneficiary_pnl', group_by: 'billing_period', summary: true, sort: [{ key: 'billing_period', dir: 'desc' }] } },
+  { id: 'pnl-state', group: 'Profit and loss', title: 'Profit and loss by state', blurb: 'Beneficiaries totalled by their state.',
+    spec: { dataset: 'beneficiary_pnl', group_by: 'buyer_state', summary: true } },
+  { id: 'pnl-bills', group: 'Profit and loss', title: 'Profit and loss, bill by bill', blurb: 'Every buyer bill with its gain or loss, under its beneficiary.',
+    spec: { dataset: 'beneficiary_pnl', columns: ['invoice_no', 'billing_period', 'bill_kind', 'energy_mwh', 'sale_value', 'cost_of_power', 'cost_basis', 'energy_spread',
+      'lps_from_buyer', 'rebate_to_buyer', 'rebate_from_developer', 'lps_to_developer', 'notes_net', 'net_gain', 'funded_days', 'funding_cost', 'net_after_funding'],
+    group_by: 'buyer_name' } },
   { id: 'bills-psa', group: 'Billing', title: 'Bills register — buyer side (PSA)', blurb: 'Bills SJVN raised on buyers, with payments and balance.', counterparty: 'BUYER',
     cp: { BUYER: { title: 'Bills from SJVN (PSA)', blurb: 'Each bill SJVN raised on you, with what was paid and what is still due.' } },
     spec: { dataset: 'invoices', filters: [{ key: 'direction', op: 'in', value: ['SJVN_TO_BUYER'] }] } },
