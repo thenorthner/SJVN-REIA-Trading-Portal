@@ -5,6 +5,7 @@ import { newId, logAudit as writeLog, pushNotification, genInvoiceNo, buildBilli
 import { getParamNumber } from '../mastersService.js';
 import { scrapeLatestDSM } from '../services/nrpcScraper.js';
 import { settledLakh, settlementRupees, luToMwh } from '../services/nrpcDsa.js';
+import { REIA_BETA } from '../services/reiaBeta.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -59,7 +60,12 @@ function outsideDesk(user, contract) {
   return null;
 }
 
+// The beta's DSM is REIA's own projects. Its rows were scrubbed of the
+// stations, but the weeks, totals and pool figures above them still counted
+// the stations' DSM (7 weeks and ₹33.6 lakh payable over an empty list).
+const IN_BETA = (c) => !REIA_BETA || !['Hydro', 'PSP', 'Thermal'].includes(String(c?.project_type || ''));
 function verticalClause(vertical) {
+  if (!vertical && REIA_BETA) vertical = 'REIA';
   if (!vertical) return '';
   const cond = VERTICAL_TYPES[vertical];
   if (!cond) throw Object.assign(new Error('vertical must be REIA, HYDRO or THERMAL'), { status: 400 });
@@ -410,7 +416,7 @@ router.get('/statement-sync', requireRole(...READ), (req, res) => {
   // A desk sees its own stations' weeks: the Thermal desk was shown the hydro
   // stations' NRPC statements (Thermal QA run 15).
   const contracts = db.prepare(`SELECT * FROM contracts WHERE status IN ('ACTIVE','NEARING_EXPIRY','AMENDED','RENEWED','EXPIRED')`).all()
-    .filter((c) => !outsideDesk(req.user, c))
+    .filter((c) => !outsideDesk(req.user, c) && IN_BETA(c))
     .map((c) => ({ c, st: stationOf(c) })).filter((x) => x.st);
   const rows = [];
   for (const a of accounts) {
@@ -468,13 +474,13 @@ router.get('/pool-tracker', requireRole(...READ), (req, res) => {
   const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
   const days = (a, b) => Math.max(0, Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000));
   const bills = db.prepare(`
-    SELECT i.*, c.contract_no, d.dsm_no, d.week_no, x.financial_year, x.revision FROM invoices i
+    SELECT i.*, c.contract_no, c.project_type, d.dsm_no, d.week_no, x.financial_year, x.revision FROM invoices i
     JOIN contracts c ON c.id = i.contract_id
     LEFT JOIN deviation_settlements d ON d.invoice_id = i.id
     LEFT JOIN nrpc_dsa_accounts x ON x.id = d.dsa_account_id
     WHERE i.invoice_no LIKE 'DSM-%' AND i.status NOT IN ('CANCELLED', 'DRAFT', 'REJECTED')
     ORDER BY i.due_date IS NULL, i.due_date
-  `).all();
+  `).all().filter(IN_BETA);
   const rows = bills.map((b) => {
     const signed = dsmSigned(b);
     const pays = db.prepare('SELECT amount, deduction, payment_date, reference FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(b.id);

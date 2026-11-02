@@ -2,6 +2,7 @@ import db from '../db/index.js';
 import { computeCoverage, computeRequiredAmount, securityBreakdown, isLiveToday } from '../paymentSecurityEngine.js';
 import { ACTIVE_STATUSES, INSTRUMENTS_BY_SIDE } from '../paymentSecurityConstants.js';
 import { getParamNumber } from '../mastersService.js';
+import { betaRows } from './reiaBeta.js';
 
 /**
  * Where each contract stands against its own timeline and obligations.
@@ -313,6 +314,11 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90, contr
       state: !live ? 'NOT_LIVE' : breaches.length ? 'BREACH' : due.length ? 'DUE' : 'OK',
     };
   });
+
+  // The beta's register leaves out the other desks' contracts here, not only
+  // in the answer, so its counts and the Excel agree with the rows shown. One
+  // contract asked for by id (a hold check) is judged whatever it is.
+  if (!contractId) rows.splice(0, rows.length, ...betaRows(rows));
 
   // Worst first: a live contract out of compliance is the thing to look at.
   const order = { BREACH: 0, DUE: 1, OK: 2, NOT_LIVE: 3 };
