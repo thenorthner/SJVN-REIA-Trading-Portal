@@ -272,9 +272,9 @@ const MISSIONS = [
     { who:'F', opt:true, noquiz:true, t:'See what each seller can be paid', where:'REIA Billing & Settlement › Others › Developer Release Planner',
       rules:['Shows what buyers paid that belongs to each generator (its energy share; no SJVN margin, no credit notes), what has gone out, and what can be released now.'] },
     { who:'C', alt:['F'], t:'Release to the generator', where:'The seller’s bill › Release Payment to Generator (Pay-when-paid)', press:['Release to Generator'],
-      fill:['Net amount paid (₹)','TDS deducted (₹)','Fund source: DISCOM realization, own fund or payment security fund','Payment date, reference'],
+      fill:['Net amount paid (₹)','TDS deducted (₹)','Fund source: DISCOM realization, own fund or payment security fund','Payment date (not after today), UTR / reference'],
       res:{o:'Seller’s bill', f:'APPROVED', t:'PAID'},
-      rules:['The section shows what the DISCOM has realised, what is already released, and what is available.','Net + TDS may not exceed the lower of what is available and the bill less the early-payment rebate: 1.5% if paid within 5 days of the bill, 1% within 30 days, unless the PPA sets its own.','TDS u/s 194Q: 0.1% of the bill above ₹50 lakh in the year.','Net + TDS + rebate = the bill, exactly. Finance can release too.'],
+      rules:['The section shows what the DISCOM has realised, what is already released, and what is available.','Net + TDS may not exceed the lower of what is available and the bill less the early-payment rebate: 1.5% if paid within 5 days of the bill, 1% within 30 days, unless the PPA sets its own.','TDS u/s 194Q: 0.1% of the bill above ₹50 lakh in the year.','Net + TDS + rebate = the bill, exactly. Finance can release too.','The release needs the bank’s UTR, and its payment date cannot be after today: the rebate is judged on that date.'],
       refuse:['₹2,17,80,000 is more than the ₹2,14,53,300 left on … (₹2,17,80,000 owed, less the 1.50% early-payment rebate it earns if paid today).'],
       block:'Maker: the release section does not appear.' },
     { who:'S', opt:true, noquiz:true, t:'See the money', where:'Seller Portal › My Dashboard / Payments & Ledger',
@@ -600,7 +600,7 @@ const QUESTS = [
     { who:'F', t:'File the seller’s Form 16A', where:'Counterparty Ledgers & TDS › Ledger of one party › Sellers (payable) › the seller › TDS certificates', press:['+ File a certificate','File certificate'],
       fill:['Financial year, e.g. 2026-27','Quarter: Q1 — Apr–Jun to Q4 — Jan–Mar','Certificate number','TDS on the certificate (₹)','Certificate (PDF)'],
       res:{o:'Form 16A', text:'Filed'},
-      rules:['The quarterly certificate for the tax SJVN deducted at source from the seller’s payments.'] },
+      rules:['The quarterly certificate for the tax SJVN deducted at source from the seller’s payments.','Only a quarter that has ended can be filed; the form offers those alone.'] },
     { who:'S', noquiz:true, t:'Download the certificate', where:'Seller Portal › Payments & Ledger › TDS certificates', press:['View / download'],
       rules:['The seller claims the credit in its income-tax return.','Its ledger has four tabs: Outstanding & ageing, Ledger, Payments, TDS certificates.'] },
     { who:'B', t:'File its own certificate', where:'Buyer Portal › Billing & Payments › Payment Ledger & Receipts › TDS certificates', press:['+ File a certificate','File certificate'],
@@ -699,7 +699,7 @@ const QUESTS = [
       res:{o:'Week', t:'CALCULATED'},
       rules:['The week is recorded at the figure NRPC published; nothing is computed here.','Nothing is billed until you generate the supplementary bill.'] },
     { who:'M', t:'Generate the supplementary bill', where:'Deviation Settlement (DSM) › the week', press:['Generate supplementary bill','Dispatch & Create Invoice'],
-      fill:['Bill / Invoice No. (optional): auto-generated if blank (DSM-PPA / DSM-PSA)','Dispatch Date'],
+      fill:['Bill / Invoice No. (optional): auto-generated if blank (DSM-POOL)','Dispatch Date'],
       res:{o:'Week', f:'CALCULATED', t:'DISPATCHED'},
       rules:['Creates a supplementary invoice linked to the week, as a draft. Once raised, the week is frozen.'],
       refuse:['This row is a manual estimate, not the published settlement, so it cannot be billed.'] },
@@ -816,14 +816,16 @@ const QUESTS = [
   also:['Short cover can be treated as adequate for up to 90 days, with a reason: HOD or Management (Adequacy overrides).'] },
 
 { zone:'risk', short:'Power diversion', name:'Power diversion on default', screen:'REIA Billing & Settlement › Others › Power Diversion',
-  goal:'When a buyer does not pay or does not take the power, sell it elsewhere and set the proceeds against its dues (PSA Art. 6.6).',
-  start:'Buyer in payment default, or power not requisitioned', end:'Diversion {RECOVERED}',
+  goal:'When a buyer does not pay and its LC cannot cover what it owes, or does not take the power, sell the power elsewhere and set the proceeds against its dues (PSA Art. 6.6).',
+  start:'Buyer in payment default with its LC unable to cover it, or power not requisitioned', end:'Diversion {RECOVERED}',
   steps:[
+    { who:'M', opt:true, noquiz:true, t:'See which buyers are in default', where:'REIA Billing & Settlement › Others › Power Diversion › Buyer default',
+      rules:['One row per PSA: what is overdue and since when, the LC left to draw, and “In default — may divert” or “Not open”.','A buyer is in payment default when a bill is past its due date and its LC cannot cover what is overdue. The LC is drawn first (Side quest 14).'] },
     { who:'M', t:'Record the diversion', where:'REIA Billing & Settlement › Others › Power Diversion', press:['+ Record Diversion','Record'],
-      fill:['PSA Contract (defaulting buyer)','Period','Reason: Payment default, or Power not requisitioned','Quantum Diverted (MWh)','Sale Rate (₹/MWh) and Expenses (₹)'],
+      fill:['PSA Contract (defaulting buyer)','Period: a month that has started','Reason: Payment default, or Power not requisitioned','Quantum Diverted (MWh): no more than the PSA’s capacity could deliver in the month','Sale Rate (₹/MWh) and Expenses (₹)','For power not requisitioned: what shows it was not requisitioned (schedule / SLDC record), at least 15 characters'],
       res:{o:'Diversion', t:'RECORDED'},
-      rules:['Net gain: what the sale fetched, less the expenses.','Payment default needs a bill past its due date.'],
-      refuse:['… has no bill past its due date, so the buyer is not in payment default. If the buyer did not schedule the power, record it as not requisitioned.'],
+      rules:['Net gain: what the sale fetched, less the expenses.','Payment default needs a bill past its due date that the LC cannot cover.','Power not requisitioned needs its evidence: the buyer’s schedule or the SLDC record.'],
+      refuse:['… has no bill past its due date, so the buyer is not in payment default. If the buyer did not schedule the power, record it as not requisitioned.','…: ₹… overdue, covered by ₹… of LC — draw on the LC first. Power is diverted for a payment default once the letter of credit cannot cover it.'],
       block:'Checker: no `+ Record Diversion`.' },
     { who:'M', t:'Recover the gain against dues', where:'Power Diversion › the row', press:['Recover against dues','Recover'],
       res:{o:'Diversion', f:'RECORDED', t:'RECOVERED'},
@@ -1090,6 +1092,21 @@ const QUESTS = [
   also:['The bell in the top bar lists your own notifications, e.g. a change to your role’s powers.','`Disclaimer` in Quick Connect says what the facility is not for.','On the portal, every step of this Playbook has a “Report a problem” link: it opens the Feedback page with the step filled in.'] },
 ];
 
+// The REIA sidebar's Others menu, in its order, and the side quests that play
+// each screen. test-quests checks it against the sidebar in Layout.jsx.
+const OTHERS = [
+  ['Compliance Desk', ['q12','q22']],
+  ['Month-Close Board', ['q7','q1']],
+  ['Developer Release Planner', ['q5']],
+  ['Invoice Verification', ['q8']],
+  ['Counterparty Ledgers & TDS', ['q6']],
+  ['Generation Performance', ['q13']],
+  ['Power Diversion', ['q16']],
+  ['Advances & Unapplied Receipts', ['q4']],
+  ['Energy Banking', ['q17']],
+  ['Deviation Settlement (DSM)', ['q10']],
+];
+
 /* ───────────────────────── data: the complete cycle ─────────────────────────
    The whole desk on one page: each stage's normal path as [who, title, what
    happens], then every way it can go differently and what the platform does
@@ -1350,6 +1367,8 @@ const CYCLE = [
     { if:'The bank refuses', then:'`Bank refused`, with the date: the invocation is {REJECTED}.' },
     { if:'The notice went out by mistake', then:'It cannot be undone from this screen.' },
     { if:'Diversion is recorded as a payment default with no bill past due', then:'Refused: record it as power not requisitioned if that is what happened.', refuse:'… has no bill past its due date, so the buyer is not in payment default. If the buyer did not schedule the power, record it as not requisitioned.' },
+    { if:'The buyer’s LC still covers what is overdue', then:'Refused: draw on the LC first. Power is diverted for a payment default only once the LC cannot cover it.', refuse:'…: ₹… overdue, covered by ₹… of LC — draw on the LC first. Power is diverted for a payment default once the letter of credit cannot cover it.' },
+    { if:'The power was not requisitioned', then:'Record it so, with what shows it: the buyer’s schedule or the SLDC record, in at least 15 characters.' },
     { if:'The diversion fetched more than the buyer owes', then:'The surplus is held as the buyer’s advance.' },
     { if:'The power sold for less than it cost', then:'`Bill the deficit`: a debit note on the buyer’s latest bill.' },
     { if:'No more bills should go out on the contract', then:'Put it on hold: new SJVN bills on it are refused until the hold is released.' },
@@ -2099,8 +2118,12 @@ function viewSide() {
       <div class="sq-act"><button class="btn primary" type="button" data-play="${q.id}">${ICON.play} Play</button><button class="btn" type="button" data-go="${q.id}">Open the lanes</button></div>
     </article>`;
   };
+  const others = OTHERS.map(([label, ids]) => `<li class="om-row"><b>${esc(label)}</b><span>${ids.map((id) => `<button class="chip${isDone(BOOK[id]) ? ' done' : ''}" type="button" data-play="${id}">${ICON.play} ${esc(BOOK[id].short)}</button>`).join('')}</span></li>`).join('');
   return `<section><p class="eyebrow">Side quests</p><h1>Everything else on the desk</h1>
     <p class="lede">The screens beyond the ten missions, each played the same way: lanes for each player, the button to press, where to log out and who logs in next. ${doneN} of ${QUESTS.length} done.</p></section>
+    <h2 class="side-h">The Others menu</h2>
+    <p class="sq-goal">Every screen under REIA Billing &amp; Settlement › Others, in the sidebar’s order. Press one to play it.</p>
+    <ul class="om">${others}</ul>
     ${QZONES.map(([z, label]) => `<h2 class="side-h">${esc(label)}</h2><div class="sq">${QUESTS.filter((q) => q.zone === z).map(card).join('')}</div>`).join('')}`;
 }
 

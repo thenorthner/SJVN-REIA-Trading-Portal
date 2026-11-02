@@ -18,6 +18,7 @@ they play on, the Full cycle page (`CYCLE`), and the three shipped copies (sourc
 | 1.9 | Quiz fairness: a step whose text says another role can also do it keeps that role out of the options | A right answer marked wrong |
 | 1.10 | No duplicate step titles inside a quest; `opt`/`noquiz` are booleans | Ambiguous quiz questions |
 | 1.11 | Full cycle: each stage has a phase from `CPHASES`, a path of real roles, each step with a title (none used twice) and what happens, exceptions with `if` and `then` (no `if` twice), `see` ids that exist; every mission and side quest is linked from a stage; 1.5 and 1.8 apply to its text, and it names no mission or quest by number | A stage that links nowhere, or a quest no stage reaches, leaves a hole in the one-page picture |
+| 1.12 | The Others menu (`OTHERS`) lists the sidebar's REIA screens under Others in `Layout.jsx`, in its order; each quest it names exists and is played on that screen, and every quest played on an Others screen is named | A screen added to the sidebar, or a quest added for one, that the Others menu leaves out |
 
 ## Layer 2 — Labels against the code (automated: `check-labels.mjs --all`)
 
@@ -44,6 +45,8 @@ For each of the side quests:
   Finish dialog with the right step / log-in counts and XP; "Mark done and go to the next" saves
   `q<n>` and opens the next quest; the last quest returns to the board.
 - Board: one card per quest under each zone heading, done counts, Play and Open buttons; chip nav 1–N.
+- The Others menu: one row per sidebar screen, in order, with a Play chip per quest (marked done once
+  played); each row's first chip opens that quest and starts play at its first step.
 - Routing: `#q0`, `#q<N+1>`, `#qx` fall back safely; back/forward; keyboard (→ ← Esc Enter).
 - Players page: each role's quest chips open the right quest. Quiz pool includes quest steps.
 - Phone width (375px): lanes stack, no horizontal page scroll. Dark theme. No console errors.

@@ -26,8 +26,8 @@ export async function run({ src } = {}) {
   if (!src.includes('data: roles')) src = await (await fetch(`${$('script[src]')?.src || 'index.html'}?${Date.now()}`, { cache: 'no-store' })).text();
   const cut = (a, b) => { const i = src.indexOf(a); return src.slice(i, src.indexOf(b, i)); };
   // eslint-disable-next-line no-new-func
-  const D = new Function(`${cut('/* ───────────────────────── data: roles', '/* ───────────────────────── helpers')}\nreturn { R, MISSIONS, QUESTS, QZONES, CYCLE };`)();
-  const { R, MISSIONS, QUESTS, QZONES, CYCLE } = D;
+  const D = new Function(`${cut('/* ───────────────────────── data: roles', '/* ───────────────────────── helpers')}\nreturn { R, MISSIONS, QUESTS, QZONES, CYCLE, OTHERS };`)();
+  const { R, MISSIONS, QUESTS, QZONES, CYCLE, OTHERS } = D;
   // The portal copy links each step to its screen and to the feedback form; the offline one does not.
   const PORTAL = /\/reia-playbook\//.test(location.pathname);
   const plain = (s) => String(s).replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\{([A-Z][A-Z0-9_]*)\}/g, (m, t) => t.replace(/_/g, ' '));
@@ -152,13 +152,28 @@ export async function run({ src } = {}) {
   // The board
   await route('#quests');
   ok($$('.sqc').length === QUESTS.length, `board: ${$$('.sqc').length} cards`);
-  ok(JSON.stringify($$('h2.side-h').map(txt)) === JSON.stringify(QZONES.map(([, l]) => l)), `board: zone headings ${$$('h2.side-h').map(txt)}`);
+  ok(JSON.stringify($$('h2.side-h').map(txt)) === JSON.stringify(['The Others menu', ...QZONES.map(([, l]) => l)]), `board: headings ${$$('h2.side-h').map(txt)}`);
   ok($$('.sqc.done').length === QUESTS.length, `board: ${$$('.sqc.done').length} marked done`);
   ok(txt($('.lede')).includes(`${QUESTS.length} of ${QUESTS.length} done`), 'board: done count');
   QZONES.forEach(([z], k) => {
     const grid = $$('.sq')[k]; const want = QUESTS.filter((q) => q.zone === z).map((q) => q.name);
     ok(JSON.stringify($$('h3', grid).map(txt)) === JSON.stringify(want), `board: zone ${z} lists ${$$('h3', grid).map(txt)}`);
   });
+  // The Others menu: the sidebar's screens in order, each with its quests' Play chips
+  ok(JSON.stringify($$('.om-row b').map(txt)) === JSON.stringify(OTHERS.map(([l]) => l)), `Others menu: rows ${$$('.om-row b').map(txt)}`);
+  OTHERS.forEach(([label, ids], k) => {
+    const chips = $$('.chip', $$('.om-row')[k]);
+    ok(JSON.stringify(chips.map((c) => c.dataset.play)) === JSON.stringify(ids), `Others menu ${label}: plays ${chips.map((c) => c.dataset.play)}`);
+    chips.forEach((c, j) => ok(txt(c) === QUESTS[Number(ids[j].slice(1)) - 1].short && c.classList.contains('done'), `Others menu ${label}: chip “${txt(c)}”`));
+  });
+  for (const [label, ids] of OTHERS) {
+    await route('#quests'); await click(`.om [data-play="${ids[0]}"]`); await sleep(60);
+    const q = QUESTS[Number(ids[0].slice(1)) - 1];
+    ok(location.hash === `#${ids[0]}` && txt($('h1')) === q.name && document.body.classList.contains('playing') && txt($('.hud-txt b')) === plain(q.steps[0].t),
+      `Others menu ${label}: Play opened ${location.hash} “${txt($('h1'))}” at “${txt($('.hud-txt b'))}”`);
+    await key('Escape');
+  }
+  await route('#quests');
   // Toggle one back to not done from its own page
   await route('#q3'); await click('[data-done="q3"]');
   ok(stored().done?.q3 === false && txt($('[data-done="q3"]')).includes('Mark as done'), 'Mark as done does not toggle back');

@@ -28,6 +28,7 @@ const CITES = [
   [/Finance then books the month \(Side quest (\d+)\)/, 'q', 'Finance posting (SAP)'],
   [/Holds: Side quest (\d+)/, 'q', 'Compliance & holds'],
   [/held as the buyer’s advance \(Side quest (\d+)\)/, 'q', 'Advances'],
+  [/The LC is drawn first \(Side quest (\d+)\)/, 'q', 'Invoke security'],
   [/use an additional charge instead \(Side quest (\d+)\)/, 'q', 'Additional charge'],
   [/can also be limited to some projects \(Side quest (\d+)\)/, 'q', 'Additional charge'],
   [/from Counterparty Ledgers & TDS \(Side quest (\d+)\)/, 'q', 'Ledgers & TDS'],
@@ -54,7 +55,7 @@ export function load(src = fs.readFileSync(path.join(HERE, 'index.html'), 'utf8'
   const kind = cut('const KIND = {};', 'const st =');
   const qx = cut('const QX = ', 'const POOL');
   // eslint-disable-next-line no-new-func
-  return new Function(`${data}\n${kind}\n${qx}\nreturn { R, ROLE_ORDER, MISSIONS, MX, LIFE, QZONES, QUESTS, CPHASES, CYCLE, KIND, QX };`)();
+  return new Function(`${data}\n${kind}\n${qx}\nreturn { R, ROLE_ORDER, MISSIONS, MX, LIFE, QZONES, QUESTS, OTHERS, CPHASES, CYCLE, KIND, QX };`)();
 }
 
 export function run({ src, log = console.log } = {}) {
@@ -195,6 +196,22 @@ export function run({ src, log = console.log } = {}) {
   });
   // Every mission and side quest is reached from the cycle.
   ids.forEach((id) => { if (!D.CYCLE.some((c) => c.see.includes(id))) fail(id, 'no stage of the full cycle links to it'); });
+
+  // 1.12 the Others menu: the sidebar's REIA screens under Others, in its order,
+  // each with the quests on that screen and no quest left out.
+  const layout = fs.readFileSync(path.join(HERE, '../../frontend/src/components/Layout.jsx'), 'utf8');
+  const og = layout.slice(layout.indexOf("group: 'Others'"));
+  const menu = [...og.slice(0, og.indexOf('section:')).matchAll(/to: '\/reia\/[^']+', label: '([^']+)'/g)].map((x) => x[1]);
+  if (!menu.length) fail('Others menu', 'cannot read the Others group in Layout.jsx');
+  if (D.OTHERS.map(([l]) => l).join(' | ') !== menu.join(' | ')) fail('Others menu', `lists ${D.OTHERS.map(([l]) => l).join(', ')}; the sidebar has ${menu.join(', ')}`);
+  D.OTHERS.forEach(([label, qs]) => {
+    qs.forEach((id) => {
+      const q = QUESTS[Number(id.slice(1)) - 1];
+      if (!/^q\d+$/.test(id) || !q) fail(`Others menu ${label}`, `${id} is no side quest`);
+      else if (!q.screen.includes(`Others › ${label}`)) fail(`Others menu ${label}`, `${id} “${q.short}” is played on ${q.screen}`);
+    });
+    QUESTS.forEach((q, i) => { if (q.screen.includes(`Others › ${label}`) && !qs.includes('q' + (i + 1))) fail(`Others menu ${label}`, `leaves out q${i + 1} “${q.short}”, played on that screen`); });
+  });
 
   const steps = QUESTS.reduce((a, q) => a + q.steps.length, 0);
   log(`Checked ${QUESTS.length} side quests, ${steps} steps; the full cycle, ${D.CYCLE.length} stages, ${D.CYCLE.reduce((a, c) => a + c.edges.length, 0)} exceptions.`);
