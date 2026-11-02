@@ -30,6 +30,17 @@ function fyRange(offset) {
   const start = (now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1) - offset;
   return { label: `FY ${start}-${String((start + 1) % 100).padStart(2, '0')}`, from: `${start}-04-01`, to: `${start + 1}-03-31` };
 }
+// A Form 16A follows the quarter's TDS return, so only an ended quarter is offered.
+const QUARTER_END = { Q1: [0, '06-30'], Q2: [0, '09-30'], Q3: [0, '12-31'], Q4: [1, '03-31'] };
+const quarterEnded = (fy, q) => `${Number(fy.slice(0, 4)) + QUARTER_END[q][0]}-${QUARTER_END[q][1]}` < new Date().toISOString().slice(0, 10);
+const FILING_FYS = [0, 1, 2, 3].map((i) => fyRange(i).label.slice(3));
+function lastEndedQuarter() {
+  for (const fy of FILING_FYS) {
+    const q = ['Q4', 'Q3', 'Q2', 'Q1'].find((x) => quarterEnded(fy, x));
+    if (q) return { financial_year: fy, quarter: q };
+  }
+  return { financial_year: FILING_FYS[1], quarter: 'Q4' };
+}
 const PERIODS = [
   { key: 'ALL', label: 'All time', range: () => ({ from: '', to: '' }) },
   { key: 'FY0', label: `This year (${fyRange(0).label})`, range: () => fyRange(0) },
@@ -100,6 +111,8 @@ function Certificates({ entityId }) {
 
   async function file(e) {
     e.preventDefault();
+    if (!(Number(form.tds_amount) >= 0) || form.tds_amount === '') { setError('Enter the TDS shown on the certificate (₹0 or more).'); return; }
+    if (!form.file) { setError('Attach the certificate (PDF).'); return; }
     setBusy(true);
     try {
       const fd = new FormData();
@@ -120,7 +133,6 @@ function Certificates({ entityId }) {
   }
 
   if (!data) return <Card><div style={{ padding: 20 }}>{error || 'Loading…'}</div></Card>;
-  const thisFy = fyRange(0).label.slice(3);
 
   return (
     <Card title="TDS certificates (Form 16A)">
@@ -134,24 +146,28 @@ function Certificates({ entityId }) {
       </p>
       {data.can_file && !form && (
         <div style={{ marginBottom: 12 }}>
-          <button className="btn btn-primary btn-sm" onClick={() => setForm({ financial_year: thisFy, quarter: 'Q1', certificate_no: '', tds_amount: '', file: null })}>+ File a certificate</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setForm({ ...lastEndedQuarter(), certificate_no: '', tds_amount: '', file: null })}>+ File a certificate</button>
         </div>
       )}
       {form && (
-        <form className="cw-form" onSubmit={file}>
+        <form className="cw-form" onSubmit={file} noValidate>
           <div className="form-grid">
-            <Field label="Financial year" required><input required value={form.financial_year} onChange={(e) => setForm({ ...form, financial_year: e.target.value })} placeholder="2026-27" /></Field>
+            <Field label="Financial year" required>
+              <select value={form.financial_year} onChange={(e) => { const fy = e.target.value; setForm({ ...form, financial_year: fy, quarter: quarterEnded(fy, form.quarter) ? form.quarter : ['Q4', 'Q3', 'Q2', 'Q1'].find((q) => quarterEnded(fy, q)) || form.quarter }); }}>
+                {FILING_FYS.filter((fy) => quarterEnded(fy, 'Q1')).map((fy) => <option key={fy} value={fy}>{fy}</option>)}
+              </select>
+            </Field>
             <Field label="Quarter" required>
               <select value={form.quarter} onChange={(e) => setForm({ ...form, quarter: e.target.value })}>
-                <option value="Q1">Q1 — Apr–Jun</option><option value="Q2">Q2 — Jul–Sep</option><option value="Q3">Q3 — Oct–Dec</option><option value="Q4">Q4 — Jan–Mar</option>
+                {[['Q1', 'Apr–Jun'], ['Q2', 'Jul–Sep'], ['Q3', 'Oct–Dec'], ['Q4', 'Jan–Mar']].filter(([q]) => quarterEnded(form.financial_year, q)).map(([q, m]) => <option key={q} value={q}>{q} — {m}</option>)}
               </select>
             </Field>
             <Field label="Certificate number"><input value={form.certificate_no} onChange={(e) => setForm({ ...form, certificate_no: e.target.value })} /></Field>
-            <Field label="TDS on the certificate (₹)" required><input required type="number" min="0" step="any" value={form.tds_amount} onChange={(e) => setForm({ ...form, tds_amount: e.target.value })} /></Field>
+            <Field label="TDS on the certificate (₹)" required><input type="number" min="0" step="any" value={form.tds_amount} onChange={(e) => setForm({ ...form, tds_amount: e.target.value })} /></Field>
           </div>
-          <Field label="Certificate (PDF)" required><input required type="file" accept=".pdf,application/pdf" onChange={(e) => setForm({ ...form, file: e.target.files[0] })} /></Field>
+          <Field label="Certificate (PDF)" required><input type="file" accept=".pdf,application/pdf" onChange={(e) => setForm({ ...form, file: e.target.files[0] })} /></Field>
           <p className="inline-note">Filing again for the same quarter replaces the earlier certificate.</p>
-          <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Cancel</button><button type="submit" className="btn btn-primary" disabled={busy || !form.file}>{busy ? 'Filing…' : 'File certificate'}</button></div>
+          <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Cancel</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Filing…' : 'File certificate'}</button></div>
         </form>
       )}
       <div className="table-wrap">

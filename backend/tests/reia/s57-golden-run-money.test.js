@@ -18,7 +18,7 @@ let fin, sellerCo, ppa, psa;
 const pay = (inv, amount, over = {}) => db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, deduction) VALUES (?, ?, ?, '2026-10-17', ?, ?)`)
   .run(newId('PAY'), inv.id, amount, over.mode || 'RTGS', over.deduction || 0);
 const release = (inv, amount) => request(app).post(`/api/invoices/${inv.id}/release-to-generator`).set(auth(fin))
-  .send({ amount, source: 'DISCOM_REALIZATION', reference: 'S57' });
+  .send({ amount, source: 'DISCOM_REALIZATION', reference: 'UTR-S57' });
 
 beforeEach(() => {
   resetReia();

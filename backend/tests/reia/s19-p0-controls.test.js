@@ -121,7 +121,7 @@ describe('S19 Money does not move to an unverified account', () => {
   });
 
   const release = () => request(app).post(`/api/invoices/${inv.id}/release-to-generator`).set(auth(tokenFor('REIA_CHECKER')))
-    .send({ amount: 50000, source: 'OWN_FUND', reference: 'T' });
+    .send({ amount: 50000, source: 'OWN_FUND', reference: 'UTR-T' });
 
   it('releases to a verified account', async () => {
     const r = await release();

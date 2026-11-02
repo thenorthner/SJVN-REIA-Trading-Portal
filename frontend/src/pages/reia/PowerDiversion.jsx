@@ -51,10 +51,13 @@ export default function PowerDiversion() {
     e.preventDefault();
     if (busy.current) return;
     const thisMonth = new Date().toISOString().slice(0, 7);
-    const problem = !(Number(form.quantum_mwh) > 0) ? 'Quantum must be more than zero.'
+    const problem = !form.contract_id ? 'Choose the PSA of the buyer the power was diverted from.'
+      : !form.period_month ? 'Choose the month the power was diverted.'
+      : !(Number(form.quantum_mwh) > 0) ? 'Quantum must be more than zero.'
       : !(Number(form.sale_rate_per_mwh) > 0) ? 'The sale rate must be a positive ₹/MWh figure.'
         : Number(form.expenses) < 0 ? 'Expenses cannot be negative.'
-          : form.period_month > thisMonth ? `${form.period_month} has not started.` : '';
+          : form.period_month > thisMonth ? `${form.period_month} has not started.`
+            : form.reason === 'NON_REQUISITION' && form.notes.trim().length < 15 ? 'Say what shows the buyer did not requisition the power (its schedule, the SLDC record) — at least 15 characters.' : '';
     if (problem) { setError(problem); return; }
     setError('');
     busy.current = true;
@@ -182,7 +185,7 @@ export default function PowerDiversion() {
       />
       <Modal open={show} onClose={() => setShow(false)} title="Record Power Diversion" width={560}>
         <AlertPopup open={!!error} title="Not recorded" message={error} onClose={() => setError('')} />
-        <form onSubmit={save}>
+        <form onSubmit={save} noValidate>
           <Field label="PSA Contract (defaulting buyer)">
             <select required value={form.contract_id} onChange={(e) => setForm({ ...form, contract_id: e.target.value })}>
               <option value="">Select PSA...</option>

@@ -212,13 +212,15 @@ export default function ContractCompliance({ embedded = false }) {
                             <div className="table-wrap">
                               <table className="data-table">
                                 <tbody>
-                                  {c.checks.map((k) => (
+                                  {c.checks.map((k, i) => (
                                     <tr key={`${k.code}-${k.label}`}>
                                       <th scope="row" style={{ width: '28%', textAlign: 'left' }}>{k.label}</th>
                                       <td style={{ width: 140 }}><Badge type={STATE_TONE[k.state]}>{STATE_LABEL[k.state]}</Badge></td>
                                       <td>
                                         {k.detail}
-                                        {canAsk && ['BREACH', 'DUE'].includes(k.state) && ['SECURITY', 'APPROVALS', 'TENURE'].includes(k.code) && (
+                                        {canAsk && ['BREACH', 'DUE'].includes(k.state) && ['SECURITY', 'APPROVALS', 'TENURE'].includes(k.code)
+                                          // One request covers every failing check of a code, so it is offered once.
+                                          && c.checks.findIndex((o) => o.code === k.code && ['BREACH', 'DUE'].includes(o.state)) === i && (
                                           // CC2: one click to ask the counterparty on the Document Desk.
                                           <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); act(() => api.contracts.complianceRequest(c.contract_id, k.code), 'Request sent to the counterparty'); }}>Ask the counterparty</button>
                                         )}
@@ -237,9 +239,17 @@ export default function ContractCompliance({ embedded = false }) {
                                         {canLift && c.hold?.breaches?.length > 0 && !c.hold?.override && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setHoldForm({ contract: c, mode: 'OVERRIDE', reason: '', valid_until: '' })}>Lift for a stated time</button>}
                                       </div>
                                       {holdForm?.contract?.contract_id === c.contract_id && (
-                                        <form className="cw-form" onClick={(e) => e.stopPropagation()} onSubmit={(e) => {
+                                        <form className="cw-form" noValidate onClick={(e) => e.stopPropagation()} onSubmit={(e) => {
                                           e.preventDefault();
                                           const f = holdForm;
+                                          const problems = [];
+                                          if (f.reason.trim().length < 15) problems.push('Give the reason in a sentence (at least 15 characters).');
+                                          if (f.mode === 'OVERRIDE') {
+                                            const from = new Date().toISOString().slice(0, 10);
+                                            const to = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+                                            if (!f.valid_until || f.valid_until < from || f.valid_until > to) problems.push(`Give the date the hold is lifted until — ${from} to ${to}.`);
+                                          }
+                                          if (problems.length) { setNotice2({ title: 'Check the form', message: problems.join(' ') }); return; }
                                           act(() => (f.mode === 'OVERRIDE' ? api.contracts.overrideHold(c.contract_id, { reason: f.reason, valid_until: f.valid_until }) : api.contracts.setHold(c.contract_id, f.mode === 'HOLD', f.reason)),
                                             f.mode === 'HOLD' ? 'Put on hold' : f.mode === 'RELEASE' ? 'Hold released' : 'Hold lifted');
                                         }}>

@@ -485,6 +485,12 @@ router.post('/tds-certificates', (req, res) => send(res, () => {
   if (!/^\d{4}-\d{2}$/.test(fy) || Number(fy.slice(5)) !== (Number(fy.slice(0, 4)) + 1) % 100) throw fail(400, 'financial_year must read like 2026-27');
   const quarter = String(req.body.quarter || '').toUpperCase();
   if (!QUARTERS[quarter]) throw fail(400, 'quarter must be Q1, Q2, Q3 or Q4');
+  // A Form 16A is issued after the quarter's TDS return, so it exists only for
+  // a quarter that has ended; one for Oct–Dec was taken in November.
+  const startYear = Number(fy.slice(0, 4));
+  const quarterEnd = { Q1: `${startYear}-06-30`, Q2: `${startYear}-09-30`, Q3: `${startYear}-12-31`, Q4: `${startYear + 1}-03-31` }[quarter];
+  const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  if (quarterEnd >= todayIst) throw fail(400, `${quarter} of FY ${fy} has not ended yet (it ends ${quarterEnd}); its Form 16A is issued after the quarter.`);
   const amount = Number(req.body.tds_amount);
   if (!(amount >= 0)) throw fail(400, 'tds_amount must be a number');
   const v = db.prepare(`

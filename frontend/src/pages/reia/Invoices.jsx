@@ -514,6 +514,8 @@ export default function Invoices() {
 
   async function handleRelease(e) {
     e.preventDefault();
+    if (!releaseForm.payment_date) { setReleaseError('Give the payment date.'); return; }
+    if (String(releaseForm.reference || '').trim().length < 4) { setReleaseError("Give the bank's UTR / reference for the release (at least 4 characters)."); return; }
     const ok = await onInvoice('release', () => api.invoices.releaseToGenerator(selected.id, {
       ...releaseForm, amount: Number(releaseForm.amount),
       tds_amount: Number(releaseForm.tds_amount) || 0, other_deduction: Number(releaseForm.other_deduction) || 0,
@@ -1418,7 +1420,7 @@ export default function Invoices() {
                     </div>
                   </div>
                 )}
-                <form onSubmit={handleRelease}>
+                <form onSubmit={handleRelease} noValidate>
                   <div className="form-grid">
                     <Field label="Net amount paid (₹)">
                       <input required type="number" value={releaseForm.amount} onChange={(e) => setReleaseForm({ ...releaseForm, amount: e.target.value })} />
@@ -1433,7 +1435,7 @@ export default function Invoices() {
                     <Field label="Payment Date">
                       <input required type="date" value={releaseForm.payment_date} onChange={(e) => setReleaseForm({ ...releaseForm, payment_date: e.target.value })} />
                     </Field>
-                    <Field label="Reference">
+                    <Field label="UTR / reference" required>
                       <input value={releaseForm.reference} onChange={(e) => setReleaseForm({ ...releaseForm, reference: e.target.value })} />
                     </Field>
                     {/* What is held back settles the bill too; it is recorded as what it is, and shows on the seller's payment advice. */}

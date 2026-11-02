@@ -53,6 +53,17 @@ export default function VerificationQueue() {
     }
     setPicked([]); setReload((n) => n + 1);
   }
+  // Sending back rejects the developer's bill, so the checker sees what the
+  // developer will be told and confirms it first.
+  function askSendBack(r) {
+    setPopup({
+      tone: 'warning',
+      title: `Send ${r.invoice_no} back to the developer?`,
+      message: 'The bill is rejected and the developer is told to correct:',
+      items: r.failed_checks.map((f) => (typeof f === 'string' ? f : f.label || f.key)),
+      actions: <button type="button" className="btn btn-danger" onClick={() => { setPopup(null); sendBack(r); }}>Send back</button>,
+    });
+  }
   async function sendBack(r) {
     try {
       const out = await api.invoices.sendBack(r.invoice_id);
@@ -296,7 +307,7 @@ export default function VerificationQueue() {
                                 <Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(r.invoice_id)}`}>Open the bill to verify it</Link>
                                 {canSendBack && OPEN_FOR_DESK.includes(r.status) && (r.failed_checks.length > 0) && (
                                   // V1: back to the developer with exactly what failed.
-                                  <button type="button" className="btn btn-sm btn-danger" style={{ marginLeft: 8 }} onClick={() => sendBack(r)}>Send back to the developer</button>
+                                  <button type="button" className="btn btn-sm btn-danger" style={{ marginLeft: 8 }} onClick={() => askSendBack(r)}>Send back to the developer</button>
                                 )}
                               </div>
                             </div>
@@ -317,7 +328,7 @@ export default function VerificationQueue() {
       )}
       </>
       )}
-      <AlertPopup open={!!popup} tone={popup?.tone || 'error'} title={popup?.title} message={popup?.message} items={popup?.items} onClose={() => setPopup(null)} />
+      <AlertPopup open={!!popup} tone={popup?.tone || 'error'} title={popup?.title} message={popup?.message} items={popup?.items} actions={popup?.actions} onClose={() => setPopup(null)} />
     </div>
   );
 }

@@ -369,7 +369,7 @@ describe('E2E: paying the generator', () => {
     db.prepare('UPDATE entities SET is_penny_drop_verified = 0 WHERE id = ?').run(seller.id);
 
     const r = await post(`/api/invoices/${inv.id}/release-to-generator`, finance,
-      { amount: 10000, source: 'OWN_FUND', payment_date: '2026-05-15' });
+      { amount: 10000, source: 'OWN_FUND', payment_date: '2026-05-15', reference: 'UTR-E2E' });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/not been verified/i);
     expect(db.prepare('SELECT COUNT(*) c FROM payments WHERE invoice_id = ?').get(inv.id).c).toBe(0);
@@ -381,7 +381,7 @@ describe('E2E: paying the generator', () => {
       .run(JSON.stringify({ account_no: '9999', ifsc: 'HDFC0000001' }), seller.id);
 
     const r = await post(`/api/invoices/${inv.id}/release-to-generator`, finance,
-      { amount: 10000, source: 'OWN_FUND', payment_date: '2026-05-15' });
+      { amount: 10000, source: 'OWN_FUND', payment_date: '2026-05-15', reference: 'UTR-E2E' });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/awaiting verification/i);
   });
@@ -389,7 +389,7 @@ describe('E2E: paying the generator', () => {
   it('will not pay out from DISCOM realization that has not been realized', async () => {
     const inv = await approvedDeveloperBill();
     const r = await post(`/api/invoices/${inv.id}/release-to-generator`, finance,
-      { amount: 10000, source: 'DISCOM_REALIZATION', payment_date: '2026-05-15' });
+      { amount: 10000, source: 'DISCOM_REALIZATION', payment_date: '2026-05-15', reference: 'UTR-E2E' });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/nothing realized|realized from the DISCOM/i);
   });
@@ -410,7 +410,7 @@ describe('E2E: paying the generator', () => {
   it('refuses a source it does not recognise', async () => {
     const inv = await approvedDeveloperBill();
     const r = await post(`/api/invoices/${inv.id}/release-to-generator`, finance,
-      { amount: 1000, source: 'PETTY_CASH', payment_date: '2026-05-15' });
+      { amount: 1000, source: 'PETTY_CASH', payment_date: '2026-05-15', reference: 'UTR-E2E' });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/source must be one of/);
   });

@@ -162,6 +162,12 @@ describe('TDS certificates', () => {
     expect((await file(reia)).status).toBe(403);
     expect((await get(reia, `/tds-certificates?entity_id=${alpha.id}`)).body.can_file).toBe(false);
     expect((await file(finance, { financial_year: '2026-28' })).status).toBe(400);
+    // The quarter running today has no Form 16A yet: it is issued after the quarter.
+    const ist = new Date(Date.now() + 330 * 60000);
+    const m = ist.getUTCMonth() + 1, y = ist.getUTCFullYear(), s = m >= 4 ? y : y - 1;
+    const running = await file(finance, { financial_year: `${s}-${String(s + 1).slice(2)}`, quarter: m >= 4 ? `Q${Math.ceil((m - 3) / 3)}` : 'Q4' });
+    expect(running.status).toBe(400);
+    expect(running.body.error).toMatch(/has not ended yet/);
     expect((await file(finance, { version_id: 'VB' })).status).toBe(400);
     const ok = await file(finance, { certificate_no: 'ABCDEFG' });
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);

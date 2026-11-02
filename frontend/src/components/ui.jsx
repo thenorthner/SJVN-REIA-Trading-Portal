@@ -313,7 +313,8 @@ export function AlertPopup({ open, tone = 'error', title, message, items, action
   const icon = { error: '!', warning: '!', success: '✓', info: 'i' }[tone] || '!';
   const defaultLabel = actions
     ? 'Close'
-    : (items?.length > 0
+    // A list on a success popup is what was done, not something to fix.
+    : (items?.length > 0 && tone !== 'success'
         ? 'Review & Fix'
         : (tone === 'warning' || tone === 'info' ? 'Acknowledge' : (tone === 'success' ? 'OK' : 'Acknowledge')));
   const buttonText = okLabel || defaultLabel;

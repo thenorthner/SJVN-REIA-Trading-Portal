@@ -23,6 +23,15 @@ export default function ReleasePlanner() {
   async function release(e) {
     e.preventDefault();
     if (busy.current) return;
+    const amount = Number(form.amount);
+    const today = new Date().toISOString().slice(0, 10);
+    const problems = [
+      !(amount > 0) && 'Enter the amount to release.',
+      amount > form.row.releasable_now && `At most ${fmtCurrency(form.row.releasable_now)} can be released from what the buyers have paid.`,
+      (!form.date || form.date > today) && 'Give the payment date — today or earlier.',
+      String(form.reference || '').trim().length < 4 && "Give the bank's UTR / reference (at least 4 characters).",
+    ].filter(Boolean);
+    if (problems.length) { setPopup({ title: 'Check the release', message: problems.join(' ') }); return; }
     busy.current = true;
     try {
       await api.invoices.releaseToGenerator(form.row.invoice_id, { amount: Number(form.amount), source: 'DISCOM_REALIZATION', payment_date: form.date, reference: form.reference });
@@ -59,7 +68,7 @@ export default function ReleasePlanner() {
       </Card>
       {form && (
         <Card title={`Release on ${form.row.invoice_no}`}>
-          <form className="cw-form" onSubmit={release}>
+          <form className="cw-form" onSubmit={release} noValidate>
             <div className="form-grid">
               <Field label="Amount (₹)" required><input type="number" required min="1" step="0.01" max={form.row.releasable_now} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
               <Field label="Payment date" required><input type="date" required max={new Date().toISOString().slice(0, 10)} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>

@@ -186,6 +186,8 @@ describe('the buyer\'s ledger', () => {
     const inv = bill();
     const a = await tell(admin, inv);
     await post(finance, `/intimations/${a.body.id}/confirm`, {});
+    // A Form 16A follows the quarter; put the payment in one that has ended.
+    db.prepare('UPDATE payments SET payment_date = ? WHERE invoice_id = ?').run(day(-100), inv.id);
     db.prepare(`INSERT INTO documents (id, entity_id, document_type, category, title) VALUES ('D16', ?, 'FORM_16A', 'RECORD', 'Form 16A')`).run(discom.id);
     db.prepare(`INSERT INTO document_versions (id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type) VALUES ('V16B', 'D16', 1, '/nowhere', 'form16a.pdf', 10, 'application/pdf')`).run();
     const list = (await ledger(checker, '/tds-certificates')).body;

@@ -46,18 +46,18 @@ describe('S47 One month is owed to a developer once', () => {
   it('releases against the developer\'s invoice only, and never more than is left', async () => {
     const c = computedBill();
     const d = developerBill();
-    const onComputed = await post(`/api/invoices/${c.id}/release-to-generator`, { amount: 1000, source: 'OWN_FUND' });
+    const onComputed = await post(`/api/invoices/${c.id}/release-to-generator`, { amount: 1000, source: 'OWN_FUND', reference: 'UTR-S47' });
     expect(onComputed.status).toBe(400);
     expect(onComputed.body.error).toMatch(/developer's own invoice/);
-    const over = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 5000000, source: 'OWN_FUND' });
+    const over = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 5000000, source: 'OWN_FUND', reference: 'UTR-S47' });
     expect(over.status, 'an Own Fund release had no ceiling').toBe(400);
     // Paid today, inside the rebate window: the whole bill in cash as well as the
     // rebate it earns would settle more than the bill (22-Oct-2026).
-    const whole = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 1000000, source: 'OWN_FUND' });
+    const whole = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 1000000, source: 'OWN_FUND', reference: 'UTR-S47' });
     expect(whole.status).toBe(400);
     expect(whole.body.rebate_rate).toBeGreaterThan(0);
     expect(whole.body.error).toMatch(/early-payment rebate/);
-    expect((await post(`/api/invoices/${d.id}/release-to-generator`, { amount: whole.body.left, source: 'OWN_FUND' })).status).toBe(201);
+    expect((await post(`/api/invoices/${d.id}/release-to-generator`, { amount: whole.body.left, source: 'OWN_FUND', reference: 'UTR-S47' })).status).toBe(201);
     const after = db.prepare('SELECT status, rebate FROM invoices WHERE id = ?').get(d.id);
     expect(after.status).toBe('PAID');
     expect(Math.round(whole.body.left + after.rebate), 'cash and rebate settle the bill, no more').toBe(1000000);
@@ -67,7 +67,7 @@ describe('S47 One month is owed to a developer once', () => {
     const c = computedBill();
     db.prepare('INSERT INTO payments (id, invoice_id, amount, payment_date, mode) VALUES (?, ?, 400000, ?, ?)').run(newId('PAY'), c.id, day(-5), 'RELEASE:OWN_FUND');
     const d = developerBill();
-    const r = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 700000, source: 'OWN_FUND' });
+    const r = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 700000, source: 'OWN_FUND', reference: 'UTR-S47' });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/left .* after ₹4,00,000 already paid .*₹6,00,000 owed, less the .*% early-payment rebate/);
   });

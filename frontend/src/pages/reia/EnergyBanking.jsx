@@ -102,6 +102,7 @@ export default function EnergyBanking() {
     e.preventDefault();
     if (busy.current) return;
     if (!bankForm.cycle) { setError('Pick the month generated: its banking cycle is shown before you bank.'); return; }
+    if (!(Number(bankForm.banked_mwh) > 0)) { setError('Enter the energy to bank, in MWh (more than zero).'); return; }
     if (bankForm.entries_close_on && bankForm.entries_close_on < todayIso()) { setError(`The cycle ended on ${bankForm.cycle_ends_on} and took entries until ${bankForm.entries_close_on}; energy cannot be banked into a closed cycle.`); return; }
     setError('');
     busy.current = true;
@@ -131,6 +132,7 @@ export default function EnergyBanking() {
   async function doDraw(e) {
     e.preventDefault();
     if (busy.current) return;
+    if (!(Number(drawForm.draw_mwh) > 0)) { setError('Enter the energy to draw, in MWh (more than zero).'); return; }
     setError('');
     busy.current = true;
     try {
@@ -299,7 +301,7 @@ export default function EnergyBanking() {
       <Modal open={!!bankForm} onClose={() => setBankForm(null)} title="Bank Energy" width={560}>
         <AlertPopup open={!!error && !!bankForm} title="Not banked" message={error} onClose={() => setError('')} />
         {bankForm && (
-          <form onSubmit={doBank}>
+          <form onSubmit={doBank} noValidate>
             <div className="form-grid">
               <Field label="Month generated (locked)"><input required type="month" max={todayIso().slice(0, 7)} value={bankForm.period_month} onChange={(e) => setPeriod(e.target.value)} /></Field>
               <Field label="Energy Banked (MWh)"><input required type="number" step="0.001" min="0.001" value={bankForm.banked_mwh} onChange={(e) => setBankForm({ ...bankForm, banked_mwh: e.target.value })} /></Field>
@@ -338,7 +340,7 @@ export default function EnergyBanking() {
       <Modal open={!!drawForm} onClose={() => setDrawForm(null)} title="Draw Banked Energy" width={480}>
         <AlertPopup open={!!error && !!drawForm} title="Not drawn" message={error} onClose={() => setError('')} />
         {drawForm && (
-          <form onSubmit={doDraw}>
+          <form onSubmit={doDraw} noValidate>
             <Field label="Cycle"><input value={drawForm.cycle} readOnly /></Field>
             <Field label="Draw (MWh)">
               <input required type="number" step="0.001" min="0.001" value={drawForm.draw_mwh} onChange={(e) => setDrawForm({ ...drawForm, draw_mwh: e.target.value })} />

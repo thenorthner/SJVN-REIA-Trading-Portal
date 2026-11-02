@@ -2312,7 +2312,7 @@ router.put('/:id/revise', requireRole(...SELLER_ROLES), (req, res) => {
   if (next.other_adjustments && !remarks) return res.status(400).json({ error: 'Say what the other adjustment is for.' });
 
   const total = next.energy_charges + next.transmission_charges + (Number(inv.trading_margin) || 0) + next.taxes
-    - (Number(inv.rebate) || 0) + (Number(inv.lps) || 0) + (Number(inv.penalty) || 0) + next.other_adjustments;
+    - (Number(inv.rebate) || 0) + (Number(inv.lps) || 0) - (Number(inv.penalty) || 0) + next.other_adjustments;
   if (!(total > 0)) return res.status(400).json({ error: 'The bill totals zero or less.' });
 
   db.prepare(`
@@ -3474,6 +3474,16 @@ router.post('/:id/release-to-generator', requireRole('FINANCE_USER', ...ROLE_GRO
   }
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive release amount is required' });
+  // Money that has left: on a real day not after today, against the bank's
+  // reference. A release dated 31 December, or with no UTR, went through.
+  const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().split('T')[0];
+  const payDate = payment_date || todayIst;
+  const asDate = /^\d{4}-\d{2}-\d{2}$/.test(payDate) ? new Date(`${payDate}T00:00:00Z`) : null;
+  if (!asDate || Number.isNaN(asDate.getTime()) || asDate.toISOString().slice(0, 10) !== payDate || payDate > todayIst) {
+    return res.status(400).json({ error: `The payment date must be a real date, not after today (${todayIst}).` });
+  }
+  const utr = String(reference || '').trim();
+  if (utr.length < 4) return res.status(400).json({ error: "Give the bank's UTR / reference for the release (at least 4 characters)." });
 
   // `amount` is the cash that leaves. Tax deducted at source and anything else
   // held back settle the bill too, and are recorded as what they are.
@@ -3491,7 +3501,7 @@ router.post('/:id/release-to-generator', requireRole('FINANCE_USER', ...ROLE_GRO
   // discount: cash c settles c / (1 - rate). Paying the whole balance in cash
   // as well as allowing the rebate settled more than the bill (22-Oct-2026,
   // ₹3,26,700 over on a ₹2.18 Cr bill), so cash is capped at what settles it.
-  const rate = rebateRateOn(inv, payment_date ? new Date(payment_date) : new Date());
+  const rate = rebateRateOn(inv, new Date(payDate));
   const left = Math.floor(owed * (1 - rate) * 100) / 100;
   if (amt + held > left + 1) {
     return res.status(400).json({
@@ -3518,9 +3528,9 @@ router.post('/:id/release-to-generator', requireRole('FINANCE_USER', ...ROLE_GRO
 
   const updated = applyInvoicePayment(inv, {
     amount: amt,
-    payment_date: payment_date || new Date().toISOString().split('T')[0],
+    payment_date: payDate,
     mode: `RELEASE:${source}`,
-    reference: reference || null,
+    reference: utr,
     deduction: held,
     release_source: source,
     breakup: { tds_amount: tds || null, tds_section: tds > 0 ? String(getParam('seller_invoice_tds_section', '194Q')) : null, deduction_note: deductionNote || null },

@@ -74,9 +74,16 @@ const REQUEST_FOR = {
 export function requestFromCheck(contractId, code, { dueDate = null, user, req = null }) {
   const row = contractCompliance({ contractId }).contracts[0];
   if (!row) throw err(404, 'Contract not found');
-  const check = row.checks.find((k) => k.code === code);
-  if (!check) throw err(400, `${row.contract_no} has no ${code} check`);
-  if (!['BREACH', 'DUE'].includes(check.state)) throw err(400, `${check.label} on ${row.contract_no} is in order — there is nothing to ask for.`);
+  const all = row.checks.filter((k) => k.code === code);
+  if (!all.length) throw err(400, `${row.contract_no} has no ${code} check`);
+  // One code can carry two checks (approvals: the counterparty's standing and
+  // its statutory approvals); one request asks for everything either lacks.
+  const failing = all.filter((k) => ['BREACH', 'DUE'].includes(k.state));
+  if (!failing.length) throw err(400, `${all[0].label} on ${row.contract_no} is in order — there is nothing to ask for.`);
+  const check = {
+    label: failing.map((k) => k.label).join(' and '),
+    detail: failing.length > 1 ? failing.map((k) => `${k.label}: ${k.detail}`).join('; ') : failing[0].detail,
+  };
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
   const entityId = c.contract_type === 'PPA' ? c.seller_id : c.buyer_id;
   const make = REQUEST_FOR[code] || ((x) => ({ document_type: code, note: `${x.contract_no}: ${check.label} — ${check.detail}` }));

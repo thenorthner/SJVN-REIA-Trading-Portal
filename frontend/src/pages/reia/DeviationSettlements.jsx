@@ -163,6 +163,20 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
     e.preventDefault();
     if (lock.current) return;
     setError('');
+    // What the form needs, said in a popup rather than the browser's bubble.
+    const weekNo = Number(form.week_no);
+    const problem = !editId && (
+      !form.contract_id ? 'Choose the contract (the PPA the week is settled under).'
+        : !form.period_month ? 'Choose the month the week falls in.'
+          : !Number.isInteger(weekNo) || weekNo < 1 || weekNo > 53 ? 'Enter the week number — the financial-year week, 1 to 53.'
+            : '')
+      || (!editingOfficial && (
+        form.scheduled_mwh === '' || !(Number(form.scheduled_mwh) >= 0) ? 'Enter the scheduled energy in MWh (zero or more).'
+          : form.actual_mwh === '' || !(Number(form.actual_mwh) >= 0) ? 'Enter the actual energy in MWh (zero or more).'
+            : String(form.statement_ref || '').trim()
+              ? (form.statement_amount === '' || !Number.isFinite(Number(form.statement_amount)) ? 'Enter the net amount the statement prints for the week.' : '')
+              : form.deviation_rate === '' || !Number.isFinite(Number(form.deviation_rate)) ? 'Enter the deviation rate in ₹/MWh the estimate is priced at.' : ''));
+    if (problem) { setError(problem); return; }
     setBusy('save');
     try {
       // An official row keeps NRPC's figures; only its labels and notes are sent.
@@ -221,6 +235,10 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
     e.preventDefault();
     if (lock.current) return;
     setRaiseError('');
+    const problem = !raise.contract_id ? 'Choose the contract the week is raised on.'
+      : !raise.dsa_account_id ? 'Choose the NRPC statement (week).'
+        : !raise.entity_name ? 'Choose the section of the statement the week is raised from.' : '';
+    if (problem) { setRaiseError(problem); return; }
     setBusy('raise');
     try {
       const made = await api.deviation.fromDsa({ ...raise, notes: raise.notes.trim() || undefined });
@@ -284,6 +302,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
     e.preventDefault();
     if (lock.current) return;
     setDispatchError('');
+    if (!dispatchForm.dispatch_date) { setDispatchError('Choose the dispatch date.'); return; }
     setBusy('dispatch');
     try {
       // Raised straight from CALCULATED: this modal is the review step, showing
@@ -497,7 +516,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
         width={620}
       >
         {!uploadResult ? (
-          <form onSubmit={submitUpload}>
+          <form onSubmit={submitUpload} noValidate>
             <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 0 }}>
               NRPC publishes one statement a week covering every entity in the Northern Region.
               Upload it whole — every entity and every day is imported. SJVN&apos;s stations are
@@ -580,7 +599,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       </Modal>
 
       <Modal open={showRaise} onClose={() => setShowRaise(false)} title="Raise a week from the NRPC statement" width={640}>
-        <form onSubmit={submitRaise}>
+        <form onSubmit={submitRaise} noValidate>
           <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-muted)', marginTop: 0 }}>
             Pick the statement and the station&apos;s section in it. The week is recorded at the figure
             NRPC published — nothing is computed here — and nothing is billed until you generate the
@@ -650,7 +669,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       </Modal>
 
       <Modal open={show} onClose={() => setShow(false)} title={editId ? 'Edit Deviation Week' : 'Add Deviation Week'} width={600}>
-        <form onSubmit={save}>
+        <form onSubmit={save} noValidate>
           
           <h4 style={{ fontSize: 15.5, color: 'var(--primary)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>1. Station & Time Details</h4>
           <Field label="Contract">
@@ -670,8 +689,8 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             </select>
           </Field>
           <div className="form-grid">
-            <Field label="Plant Code"><input value={form.plant_code} placeholder="NJHPS=001 / RHPS=002" onChange={(e) => setForm({ ...form, plant_code: e.target.value })} /></Field>
-            <Field label="Plant Name"><input value={form.plant_name} placeholder="e.g. NATHPA JHAKRI" onChange={(e) => setForm({ ...form, plant_name: e.target.value })} /></Field>
+            <Field label="Plant Code"><input value={form.plant_code} placeholder={vertical === 'REIA' ? 'as the NRPC statement codes it' : 'NJHPS=001 / RHPS=002'} onChange={(e) => setForm({ ...form, plant_code: e.target.value })} /></Field>
+            <Field label="Plant Name"><input value={form.plant_name} placeholder={vertical === 'REIA' ? 'as the NRPC statement names it' : 'e.g. NATHPA JHAKRI'} onChange={(e) => setForm({ ...form, plant_name: e.target.value })} /></Field>
           </div>
           <div className="form-grid">
             <Field label="Period (Month)"><input required type="month" disabled={!!editId} value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} /></Field>
@@ -748,7 +767,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
 
       <Modal open={!!dispatchRow} onClose={() => { setDispatchRow(null); setDispatchError(''); }} title="Generate supplementary bill" width={460}>
         {dispatchRow && (
-          <form onSubmit={doDispatch}>
+          <form onSubmit={doDispatch} noValidate>
             <p className="inline-note">{dispatchRow.dsm_no} · Net <SignedAmount v={dispatchRow.deviation_amount} /></p>
             {dispatchRow.dsa_statement && (
               <p style={{ fontSize: 15, color: 'var(--text-light)', margin: '0 0 10px', lineHeight: 1.6 }}>
@@ -764,7 +783,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
               Once raised, the row is frozen.
             </p>
             <Field label="Bill / Invoice No. (optional)">
-              <input value={dispatchForm.invoice_no} placeholder="auto-generated if blank (DSM-PPA / DSM-PSA)" onChange={(e) => setDispatchForm({ ...dispatchForm, invoice_no: e.target.value })} />
+              <input value={dispatchForm.invoice_no} placeholder="auto-generated if blank (DSM-POOL)" onChange={(e) => setDispatchForm({ ...dispatchForm, invoice_no: e.target.value })} />
             </Field>
             <Field label="Dispatch Date">
               <input type="date" required value={dispatchForm.dispatch_date} onChange={(e) => setDispatchForm({ ...dispatchForm, dispatch_date: e.target.value })} />

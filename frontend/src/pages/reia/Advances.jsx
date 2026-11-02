@@ -41,6 +41,15 @@ export default function Advances() {
   async function act(e) {
     e.preventDefault();
     if (busy.current) return;
+    const amount = f.amount === undefined || f.amount === '' ? null : Number(f.amount);
+    const problems = [
+      mode === 'apply' && !f.invoice_id && 'Choose the bill to apply the advance to.',
+      amount !== null && !(amount > 0) && 'The amount must be more than zero, or left blank.',
+      amount !== null && amount > open.balance && `At most ${fmtCurrency(open.balance)} is left on ${open.receipt_no}.`,
+      mode === 'refund' && String(f.reference || '').trim().length < 4 && 'Enter the UTR of the refund (at least 4 characters).',
+      mode === 'refund' && !String(f.note || '').trim() && 'Say why the advance is refunded rather than applied.',
+    ].filter(Boolean);
+    if (problems.length) { setPopup({ title: 'Check the form', message: problems.join(' ') }); return; }
     busy.current = true;
     try {
       if (mode === 'apply') {
@@ -99,7 +108,7 @@ export default function Advances() {
               </div>
             )}
             {mode && (
-              <form className="cw-form" onSubmit={act}>
+              <form className="cw-form" onSubmit={act} noValidate>
                 {mode === 'apply' ? (
                   <div className="form-grid">
                     <Field label="Bill" required>
