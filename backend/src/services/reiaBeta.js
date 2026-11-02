@@ -122,6 +122,11 @@ export function scrub(body, h) {
   return body;
 }
 
+/** Ids of the stations, their contracts and the other desks' users, for a query to leave out. */
+export function betaHiddenIds() {
+  return REIA_BETA ? [...hiddenSets().ids] : [];
+}
+
 /** Rows sent some other way than res.json (a CSV export), as the beta shows them. */
 export function betaRows(rows) {
   return REIA_BETA ? scrub(rows, hiddenSets()) : rows;

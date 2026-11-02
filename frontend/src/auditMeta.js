@@ -51,7 +51,57 @@ export const ACTION_META = {
   DISTRIBUTE_MIS: { label: 'MIS pack sent', tone: 'blue', icon: '✉' },
   CREATE_PORTFOLIO_ID: { label: 'Portfolio mapped', tone: 'blue', icon: '＋' },
   UPDATE_PORTFOLIO_ID: { label: 'Portfolio changed', tone: 'amber', icon: '' },
+  SESSION_TIMEOUT: { label: 'Session timed out', tone: 'gray', icon: '◷' },
+  PASSWORD_CHANGED: { label: 'Password changed', tone: 'amber', icon: '' },
+  CONCURRENT_LOGIN_ALERT: { label: 'Signed in from two places', tone: 'red', icon: '!' },
+  STATUTORY_DECLARATION: { label: 'Declaration accepted', tone: 'gray', icon: '' },
+  DATA_SUMMARY_VIEWED: { label: 'Viewed data summary', tone: 'gray', icon: '◦' },
+  DOCUMENT_UPLOADED: { label: 'Uploaded document', tone: 'blue', icon: '⇪' },
+  DOCUMENT_OPENED: { label: 'Opened document', tone: 'gray', icon: '◦' },
+  REPORT_EXPORTED: { label: 'Report exported', tone: 'amber', icon: '⇩' },
+  STATEMENT_DOWNLOADED: { label: 'Statement downloaded', tone: 'amber', icon: '⇩' },
+  REIA_FI_POSTING_PREPARED: { label: 'FI posting prepared', tone: 'blue', icon: '₹' },
+  REIA_FI_SAP_PUSH: { label: 'Pushed to SAP', tone: 'blue', icon: '₹' },
+  RELEASE_TO_GENERATOR: { label: 'Released to generator', tone: 'green', icon: '₹' },
 };
+
+/**
+ * Kinds of activity, as the API's `activity` filter and each row's `activity`
+ * name them (routes/auditLogs.js sorts every action code into one). In the
+ * order the filter shows them.
+ */
+export const AUDIT_ACTIVITIES = [
+  { key: 'signin', label: 'Sign-ins & sessions', tone: 'gray', hint: 'Signing in and out, timeouts, password changes' },
+  { key: 'changes', label: 'Record changes', tone: 'amber', hint: 'Records created, edited, cancelled or deleted' },
+  { key: 'approvals', label: 'Approvals & checks', tone: 'green', hint: 'Submitted, verified, approved, rejected, sent back' },
+  { key: 'billing', label: 'Bills & invoices', tone: 'blue', hint: 'Bills generated, issued and dispatched; notes and charges' },
+  { key: 'money', label: 'Payments & finance', tone: 'green', hint: 'Payments, FI postings, SAP, TDS, security instruments' },
+  { key: 'energy', label: 'Energy data', tone: 'blue', hint: 'REA fetches, allocations, energy banking' },
+  { key: 'recon', label: 'Reconciliation', tone: 'blue', hint: 'Reconciliation runs, sign-offs and withdrawals' },
+  { key: 'disputes', label: 'Disputes', tone: 'red', hint: 'Disputes raised, reviewed and resolved' },
+  { key: 'documents', label: 'Documents & uploads', tone: 'blue', hint: 'Uploads, requests and declarations' },
+  { key: 'views', label: 'Viewed / opened', tone: 'gray', hint: 'Records opened or read, nothing changed' },
+  { key: 'exports', label: 'Exports & downloads', tone: 'amber', hint: 'Data that left the platform' },
+  { key: 'admin', label: 'Users & settings', tone: 'gray', hint: 'Roles, staff, teams, circulars' },
+  { key: 'security', label: 'Security alerts', tone: 'red', hint: 'Failed sign-ins, denied access, overrides, data fixes' },
+  { key: 'other', label: 'Other', tone: 'gray', hint: 'Anything not in a kind above' },
+];
+
+export function activityMeta(key) {
+  return AUDIT_ACTIVITIES.find((a) => a.key === key) || { key, label: humanize(key || 'other'), tone: 'gray', hint: '' };
+}
+
+// Words a role code spells in capitals ("REIA_MAKER" is "REIA Maker", not "Reia maker").
+const ROLE_ACRONYMS = new Set(['REIA', 'SJVN', 'IT', 'HOD', 'MIS', 'L1', 'L2', 'L3', 'SLDC', 'CFO']);
+
+/** A role code as people say it: "REIA Checker", "Buyer L3", "Finance Bill Checker (custom)". */
+export function roleLabel(role) {
+  if (!role) return '';
+  const custom = /^CUSTOM_/.test(role);
+  const words = String(role).replace(/^CUSTOM_/, '').split('_').filter(Boolean)
+    .map((w) => (ROLE_ACRONYMS.has(w) ? w : w.charAt(0) + w.slice(1).toLowerCase()));
+  return `${words.join(' ')}${custom ? ' (custom)' : ''}`;
+}
 
 export const MODULE_LABELS = {
   AUTH: 'Authentication',
@@ -61,6 +111,19 @@ export const MODULE_LABELS = {
   TRADING: 'Power Trading',
   MIS: 'MIS & Reports',
   SYSTEM: 'System',
+  COMPLIANCE: 'Compliance',
+  CONTRACTS: 'Contracts',
+  DOCUMENTS: 'Documents',
+  ENERGY: 'Energy Data',
+  GOVERNANCE: 'Governance',
+  MAIL: 'Mail',
+  MASTERS: 'Masters',
+  PRIVACY: 'Privacy',
+  PUBLIC_PORTAL: 'Public Portal',
+  REPORTS: 'Reports',
+  ROLE_POWERS: 'Role Powers',
+  STAFF: 'Staff',
+  TEAM: 'Team',
 };
 
 /** The named slices of the trail; `key` is what the API's `category` takes. */
@@ -254,9 +317,9 @@ export const dayKey = localDayKey;
  * Collapse consecutive events that are the same action, entity type and actor
  * into a single row. A seeding run or a bulk REA import produces a hundred
  * identical "Created energy record" lines; as one collapsible group it reads
- * as a single fact.
+ * as a single fact. With `fold: false` every event keeps its own line.
  */
-export function groupEvents(logs) {
+export function groupEvents(logs, { fold = true } = {}) {
   const days = [];
   let currentDay = null;
 
@@ -269,6 +332,7 @@ export function groupEvents(logs) {
 
     const last = currentDay.groups[currentDay.groups.length - 1];
     const sameRun =
+      fold &&
       last &&
       last.action === log.action &&
       last.entity_type === log.entity_type &&

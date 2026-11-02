@@ -81,6 +81,76 @@ describe('audit trail — listing', () => {
   });
 });
 
+describe('audit trail — views by person, activity and hour', () => {
+  it('puts every event in exactly one kind of activity', async () => {
+    const r = await get('', { limit: 10 });
+    expect(Object.fromEntries(r.body.rows.map((x) => [x.action, x.activity]))).toEqual({
+      CREATE: 'changes', UPDATE: 'changes', SUBMIT_BID: 'approvals', ACCESS_DENIED: 'security',
+      DATA_EXPORT: 'exports', EXPORT_PDF: 'exports',
+    });
+    const f = await get('/facets');
+    expect(f.body.activities).toEqual([
+      { activity: 'security', n: 1 }, { activity: 'exports', n: 2 },
+      { activity: 'approvals', n: 1 }, { activity: 'changes', n: 3 },
+    ]);
+    expect(f.body.activities.reduce((s, a) => s + a.n, 0)).toBe(7);
+    expect(f.body.actions.find((a) => a.action === 'SUBMIT_BID').activity).toBe('approvals');
+  });
+
+  it('filters by several kinds of activity, and refuses a kind it does not know', async () => {
+    expect(await count({ activity: 'changes' })).toBe(3);
+    expect(await count({ activity: 'changes,exports' })).toBe(5);
+    expect(await count({ activity: 'exports', user_id: 'USR-BOB' })).toBe(0);
+    expect((await get('', { activity: 'nonsense' })).status).toBe(400);
+    // The chips count each kind under the other filters, not under the kind picked.
+    const sum = (await get('/summary', { activity: 'changes', user_id: 'USR-ALICE' })).body;
+    expect(sum.total).toBe(2);
+    expect(Object.fromEntries(sum.by_activity.map((k) => [k.activity, k.n]))).toEqual({ changes: 2, exports: 2 });
+  });
+
+  it('filters by role and by several people at once', async () => {
+    expect(await count({ role: 'TRADING_USER' })).toBe(3);
+    expect(await count({ role: 'TRADING_USER,REIA_USER' })).toBe(7);
+    expect(await count({ user_id: 'USR-ALICE,USR-BOB' })).toBe(7);
+    const roles = (await get('/facets')).body.roles;
+    expect(roles).toEqual([{ user_role: 'REIA_USER', n: 4 }, { user_role: 'TRADING_USER', n: 3 }]);
+  });
+
+  it("finds work done outside office hours on the viewer's clock", async () => {
+    // In IST: 09:30 Tue, 01:30 Wed, 11:30 Wed, 11:30 Thu, 12:30 Thu, 12:30 Fri, 13:30 Fri.
+    expect(await count({ hours: 'after', tz_offset: 330 })).toBe(1);
+    // In UTC the 04:00 and 20:00 entries on Tuesday fall outside 09–18, and so do the 06:00–08:00 ones.
+    expect(await count({ hours: 'after', tz_offset: 0 })).toBe(7);
+    expect((await get('/summary', { tz_offset: 330 })).body.after_hours).toBe(1);
+    expect((await get('', { hours: 'later' })).status).toBe(400);
+  });
+
+  it('reads oldest first behind a cursor', async () => {
+    const p1 = await get('', { limit: 4, order: 'asc' });
+    expect(p1.body.rows.map((r) => r.action)).toEqual(['CREATE', 'UPDATE', 'SUBMIT_BID', 'ACCESS_DENIED']);
+    const p2 = await get('', { limit: 4, order: 'asc', before: p1.body.next_cursor });
+    expect(p2.body.rows.map((r) => r.action)).toEqual(['DATA_EXPORT', 'EXPORT_PDF', 'UPDATE']);
+    expect(p2.body.next_cursor).toBeNull();
+  });
+
+  it('sums up each person for the People view', async () => {
+    const r = await get('/people', { tz_offset: 330 });
+    expect(r.status).toBe(200);
+    expect(r.body.people).toHaveLength(2);
+    const [alice, bob] = r.body.people;
+    expect(alice).toMatchObject({
+      user_id: 'USR-ALICE', user_name: 'Alice', user_role: 'REIA_USER', n: 4,
+      first_at: '2026-09-01 04:00:00', last_at: '2026-09-04 07:00:00',
+      active_days: 4, security: 0, after_hours: 1,
+    });
+    expect(alice.activities).toEqual([{ activity: 'changes', n: 2 }, { activity: 'exports', n: 2 }]);
+    expect(bob).toMatchObject({ n: 3, security: 1, after_hours: 0 });
+    // The same filters as the list.
+    expect((await get('/people', { activity: 'security' })).body.people.map((p) => p.user_id)).toEqual(['USR-BOB']);
+    expect((await get('/people', {}, trader)).status).toBe(403);
+  });
+});
+
 describe('audit trail — facets and summary', () => {
   it('lists what the dropdowns can offer, with counts', async () => {
     const r = await get('/facets');
@@ -120,7 +190,7 @@ describe('audit trail — export', () => {
     expect(r.headers['content-type']).toMatch(/text\/csv/);
     expect(r.headers['x-export-rows']).toBe('2');
     const lines = r.text.replace(/^\uFEFF/, '').trim().split('\r\n');
-    expect(lines[0]).toBe('created_at_utc,user_name,user_role,user_id,action,module,entity_type,entity_id,reason,before_value,after_value,details,trace_id,ip_address,audit_id,record_hash');
+    expect(lines[0]).toBe('created_at_utc,user_name,user_role,user_id,action,activity,module,entity_type,entity_id,reason,before_value,after_value,details,trace_id,ip_address,audit_id,record_hash');
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain(",'=SUM(A1),");
     expect(lines[1]).toContain('"{""note"":""said \\""revise\\""""}"');

@@ -1688,6 +1688,7 @@ export const api = {
     get: (id) => g(`/audit-logs/${id}`),
     facets: (params) => g('/audit-logs/facets', params),
     summary: (params) => g('/audit-logs/summary', params),
+    people: (params) => g('/audit-logs/people', params),
     integrity: () => g('/audit-logs/integrity'),
     verifyIntegrity: () => p('/audit-logs/verify-integrity'),
     violationsSod: () => g('/audit-logs/violations/sod'),

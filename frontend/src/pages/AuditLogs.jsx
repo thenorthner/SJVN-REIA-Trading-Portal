@@ -6,17 +6,25 @@ import { PageHeader, Card, Badge, Modal, StatCard, scrollPageTop } from '../comp
 import {
   actionMeta, moduleLabel, entityLabel, humanize, formatValue, safeParse,
   computeDiff, summarizeDetails, detailsFieldCount, describeEvent, groupSummary,
-  timeLabel, groupEvents, AUDIT_CATEGORIES,
+  timeLabel, groupEvents, AUDIT_CATEGORIES, AUDIT_ACTIVITIES, activityMeta, roleLabel,
 } from '../auditMeta.js';
-import { fmtDateTime, fmtDate, localDayStartUtc, localDayEndUtc } from '../datetime.js';
+import { fmtDateTime, fmtDate, localDayStartUtc, localDayEndUtc, parseTimestamp } from '../datetime.js';
 
 const PAGE = 100;
 
 // Every filter lives in the URL, so a view of the trail can be bookmarked,
-// shared with a colleague, or left with the back button.
-const FILTER_KEYS = ['q', 'category', 'module', 'action', 'user_id', 'entity_type', 'entity_id', 'trace_id', 'from', 'to'];
+// shared with a colleague, or left with the back button. `category` is the
+// first version's slice, still read from old links.
+const FILTER_KEYS = ['q', 'activity', 'category', 'module', 'action', 'user_id', 'role', 'entity_type', 'entity_id', 'trace_id', 'hours', 'from', 'to'];
+// How the trail is shown, not which events: also in the URL, but not a filter.
+const VIEWS = [
+  { key: 'timeline', label: 'Timeline', hint: 'Day by day, repeats folded together' },
+  { key: 'table', label: 'Table', hint: 'One line per event, choose the columns' },
+  { key: 'people', label: 'People', hint: 'One card per person: how much, when, what kind' },
+];
 
 const fmtN = (n) => (n == null ? '…' : Number(n).toLocaleString('en-IN'));
+const splitList = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 /** The local calendar date `n` days ago, as YYYY-MM-DD. */
 function daysAgo(n) {
@@ -33,20 +41,166 @@ const PRESETS = [
   { key: '90d', label: '90 days', days: 89 },
 ];
 
+// One click to the questions an auditor asks most. Each is only a set of URL
+// filters, so it lands on the same screen a hand-built filter would.
+const QUICK_VIEWS = [
+  { label: 'Security alerts', set: { activity: 'security' } },
+  { label: 'Approvals this week', set: { activity: 'approvals', from: () => daysAgo(6) } },
+  { label: 'Payments & postings', set: { activity: 'money' } },
+  { label: 'Record changes today', set: { activity: 'changes', from: () => daysAgo(0) } },
+  { label: 'Data that left the platform', set: { activity: 'exports' } },
+  { label: 'Outside office hours', set: { hours: 'after' } },
+];
+
+// Office hours, as the API's `hours=after` counts them (routes/auditLogs.js).
+const OFFICE_START = 9;
+const OFFICE_END = 18;
+function isAfterHours(ts) {
+  const d = parseTimestamp(ts);
+  if (!d) return false;
+  const h = d.getHours();
+  return h < OFFICE_START || h >= OFFICE_END || d.getDay() === 0 || d.getDay() === 6;
+}
+
 /** URL filters to API query. Dates become the UTC bounds of the viewer's local days. */
-function toApiParams(f) {
+function toApiParams(f, order) {
   const p = {};
-  for (const k of ['q', 'category', 'module', 'action', 'user_id', 'entity_type', 'entity_id', 'trace_id']) {
+  for (const k of ['q', 'activity', 'category', 'module', 'action', 'user_id', 'role', 'entity_type', 'entity_id', 'trace_id', 'hours']) {
     if (f[k]) p[k] = f[k];
   }
   if (f.from) p.from_date = localDayStartUtc(f.from);
   if (f.to) p.to_date = localDayEndUtc(f.to);
+  if (order === 'asc') p.order = 'asc';
+  // Office hours and the chart's days are the viewer's, not UTC's.
+  p.tz_offset = -new Date().getTimezoneOffset();
   return p;
 }
 
 function dateRangeLabel(from, to) {
   if (from && from === to) return fmtDate(from);
   return `${from ? fmtDate(from) : 'Start'} – ${to ? fmtDate(to) : 'now'}`;
+}
+
+// Per-viewer conveniences (saved views, table columns, folding). Storage may be
+// missing or refuse (private window), and the page works the same without it.
+function readStore(key, fallback) {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(key) || 'null');
+    return v ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeStore(key, value) {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* not kept; fine */ }
+}
+function useStored(key, fallback) {
+  const [v, setV] = useState(() => readStore(key, fallback));
+  const set = useCallback((next) => {
+    setV((cur) => {
+      const val = typeof next === 'function' ? next(cur) : next;
+      writeStore(key, val);
+      return val;
+    });
+  }, [key]);
+  return [v, set];
+}
+
+/* ------------------------------------------------------------------ *
+ * A dropdown that picks several values, with a search box for long
+ * lists (people, actions). Nothing picked means "all".
+ * ------------------------------------------------------------------ */
+function MultiPicker({ label, allLabel, options, selected, onChange, searchable, buttonText, align = 'left' }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    if (searchable) setTimeout(() => searchRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, searchable]);
+  useEffect(() => { if (!open) setQ(''); }, [open]);
+
+  const sel = new Set(selected);
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? options.filter((o) => `${o.label} ${o.sub || ''} ${o.value}`.toLowerCase().includes(needle))
+    : options;
+  const toggle = (v) => {
+    const next = new Set(sel);
+    if (next.has(v)) next.delete(v); else next.add(v);
+    onChange([...next]);
+  };
+  const text = buttonText
+    || (selected.length === 0 ? allLabel
+      : selected.length === 1 ? (options.find((o) => o.value === selected[0])?.label || selected[0])
+        : `${selected.length} ${label.toLowerCase()}`);
+
+  let lastGroup = null;
+  return (
+    <div className="audit-picker" ref={ref}>
+      <button
+        type="button"
+        className={`audit-picker-btn${selected.length && !buttonText ? ' is-set' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="audit-picker-text">{text}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className={`audit-picker-pop${align === 'right' ? ' is-right' : ''}`} role="listbox" aria-multiselectable="true" aria-label={label}>
+          {searchable && (
+            <input
+              ref={searchRef}
+              type="search"
+              className="audit-picker-search"
+              placeholder={`Find ${label.toLowerCase()}…`}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          )}
+          <div className="audit-picker-list">
+            {shown.length === 0 && <div className="audit-picker-empty">Nothing matches “{q}”.</div>}
+            {shown.map((o) => {
+              const head = o.group && o.group !== lastGroup ? o.group : null;
+              lastGroup = o.group;
+              return (
+                <React.Fragment key={o.value}>
+                  {head && <div className="audit-picker-group">{head}</div>}
+                  <label className="audit-picker-opt">
+                    <input type="checkbox" checked={sel.has(o.value)} onChange={() => toggle(o.value)} />
+                    <span className="audit-picker-label">
+                      {o.label}
+                      {o.sub && <span className="audit-picker-sub">{o.sub}</span>}
+                    </span>
+                    {o.n != null && <span className="audit-picker-n">{fmtN(o.n)}</span>}
+                  </label>
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {!buttonText && (
+            <div className="audit-picker-foot">
+              <span>{selected.length ? `${selected.length} picked` : allLabel}</span>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={!selected.length} onClick={() => onChange([])}>Clear</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -73,6 +227,12 @@ function Pivots({ log, onPivot }) {
   );
 }
 
+function ActivityTag({ kind }) {
+  if (!kind) return null;
+  const m = activityMeta(kind);
+  return <span className={`audit-kind tone-${m.tone}`} title={m.hint}>{m.label}</span>;
+}
+
 /* ------------------------------------------------------------------ *
  * Expanded row body — shows ONLY what changed / what matters.
  * Full payload and hash chain stay behind "View full details".
@@ -87,6 +247,7 @@ function EventDetail({ log, onOpenFull, onPivot }) {
     <div className="audit-detail">
       <div className="audit-detail-meta">
         <span><span className="audit-k">Record</span> {entityLabel(log.entity_type)} {log.entity_id || '—'}</span>
+        <span><span className="audit-k">At</span> {fmtDateTime(log.created_at)}</span>
         {log.reason && <span><span className="audit-k">Reason</span> {log.reason}</span>}
       </div>
 
@@ -146,9 +307,11 @@ function EventRow({ log, expanded, onToggle, onOpenFull, onPivot }) {
           <span className="audit-desc">{describeEvent(log)}</span>
           <span className="audit-actor">
             {log.user_name || 'System'}
-            {log.user_role && <span className="audit-role"> · {humanize(log.user_role)}</span>}
+            {log.user_role && <span className="audit-role"> · {roleLabel(log.user_role)}</span>}
+            {isAfterHours(log.created_at) && <span className="audit-after"> · outside office hours</span>}
           </span>
         </span>
+        <ActivityTag kind={log.activity} />
         <span className="audit-module-chip">{moduleLabel(log.module)}</span>
         <span className="audit-chevron">{expanded ? '▾' : '▸'}</span>
       </button>
@@ -160,7 +323,7 @@ function EventRow({ log, expanded, onToggle, onOpenFull, onPivot }) {
 /* ------------------------------------------------------------------ *
  * A run of identical consecutive events, collapsed into one line.
  * ------------------------------------------------------------------ */
-function EventGroup({ group, expandedId, onToggleEvent, onOpenFull, onPivot }) {
+function EventGroup({ group, expandedId, onToggleEvent, onOpenFull, onPivot, ascending }) {
   const [open, setOpen] = useState(false);
   const meta = actionMeta(group.action);
 
@@ -179,21 +342,23 @@ function EventGroup({ group, expandedId, onToggleEvent, onOpenFull, onPivot }) {
 
   const first = group.items[0];
   const last = group.items[group.items.length - 1];
+  const [early, late] = ascending ? [first, last] : [last, first];
 
   return (
     <div className={'audit-event audit-group' + (open ? ' is-open' : '')}>
       <button type="button" className="audit-event-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="audit-time">
-          {timeLabel(last.created_at)}–{timeLabel(first.created_at)}
+          {timeLabel(early.created_at)}–{timeLabel(late.created_at)}
         </span>
         <span className={`audit-dot tone-${meta.tone}`} aria-hidden="true">{meta.icon}</span>
         <span className="audit-summary">
           <span className="audit-desc">{groupSummary(group)}</span>
           <span className="audit-actor">
             {group.user_name || 'System'}
-            {group.user_role && <span className="audit-role"> · {humanize(group.user_role)}</span>}
+            {group.user_role && <span className="audit-role"> · {roleLabel(group.user_role)}</span>}
           </span>
         </span>
+        <ActivityTag kind={first.activity} />
         <span className="audit-module-chip">{moduleLabel(group.module)}</span>
         <span className="audit-chevron">{open ? '▾' : '▸'}</span>
       </button>
@@ -213,6 +378,156 @@ function EventGroup({ group, expandedId, onToggleEvent, onOpenFull, onPivot }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Table view: one line per event, columns of the viewer's choosing.
+ * ------------------------------------------------------------------ */
+const TABLE_COLUMNS = [
+  { key: 'when', label: 'When', fixed: true, cell: (l) => fmtDateTime(l.created_at) },
+  { key: 'who', label: 'Person', cell: (l) => l.user_name || 'System' },
+  { key: 'role', label: 'Role', cell: (l) => roleLabel(l.user_role) || '—' },
+  { key: 'activity', label: 'Activity', cell: (l) => <ActivityTag kind={l.activity} /> },
+  { key: 'what', label: 'What happened', fixed: true, cell: (l) => describeEvent(l) },
+  { key: 'record', label: 'Record', cell: (l) => (l.entity_id ? `${entityLabel(l.entity_type)} ${l.entity_id}` : '—') },
+  { key: 'module', label: 'Module', cell: (l) => moduleLabel(l.module) },
+  { key: 'reason', label: 'Reason', cell: (l) => (l.reason ? <span title={l.reason}>{l.reason}</span> : '—') },
+  { key: 'ip', label: 'IP address', cell: (l) => l.ip_address || '—' },
+  { key: 'action', label: 'Action code', cell: (l) => <code>{l.action}</code> },
+];
+const DEFAULT_COLUMNS = ['when', 'who', 'role', 'activity', 'what', 'module', 'reason'];
+
+function EventTable({ rows, columns, order, onOrder, onOpen }) {
+  const cols = TABLE_COLUMNS.filter((c) => c.fixed || columns.includes(c.key));
+  return (
+    <div className="audit-table-wrap">
+      <table className="audit-table">
+        <thead>
+          <tr>
+            {cols.map((c) => (
+              <th key={c.key} scope="col">
+                {c.key === 'when' ? (
+                  <button type="button" className="audit-th-sort" onClick={onOrder} title="Change the order">
+                    When {order === 'asc' ? '↑ oldest first' : '↓ newest first'}
+                  </button>
+                ) : c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((l) => (
+            <tr
+              key={l.id}
+              tabIndex={0}
+              className={isAfterHours(l.created_at) ? 'is-after' : ''}
+              onClick={() => onOpen(l)}
+              onKeyDown={(e) => { if (e.key === 'Enter') onOpen(l); }}
+            >
+              {cols.map((c) => <td key={c.key} data-col={c.key}>{c.cell(l)}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * People view: who did how much, when, and of what kind.
+ * ------------------------------------------------------------------ */
+const PEOPLE_SORTS = [
+  { key: 'n', label: 'Most active', fn: (a, b) => b.n - a.n },
+  { key: 'last', label: 'Last active', fn: (a, b) => String(b.last_at).localeCompare(String(a.last_at)) },
+  { key: 'name', label: 'Name', fn: (a, b) => String(a.user_name || '~').localeCompare(String(b.user_name || '~')) },
+  { key: 'security', label: 'Most security alerts', fn: (a, b) => b.security - a.security || b.n - a.n },
+  { key: 'after', label: 'Most after hours', fn: (a, b) => b.after_hours - a.after_hours || b.n - a.n },
+];
+
+// A bracket is a note and an email's domain is not a name: "Meera (REIA Admin)" is M, "reia@sjvn.in" is R.
+const initials = (name) => String(name || 'System').replace(/\(.*$/, '').replace(/@.*$/, '')
+  .split(/[^A-Za-z\u0900-\u097F]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+
+function PeopleView({ data, loading, sortKey, onSort, onOpenPerson, onOpenFlag }) {
+  if (loading) return <div className="audit-placeholder">Loading people…</div>;
+  const people = [...(data?.people || [])].sort((PEOPLE_SORTS.find((s) => s.key === sortKey) || PEOPLE_SORTS[0]).fn);
+  if (!people.length) return <div className="audit-placeholder">Nobody did anything that matches these filters.</div>;
+  return (
+    <>
+      <div className="audit-list-head">
+        <span>{fmtN(people.length)} {people.length === 1 ? 'person' : 'people'}{data.truncated ? ' (the most active shown)' : ''}</span>
+        <label className="audit-inline-select">
+          Sort by
+          <select value={sortKey} onChange={(e) => onSort(e.target.value)}>
+            {PEOPLE_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="audit-people">
+        {people.map((p) => {
+          // Security alerts have their own red flag below, so they are not repeated as a kind.
+          const kinds = p.activities.filter((a) => a.activity !== 'security');
+          const top = kinds.slice(0, 4);
+          const rest = kinds.slice(4).reduce((s, a) => s + a.n, 0);
+          return (
+            <div className="audit-person" key={p.user_id || 'system'}>
+              <div className="audit-person-head">
+                <span className="audit-avatar" aria-hidden="true">{initials(p.user_name)}</span>
+                <div className="audit-person-id">
+                  <div className="audit-person-name">{p.user_name || 'System'}</div>
+                  <div className="audit-muted">{roleLabel(p.user_role) || 'Automatic jobs'}</div>
+                </div>
+                <div className="audit-person-n">
+                  <strong>{fmtN(p.n)}</strong>
+                  <span>event{p.n === 1 ? '' : 's'}</span>
+                </div>
+              </div>
+              <div className="audit-person-when">
+                Active on {fmtN(p.active_days)} day{p.active_days === 1 ? '' : 's'} · last {fmtDateTime(p.last_at)}
+              </div>
+              <div className="audit-person-kinds">
+                {top.map((a) => {
+                  const m = activityMeta(a.activity);
+                  return (
+                    <button
+                      key={a.activity}
+                      type="button"
+                      className={`audit-kind tone-${m.tone} is-button`}
+                      title={`See ${m.label.toLowerCase()} by ${p.user_name || 'the system'}`}
+                      disabled={!p.user_id}
+                      onClick={() => onOpenFlag(p, { activity: a.activity })}
+                    >
+                      {m.label} · {fmtN(a.n)}
+                    </button>
+                  );
+                })}
+                {rest > 0 && <span className="audit-muted">+{fmtN(rest)} other</span>}
+              </div>
+              {(p.security > 0 || p.after_hours > 0) && (
+                <div className="audit-person-flags">
+                  {p.security > 0 && (
+                    <button type="button" className="audit-flag tone-red" disabled={!p.user_id} onClick={() => onOpenFlag(p, { activity: 'security' })}>
+                      {fmtN(p.security)} security alert{p.security === 1 ? '' : 's'}
+                    </button>
+                  )}
+                  {p.after_hours > 0 && (
+                    <button type="button" className="audit-flag tone-amber" disabled={!p.user_id} onClick={() => onOpenFlag(p, { hours: 'after' })}>
+                      {fmtN(p.after_hours)} outside office hours
+                    </button>
+                  )}
+                </div>
+              )}
+              {p.user_id && (
+                <button type="button" className="btn btn-outline btn-sm audit-person-open" onClick={() => onOpenPerson(p)}>
+                  See all their activity →
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -238,7 +553,8 @@ function FullRecordModal({ log, onClose, onPivot }) {
           <div className="audit-banner-title">{describeEvent(log)}</div>
           <div className="audit-banner-sub">
             by <strong>{log.user_name || 'System'}</strong>
-            {log.user_role ? ` (${humanize(log.user_role)})` : ''} · {fmtDateTime(log.created_at)}
+            {log.user_role ? ` (${roleLabel(log.user_role)})` : ''} · {fmtDateTime(log.created_at)}
+            {isAfterHours(log.created_at) ? ' · outside office hours' : ''}
           </div>
         </div>
       </div>
@@ -246,9 +562,10 @@ function FullRecordModal({ log, onClose, onPivot }) {
       {/* Friendly overview — no trace ids / hashes / IPs here */}
       <div className="detail-grid" style={{ marginTop: 8 }}>
         <div className="detail-item"><span className="detail-label">What happened</span><span className="detail-value"><Badge status={log.action} label={meta.label} /></span></div>
+        {log.activity && <div className="detail-item"><span className="detail-label">Kind of activity</span><span className="detail-value"><ActivityTag kind={log.activity} /></span></div>}
         <div className="detail-item"><span className="detail-label">Area</span><span className="detail-value">{moduleLabel(log.module)}</span></div>
         <div className="detail-item"><span className="detail-label">Record</span><span className="detail-value">{entityLabel(log.entity_type)} {log.entity_id || ''}</span></div>
-        <div className="detail-item"><span className="detail-label">Done by</span><span className="detail-value">{log.user_name || 'System'}{log.user_role ? ` · ${humanize(log.user_role)}` : ''}</span></div>
+        <div className="detail-item"><span className="detail-label">Done by</span><span className="detail-value">{log.user_name || 'System'}{log.user_role ? ` · ${roleLabel(log.user_role)}` : ''}</span></div>
         <div className="detail-item"><span className="detail-label">When</span><span className="detail-value">{fmtDateTime(log.created_at)}</span></div>
         {log.reason && <div className="detail-item"><span className="detail-label">Reason</span><span className="detail-value">{log.reason}</span></div>}
       </div>
@@ -296,6 +613,7 @@ function FullRecordModal({ log, onClose, onPivot }) {
           <summary>Technical details (for auditors &amp; IT)</summary>
           <div className="audit-tech-body">
             <div className="detail-grid">
+              <div className="detail-item"><span className="detail-label">Action code</span><span className="detail-value"><code>{log.action}</code></span></div>
               <div className="detail-item"><span className="detail-label">Trace / Session</span><span className="detail-value"><code>{log.trace_id || '—'}</code> / <code>{log.session_id || '—'}</code></span></div>
               <div className="detail-item"><span className="detail-label">IP address</span><span className="detail-value"><code>{log.ip_address || 'system'}</code></span></div>
             </div>
@@ -353,13 +671,13 @@ function ActivityChart({ data, from, to, onPickDay }) {
           <XAxis dataKey="day" hide />
           <YAxis hide allowDecimals={false} />
           <Tooltip
-            cursor={{ fill: 'rgba(31, 92, 214, 0.08)' }}
+            cursor={{ fill: 'var(--primary-light)' }}
             formatter={(v) => [fmtN(v), 'events']}
             labelFormatter={(d) => fmtDate(d)}
           />
           <Bar dataKey="n" radius={[3, 3, 0, 0]} cursor="pointer" onClick={(e) => onPickDay(e?.payload?.day || e?.day)}>
             {data.map((d) => (
-              <Cell key={d.day} fill={from === d.day && to === d.day ? '#0b3d91' : '#1f5cd6'} />
+              <Cell key={d.day} fill={from === d.day && to === d.day ? 'var(--primary-dark, #0b3d91)' : 'var(--primary, #1f5cd6)'} />
             ))}
           </Bar>
         </BarChart>
@@ -374,6 +692,52 @@ function ActivityChart({ data, from, to, onPickDay }) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Saved views: a name for the current URL filters, kept in this browser.
+ * ------------------------------------------------------------------ */
+function SaveViewButton({ onSave }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const save = (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSave(name.trim());
+    setName('');
+    setOpen(false);
+  };
+  return (
+    <div className="audit-picker" ref={ref}>
+      <button type="button" className="audit-preset" onClick={() => setOpen((o) => !o)}>☆ Save this view</button>
+      {open && (
+        <form className="audit-picker-pop audit-save-pop" onSubmit={save}>
+          <label className="audit-muted" htmlFor="audit-save-name">Name this view</label>
+          <input
+            id="audit-save-name"
+            autoFocus
+            className="audit-picker-search"
+            placeholder="e.g. Checker approvals in October"
+            value={name}
+            maxLength={60}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
+          />
+          <div className="audit-picker-foot">
+            <span>Kept in this browser</span>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={!name.trim()}>Save</button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Page
  * ------------------------------------------------------------------ */
 export default function AuditLogs() {
@@ -382,7 +746,9 @@ export default function AuditLogs() {
     () => Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) || ''])),
     [params],
   );
-  const apiParams = useMemo(() => toApiParams(filters), [filters]);
+  const view = VIEWS.some((v) => v.key === params.get('view')) ? params.get('view') : 'timeline';
+  const order = params.get('order') === 'asc' ? 'asc' : 'desc';
+  const apiParams = useMemo(() => toApiParams(filters, order), [filters, order]);
   const apiKey = JSON.stringify(apiParams);
   const filtersActive = FILTER_KEYS.some((k) => filters[k]);
 
@@ -395,7 +761,14 @@ export default function AuditLogs() {
       return next;
     }, { replace });
   }, [setParams]);
-  const clearAll = () => setParams(new URLSearchParams());
+  // Clearing the filters keeps how the trail is shown.
+  const clearAll = () => setParams(() => {
+    const next = new URLSearchParams();
+    if (params.get('view')) next.set('view', params.get('view'));
+    if (params.get('order')) next.set('order', params.get('order'));
+    return next;
+  });
+  const setList = (key) => (values) => setFilter({ [key]: values.join(',') });
 
   // The search box types freely and settles into the URL a moment later, so
   // each keystroke is not its own query or its own history entry.
@@ -426,32 +799,39 @@ export default function AuditLogs() {
   const [total, setTotal] = useState(null);
   const [cursor, setCursor] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [people, setPeople] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const requestNo = useRef(0);
 
+  // The People view needs the per-person summary, the other two the rows; only
+  // the one on screen is fetched.
   const load = useCallback(() => {
     const mine = ++requestNo.current;
     setLoading(true);
     setError('');
     Promise.all([
-      api.auditLogs.list({ ...apiParams, limit: PAGE }),
-      api.auditLogs.summary({ ...apiParams, tz_offset: -new Date().getTimezoneOffset() }),
+      view === 'people' ? api.auditLogs.people(apiParams) : api.auditLogs.list({ ...apiParams, limit: PAGE }),
+      api.auditLogs.summary(apiParams),
     ])
-      .then(([page, sum]) => {
+      .then(([main, sum]) => {
         if (mine !== requestNo.current) return; // a newer filter has been asked for since
-        setRows(page.rows || []);
-        setTotal(page.total);
-        setCursor(page.next_cursor);
+        if (view === 'people') {
+          setPeople(main);
+        } else {
+          setRows(main.rows || []);
+          setTotal(main.total);
+          setCursor(main.next_cursor);
+        }
         setSummary(sum);
       })
       .catch((e) => {
         if (mine === requestNo.current) setError(e?.response?.data?.error || e?.message || 'Could not load the audit trail.');
       })
       .finally(() => { if (mine === requestNo.current) setLoading(false); });
-  }, [apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [apiKey, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -472,10 +852,10 @@ export default function AuditLogs() {
   }
 
   // Dropdown options come from the whole period, not from the page on screen.
-  const [facets, setFacets] = useState({ modules: [], actions: [], users: [], entity_types: [] });
+  const [facets, setFacets] = useState({ modules: [], actions: [], activities: [], roles: [], users: [], entity_types: [] });
   useEffect(() => {
     api.auditLogs.facets({ from_date: apiParams.from_date, to_date: apiParams.to_date })
-      .then(setFacets)
+      .then((f) => setFacets((cur) => ({ ...cur, ...f })))
       .catch(() => {});
   }, [apiParams.from_date, apiParams.to_date]);
 
@@ -488,6 +868,11 @@ export default function AuditLogs() {
   const [reportBusy, setReportBusy] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [fullRecord, setFullRecord] = useState(null);
+  const [moreFilters, setMoreFilters] = useStored('sjvn.audit.moreFilters', false);
+  const [foldRepeats, setFoldRepeats] = useStored('sjvn.audit.foldRepeats', true);
+  const [columns, setColumns] = useStored('sjvn.audit.tableColumns', DEFAULT_COLUMNS);
+  const [peopleSort, setPeopleSort] = useStored('sjvn.audit.peopleSort', 'n');
+  const [savedViews, setSavedViews] = useStored('sjvn.audit.savedViews', []);
 
   useEffect(() => {
     api.auditLogs.violationsSod().then(setSod).catch(() => {});
@@ -520,7 +905,7 @@ export default function AuditLogs() {
     try {
       const r = await api.auditLogs.exportCsv(apiParams);
       setNotice(r.truncated
-        ? `Exported the newest ${fmtN(r.rows)} events — narrow the filters to export the rest.`
+        ? `Exported the first ${fmtN(r.rows)} events — narrow the filters to export the rest.`
         : `Exported ${fmtN(r.rows)} event${r.rows === 1 ? '' : 's'} to CSV. The export is itself now in the trail.`);
       load();
     } catch {
@@ -549,25 +934,73 @@ export default function AuditLogs() {
 
   const pivot = useCallback((key, value) => {
     setExpandedId(null);
-    setFilter({ [key]: value });
+    setFilter({ [key]: value, view: view === 'table' ? 'table' : '' });
+    scrollPageTop('smooth');
+  }, [setFilter, view]);
+
+  // From a person's card to their events: all of them, or the slice a chip or flag names.
+  const openPerson = useCallback((p, extra = {}) => {
+    setFilter({ user_id: p.user_id, view: '', ...extra });
     scrollPageTop('smooth');
   }, [setFilter]);
 
-  const days = useMemo(() => groupEvents(rows), [rows]);
+  const toggleActivity = (key) => {
+    const cur = splitList(filters.activity);
+    setFilter({ activity: (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]).join(',') });
+  };
+
+  const applyQuick = (q) => {
+    const next = new URLSearchParams();
+    if (params.get('view')) next.set('view', params.get('view'));
+    for (const [k, v] of Object.entries(q.set)) next.set(k, typeof v === 'function' ? v() : v);
+    setParams(next);
+  };
+  const quickActive = (q) => FILTER_KEYS.every((k) => {
+    const want = q.set[k];
+    return (typeof want === 'function' ? want() : want || '') === filters[k];
+  });
+
+  // A saved view is the URL's filters, view and order; it opens as it was saved.
+  const currentQs = params.toString();
+  const saveView = (name) => setSavedViews((cur) => [...cur.filter((v) => v.name !== name), { name, qs: currentQs }].slice(-12));
+
+  const days = useMemo(() => groupEvents(rows, { fold: foldRepeats }), [rows, foldRepeats]);
 
   const activePreset = !filters.to && PRESETS.find((p) => filters.from === daysAgo(p.days))?.key;
   const userName = (id) => facets.users.find((u) => u.user_id === id)?.user_name || id;
+  const pickedActivities = splitList(filters.activity);
   const chips = [
     filters.q && { keys: ['q'], label: `“${filters.q}”` },
+    filters.activity && { keys: ['activity'], label: pickedActivities.map((k) => activityMeta(k).label).join(' / ') },
     filters.category && { keys: ['category'], label: AUDIT_CATEGORIES.find((c) => c.key === filters.category)?.label || filters.category },
-    filters.module && { keys: ['module'], label: moduleLabel(filters.module) },
-    filters.action && { keys: ['action'], label: filters.action.split(',').map((a) => actionMeta(a).label).join(' / ') },
-    filters.user_id && { keys: ['user_id'], label: `By ${userName(filters.user_id)}` },
+    filters.user_id && { keys: ['user_id'], label: `By ${splitList(filters.user_id).map(userName).join(', ')}` },
+    filters.role && { keys: ['role'], label: `Role: ${splitList(filters.role).map(roleLabel).join(', ')}` },
+    filters.module && { keys: ['module'], label: splitList(filters.module).map(moduleLabel).join(' / ') },
+    filters.action && { keys: ['action'], label: splitList(filters.action).map((a) => actionMeta(a).label).join(' / ') },
     filters.entity_type && { keys: ['entity_type'], label: humanize(entityLabel(filters.entity_type)) },
     filters.entity_id && { keys: ['entity_id'], label: `Record ${filters.entity_id}` },
     filters.trace_id && { keys: ['trace_id'], label: `Request ${filters.trace_id}` },
+    filters.hours && { keys: ['hours'], label: 'Outside office hours' },
     (filters.from || filters.to) && { keys: ['from', 'to'], label: dateRangeLabel(filters.from, filters.to) },
   ].filter(Boolean);
+
+  // Picker options. People narrow to the roles picked, so "Checker" then a name
+  // is a short list; actions are grouped under their kind of activity.
+  const pickedRoles = splitList(filters.role);
+  const userOptions = facets.users
+    .filter((u) => !pickedRoles.length || pickedRoles.includes(u.user_role))
+    .map((u) => ({ value: u.user_id, label: u.user_name || u.user_id, sub: roleLabel(u.user_role), n: u.n }));
+  const roleOptions = facets.roles.map((r) => ({ value: r.user_role, label: roleLabel(r.user_role), n: r.n }));
+  const moduleOptions = facets.modules.map((m) => ({ value: m.module, label: moduleLabel(m.module), n: m.n }));
+  const kindOrder = AUDIT_ACTIVITIES.map((a) => a.key);
+  const actionOptions = facets.actions
+    .filter((a) => !pickedActivities.length || pickedActivities.includes(a.activity))
+    .map((a) => ({ value: a.action, label: actionMeta(a.action).label, sub: a.action, n: a.n, group: activityMeta(a.activity).label, k: kindOrder.indexOf(a.activity) }))
+    .sort((a, b) => a.k - b.k || b.n - a.n);
+  const columnOptions = TABLE_COLUMNS.filter((c) => !c.fixed).map((c) => ({ value: c.key, label: c.label }));
+  // Under the other filters once the summary is in; the period's counts until then.
+  const activityCounts = Object.fromEntries((summary?.by_activity || facets.activities || []).map((a) => [a.activity, a.n]));
+  const hiddenFilterCount = ['role', 'module', 'action', 'entity_type'].filter((k) => filters[k]).length;
 
   return (
     <div>
@@ -582,8 +1015,8 @@ export default function AuditLogs() {
             <button className="btn btn-outline" disabled={!!reportBusy} onClick={() => downloadReport('activity')}>
               {reportBusy === 'activity' ? 'Preparing…' : 'Activity Report (PDF)'}
             </button>
-            <button className="btn btn-secondary" disabled={exporting || !total} onClick={exportCsv}>
-              {exporting ? 'Exporting…' : `Export CSV${total ? ` (${fmtN(total)})` : ''}`}
+            <button className="btn btn-secondary" disabled={exporting || !summary?.total} onClick={exportCsv}>
+              {exporting ? 'Exporting…' : `Export CSV${summary?.total ? ` (${fmtN(summary.total)})` : ''}`}
             </button>
           </div>
         }
@@ -591,20 +1024,32 @@ export default function AuditLogs() {
 
       <div className="kpi-grid">
         <StatCard label="Events" value={fmtN(summary?.total)} tone="blue" hint={filtersActive ? 'matching these filters' : 'in the whole trail'} />
-        <StatCard label="People" value={fmtN(summary?.users)} hint="distinct users acting" />
         <StatCard
-          label="Security events"
+          label="People"
+          value={fmtN(summary?.users)}
+          hint="distinct users acting — click for each one"
+          onClick={() => setFilter({ view: view === 'people' ? '' : 'people' })}
+        />
+        <StatCard
+          label="Security alerts"
           value={fmtN(summary?.security)}
           tone={summary?.security > 0 ? 'red' : 'green'}
-          hint="failed / blocked sign-ins, denied access"
-          onClick={() => setFilter({ category: filters.category === 'security' ? '' : 'security' })}
+          hint="failed sign-ins, denied access, overrides"
+          onClick={() => setFilter({ activity: filters.activity === 'security' ? '' : 'security' })}
         />
         <StatCard
           label="Exports & downloads"
           value={fmtN(summary?.exports)}
           tone={summary?.exports > 0 ? 'amber' : 'default'}
           hint="data that left the platform"
-          onClick={() => setFilter({ category: filters.category === 'exports' ? '' : 'exports' })}
+          onClick={() => setFilter({ activity: filters.activity === 'exports' ? '' : 'exports' })}
+        />
+        <StatCard
+          label="Outside office hours"
+          value={fmtN(summary?.after_hours)}
+          tone={summary?.after_hours > 0 ? 'amber' : 'default'}
+          hint={`before ${OFFICE_START}:00, after ${OFFICE_END}:00 or at weekends`}
+          onClick={() => setFilter({ hours: filters.hours ? '' : 'after' })}
         />
         <StatCard
           label="Duty conflicts"
@@ -668,6 +1113,7 @@ export default function AuditLogs() {
       )}
 
       <Card>
+        {/* 1. Search, and how to show the result */}
         <div className="audit-filter-row">
           <input
             ref={searchRef}
@@ -679,57 +1125,108 @@ export default function AuditLogs() {
             onChange={(e) => setSearchText(e.target.value)}
           />
           <span className="audit-kbd">Press <kbd>/</kbd> to search</span>
-          <div className="audit-segment" role="group" aria-label="Kind of activity">
-            {AUDIT_CATEGORIES.map((c) => (
+          <div className="audit-segment" role="group" aria-label="How to show the trail">
+            {VIEWS.map((v) => (
               <button
-                key={c.key || 'all'}
+                key={v.key}
                 type="button"
-                className={filters.category === c.key ? 'is-active' : ''}
-                aria-pressed={filters.category === c.key}
-                onClick={() => setFilter({ category: c.key })}
+                title={v.hint}
+                className={view === v.key ? 'is-active' : ''}
+                aria-pressed={view === v.key}
+                onClick={() => setFilter({ view: v.key === 'timeline' ? '' : v.key })}
               >
-                {c.label}
+                {v.label}
               </button>
             ))}
           </div>
         </div>
 
+        {/* 2. Who and when — the two questions asked most */}
         <div className="audit-filter-row audit-toolbar">
-          <select aria-label="Module" value={filters.module} onChange={(e) => setFilter({ module: e.target.value })}>
-            <option value="">All modules</option>
-            {facets.modules.map((m) => <option key={m.module} value={m.module}>{moduleLabel(m.module)} ({fmtN(m.n)})</option>)}
-          </select>
-          <select aria-label="Action" value={filters.action} onChange={(e) => setFilter({ action: e.target.value })}>
-            <option value="">All actions</option>
-            {facets.actions.map((a) => <option key={a.action} value={a.action}>{actionMeta(a.action).label} ({fmtN(a.n)})</option>)}
-          </select>
-          <select aria-label="User" value={filters.user_id} onChange={(e) => setFilter({ user_id: e.target.value })}>
-            <option value="">All users</option>
-            {facets.users.map((u) => (
-              <option key={u.user_id} value={u.user_id}>
-                {u.user_name || u.user_id}{u.user_role ? ` · ${humanize(u.user_role)}` : ''} ({fmtN(u.n)})
-              </option>
-            ))}
-          </select>
-          <select aria-label="Record type" value={filters.entity_type} onChange={(e) => setFilter({ entity_type: e.target.value })}>
-            <option value="">All record types</option>
-            {facets.entity_types.map((t) => <option key={t.entity_type} value={t.entity_type}>{humanize(entityLabel(t.entity_type))} ({fmtN(t.n)})</option>)}
-          </select>
+          <span className="audit-row-label">Who</span>
+          <MultiPicker label="People" allLabel="Everyone" searchable options={userOptions} selected={splitList(filters.user_id)} onChange={setList('user_id')} />
+          <MultiPicker label="Roles" allLabel="Any role" searchable={roleOptions.length > 8} options={roleOptions} selected={pickedRoles} onChange={setList('role')} />
+          <span className="audit-row-label audit-row-gap">When</span>
           {PRESETS.map((p) => (
             <button
               key={p.key}
               type="button"
               className={`audit-preset${activePreset === p.key ? ' is-active' : ''}`}
-              onClick={() => setFilter({ from: daysAgo(p.days), to: '' })}
+              onClick={() => setFilter({ from: activePreset === p.key ? '' : daysAgo(p.days), to: '' })}
             >
               {p.label}
             </button>
           ))}
           <input type="date" aria-label="From date" value={filters.from} max={filters.to || undefined} onChange={(e) => setFilter({ from: e.target.value })} />
           <input type="date" aria-label="To date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter({ to: e.target.value })} />
+          <label className="audit-check" title={`Before ${OFFICE_START}:00, after ${OFFICE_END}:00, or on a Saturday or Sunday`}>
+            <input type="checkbox" checked={filters.hours === 'after'} onChange={(e) => setFilter({ hours: e.target.checked ? 'after' : '' })} />
+            Outside office hours only
+          </label>
+        </div>
+
+        {/* 3. What kind of activity */}
+        <div className="audit-activity" role="group" aria-label="Kind of activity">
+          <span className="audit-row-label">Activity</span>
+          <button
+            type="button"
+            className={`audit-act${pickedActivities.length === 0 ? ' is-active' : ''}`}
+            aria-pressed={pickedActivities.length === 0}
+            onClick={() => setFilter({ activity: '' })}
+          >
+            All
+          </button>
+          {AUDIT_ACTIVITIES.filter((a) => activityCounts[a.key] || pickedActivities.includes(a.key)).map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              title={a.hint}
+              className={`audit-act tone-${a.tone}${pickedActivities.includes(a.key) ? ' is-active' : ''}`}
+              aria-pressed={pickedActivities.includes(a.key)}
+              onClick={() => toggleActivity(a.key)}
+            >
+              <span className="audit-act-dot" aria-hidden="true" />
+              {a.label}
+              <span className="audit-act-n">{fmtN(activityCounts[a.key] || 0)}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* 4. Narrower filters, folded away until wanted */}
+        <div className="audit-filter-row audit-toolbar">
+          <button type="button" className="btn btn-ghost btn-sm" aria-expanded={moreFilters} onClick={() => setMoreFilters((o) => !o)}>
+            {moreFilters ? '▾' : '▸'} More filters{hiddenFilterCount ? ` (${hiddenFilterCount} on)` : ''}
+          </button>
+          {moreFilters && (
+            <>
+              <MultiPicker label="Modules" allLabel="All modules" options={moduleOptions} selected={splitList(filters.module)} onChange={setList('module')} />
+              <MultiPicker label="Actions" allLabel={pickedActivities.length ? 'Any of these actions' : 'All actions'} searchable options={actionOptions} selected={splitList(filters.action)} onChange={setList('action')} />
+              <select aria-label="Record type" value={filters.entity_type} onChange={(e) => setFilter({ entity_type: e.target.value })}>
+                <option value="">All record types</option>
+                {facets.entity_types.map((t) => <option key={t.entity_type} value={t.entity_type}>{humanize(entityLabel(t.entity_type))} ({fmtN(t.n)})</option>)}
+              </select>
+            </>
+          )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={verify} disabled={verifying} style={{ marginLeft: 'auto' }}>
             {verifying ? 'Verifying…' : 'Verify full chain'}
           </button>
+        </div>
+
+        {/* 5. Ready-made and saved views */}
+        <div className="audit-quick" aria-label="Quick views">
+          <span className="audit-row-label">Quick views</span>
+          {QUICK_VIEWS.map((q) => (
+            <button key={q.label} type="button" className={`audit-preset${quickActive(q) ? ' is-active' : ''}`} onClick={() => applyQuick(q)}>
+              {q.label}
+            </button>
+          ))}
+          {savedViews.map((v) => (
+            <span key={v.name} className={`audit-saved${v.qs === currentQs ? ' is-active' : ''}`}>
+              <button type="button" onClick={() => setParams(new URLSearchParams(v.qs))}>★ {v.name}</button>
+              <button type="button" aria-label={`Forget saved view ${v.name}`} onClick={() => setSavedViews((cur) => cur.filter((x) => x.name !== v.name))}>×</button>
+            </span>
+          ))}
+          {filtersActive && <SaveViewButton onSave={saveView} />}
         </div>
 
         {chips.length > 0 && (
@@ -753,55 +1250,92 @@ export default function AuditLogs() {
       </Card>
 
       <Card>
-        {!loading && total != null && total > 0 && (
-          <div className="audit-list-head">
-            <span>Showing {fmtN(rows.length)} of {fmtN(total)} event{total === 1 ? '' : 's'}, newest first</span>
-            <span>Click an event for what changed; follow its links to trace a record, a person or a request.</span>
-          </div>
-        )}
-        {loading ? (
-          <div className="audit-placeholder">Loading audit trail…</div>
-        ) : days.length === 0 ? (
-          <div className="audit-placeholder">
-            {filtersActive ? (
-              <>
-                <div>No events match these filters.</div>
-                <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={clearAll}>Clear filters</button>
-              </>
-            ) : 'No audit records yet.'}
-          </div>
+        {view === 'people' ? (
+          <PeopleView data={people} loading={loading} sortKey={peopleSort} onSort={setPeopleSort} onOpenPerson={(p) => openPerson(p)} onOpenFlag={openPerson} />
         ) : (
           <>
-            <div className="audit-timeline">
-              {days.map((day) => (
-                <section className="audit-day" key={day.key}>
-                  <header className="audit-day-head">
-                    <span className="audit-day-label">{day.label}</span>
-                    <span className="audit-day-count">
-                      {day.groups.reduce((s, g) => s + g.items.length, 0)} events
-                    </span>
-                  </header>
-                  <div className="audit-day-body">
-                    {day.groups.map((group) => (
-                      <EventGroup
-                        key={group.id}
-                        group={group}
-                        expandedId={expandedId}
-                        onToggleEvent={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-                        onOpenFull={setFullRecord}
-                        onPivot={pivot}
-                      />
+            {!loading && total != null && total > 0 && (
+              <div className="audit-list-head">
+                <span>Showing {fmtN(rows.length)} of {fmtN(total)} event{total === 1 ? '' : 's'}, {order === 'asc' ? 'oldest' : 'newest'} first</span>
+                <div className="audit-list-tools">
+                  <button type="button" className="audit-preset" onClick={() => setFilter({ order: order === 'asc' ? '' : 'asc' })}>
+                    {order === 'asc' ? '↑ Oldest first' : '↓ Newest first'}
+                  </button>
+                  {view === 'timeline' && (
+                    <label className="audit-check">
+                      <input type="checkbox" checked={foldRepeats} onChange={(e) => setFoldRepeats(e.target.checked)} />
+                      Fold repeated events
+                    </label>
+                  )}
+                  {view === 'table' && (
+                    <MultiPicker
+                      label="Columns"
+                      buttonText="Columns"
+                      align="right"
+                      options={columnOptions}
+                      selected={columns}
+                      onChange={(next) => setColumns(TABLE_COLUMNS.map((c) => c.key).filter((k) => next.includes(k)))}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+            {loading ? (
+              <div className="audit-placeholder">Loading audit trail…</div>
+            ) : rows.length === 0 ? (
+              <div className="audit-placeholder">
+                {filtersActive ? (
+                  <>
+                    <div>No events match these filters.</div>
+                    <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={clearAll}>Clear filters</button>
+                  </>
+                ) : 'No audit records yet.'}
+              </div>
+            ) : (
+              <>
+                {view === 'table' ? (
+                  <EventTable
+                    rows={rows}
+                    columns={columns}
+                    order={order}
+                    onOrder={() => setFilter({ order: order === 'asc' ? '' : 'asc' })}
+                    onOpen={setFullRecord}
+                  />
+                ) : (
+                  <div className="audit-timeline">
+                    {days.map((day) => (
+                      <section className="audit-day" key={day.key}>
+                        <header className="audit-day-head">
+                          <span className="audit-day-label">{day.label}</span>
+                          <span className="audit-day-count">
+                            {day.groups.reduce((s, g) => s + g.items.length, 0)} events
+                          </span>
+                        </header>
+                        <div className="audit-day-body">
+                          {day.groups.map((group) => (
+                            <EventGroup
+                              key={group.id}
+                              group={group}
+                              ascending={order === 'asc'}
+                              expandedId={expandedId}
+                              onToggleEvent={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+                              onOpenFull={setFullRecord}
+                              onPivot={pivot}
+                            />
+                          ))}
+                        </div>
+                      </section>
                     ))}
                   </div>
-                </section>
-              ))}
-            </div>
-            {cursor && (
-              <div className="audit-more">
-                <button type="button" className="btn btn-outline" onClick={loadMore} disabled={loadingMore}>
-                  {loadingMore ? 'Loading…' : `Load older events (${fmtN(total - rows.length)} more)`}
-                </button>
-              </div>
+                )}
+                {cursor && (
+                  <div className="audit-more">
+                    <button type="button" className="btn btn-outline" onClick={loadMore} disabled={loadingMore}>
+                      {loadingMore ? 'Loading…' : `Load ${order === 'asc' ? 'later' : 'older'} events (${fmtN(total - rows.length)} more)`}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
