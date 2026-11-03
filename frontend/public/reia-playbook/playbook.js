@@ -2310,6 +2310,49 @@ function viewQuiz() {
     </div>`;
 }
 
+/* ───────────────────────── print ───────────────────────── */
+// On the portal and from disk the button prints. The hosted link runs the page in
+// a sandboxed frame where the browser ignores window.print(), so there it hands the
+// viewer this page as a file laid out for paper, which opens its own print dialog:
+// "Save as PDF" from there.
+const FRAMED = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+const DOWNLOADS = FRAMED && window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+let noteTimer = null;
+function note(text) {
+  let el = $('#note');
+  if (!el) { el = document.createElement('p'); el.id = 'note'; el.className = 'note'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.textContent = text; el.hidden = false;
+  clearTimeout(noteTimer); noteTimer = setTimeout(() => { el.hidden = true; }, 9000);
+}
+function printDoc(title) {
+  const css = $$('style').map((x) => x.textContent).join('\n');
+  // The print rules again, unconditionally, so the file on screen looks like the paper.
+  const paper = [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch (e) { return []; } })
+    .filter((r) => r.media && /\bprint\b/.test(r.media.mediaText)).map((r) => [...r.cssRules].map((x) => x.cssText).join('\n')).join('\n');
+  const fonts = $('link[rel="stylesheet"]');
+  const S = 'scr' + 'ipt'; // a closing tag spelled out would end this page's own script
+  return `<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>${fonts ? fonts.outerHTML : ''}<style>${css}\n${paper}
+@media screen{main{max-width:980px;margin:0 auto;padding:18px 16px 40px}}
+.pr-bar{margin:0;padding:10px 16px;background:#162F6A;color:#fff;font:15px var(--font-body);text-align:center}
+@media print{.pr-bar{display:none}}</style></head>
+<body><p class="pr-bar">Your browser’s print dialog opens on its own. Choose “Save as PDF” there, or press Ctrl+P (⌘P on a Mac).</p>
+<main>${app.innerHTML}</main>
+<${S}>addEventListener('load', function () { setTimeout(function () { window.print(); }, 600); });</${S}></body></html>`;
+}
+function printPage() {
+  closeDrawer(true); exitPlay();
+  if (!FRAMED) { window.print(); return; }
+  const title = `REIA Playbook - ${txt0($('h1'))}`;
+  DOWNLOADS.then((dl) => {
+    if (!dl) { note('This view cannot print. Open the Playbook on the portal, or its offline copy, and print from there.'); return; }
+    dl.save({ filename:`${title.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim()}.html`, data:printDoc(title) }).then(
+      () => note('Saved. Open the file: its print dialog opens by itself, and “Save as PDF” is there.'),
+      (e) => { if (!e || e.code !== 'declined') note(e && e.code === 'rate_limited' ? 'A save is already waiting for your answer.' : 'The file could not be saved here. Open the Playbook on the portal, or its offline copy, to print.'); });
+  });
+}
+const txt0 = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : 'page');
+
 /* ───────────────────────── events ───────────────────────── */
 document.addEventListener('click', (e) => {
   const t = e.target;
@@ -2323,7 +2366,7 @@ document.addEventListener('click', (e) => {
   if (meEl) { P.me = meEl.dataset.me; save(); if (current === 'find') paintFind(); else go(current, false); return; }
   const cyEl = t.closest('[data-cy]');
   if (cyEl) { const el = $('#cy-' + cyEl.dataset.cy); if (el) el.scrollIntoView({ block:'start' }); return; }
-  if (t.closest('[data-print]')) { closeDrawer(true); exitPlay(); window.print(); return; }
+  if (t.closest('[data-print]')) { printPage(); return; }
   const stepEl = t.closest('[data-step]');
   if (stepEl) { const [id, k] = stepEl.dataset.step.split(':'); const i = Number(k); if (play && play.id === id) { play.i = i; showStep(); } openDrawer(id, i); return; }
   const openEl = t.closest('[data-open]');

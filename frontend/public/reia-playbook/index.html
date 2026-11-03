@@ -552,11 +552,13 @@ body.playing .cy-step:not(.cur){opacity:.45}
 }
 /* Print: one mission or quest, every step written out in full. */
 .print-only{display:none}
+.note{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:45;margin:0;width:max-content;max-width:min(560px,calc(100% - 24px));background:var(--head-bg);color:var(--head-ink);border-radius:12px;padding:11px 16px;font-size:15px;box-shadow:0 12px 34px rgb(0 0 0 / .32)}
+.note[hidden]{display:none}
 @media print{
   @page{margin:14mm 12mm}
   html:root,html:root:not([data-theme="light"]),html:root[data-theme="dark"]{color-scheme:light;--bg:#fff;--surface:#fff;--surface-2:#F1F3F8;--ink:#111;--muted:#444;--line:#BFC6D4;--brand:#162F6A;--shadow:none}
   body{background:#fff;color:#111;font-size:12pt}
-  .top,.mnav,.lanes-wrap,.mact,.mfoot,.hud,.switch,.dlayer,.scrim,.me-bar-m,.blk,.panel.blk{display:none!important}
+  .top,.mnav,.lanes-wrap,.mact,.mfoot,.hud,.switch,.dlayer,.scrim,.me-bar-m,.blk,.panel.blk,.note{display:none!important}
   main{padding:0;max-width:none}
   .mhead{display:block}
   .mmeta{margin-top:12px;break-inside:avoid}
