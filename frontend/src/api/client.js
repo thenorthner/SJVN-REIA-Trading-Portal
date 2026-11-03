@@ -1273,12 +1273,14 @@ export const api = {
     listBillOfSupply: (params) => g('/billing/bill-of-supply', params),
     getBillOfSupply: (id) => g(`/billing/bill-of-supply/${id}`),
     createBillOfSupply: (body) => p('/billing/bill-of-supply', body),
-    cancelBillOfSupply: (id) => p(`/billing/bill-of-supply/${id}/cancel`, {}),
+    cancelBillOfSupply: (id, body) => p(`/billing/bill-of-supply/${id}/cancel`, body || {}),
     supplyBillReport: (params) => g('/billing/supply-bill-report', params),
   },
   billingSettlement: {
     listInvoices: (params) => g('/billing-settlement/invoices', params),
     generateInvoice: (body) => p('/billing-settlement/invoices/generate', body),
+    // A draft is issued to the client; netting counts issued bills only.
+    issueInvoice: (id) => p(`/trading-invoices/${id}/send`, {}),
     getLedger: (clientId) => g(`/billing-settlement/ledger/${clientId}`),
     getSoa: () => g('/billing-settlement/soa'),
     nettingPreview: (params) => g('/billing-settlement/netting/preview', params),

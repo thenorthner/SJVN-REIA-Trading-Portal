@@ -198,6 +198,24 @@
         "cd frontend && VITE_REIA_BETA=0 VITE_API_TARGET=http://localhost:4050 npx vite --port 5185 --strictPort"
       ],
       "port": 5185
+    },
+    {
+      "name": "backend-bill",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4060 node src/server.js"
+      ],
+      "port": 4060
+    },
+    {
+      "name": "frontend-bill",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_REIA_BETA=0 VITE_API_TARGET=http://localhost:4060 npx vite --port 5186 --strictPort"
+      ],
+      "port": 5186
     }
   ]
 }

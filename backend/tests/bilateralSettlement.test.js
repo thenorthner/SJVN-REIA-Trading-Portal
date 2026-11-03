@@ -174,13 +174,29 @@ describe('buildBilateralInvoice', () => {
     expect(inv.invoice_amount).toBe(20 * 1000 * 4.5 + 1200);
   });
 
-  it('leaves GST off unless it is asked for', () => {
+  it('leaves GST off unless it is asked for, and never puts it on energy', () => {
     addBlock({ block: '00:00-00:15', approved: 100, actual: 100 });
     expect(buildBilateralInvoice({ transaction_id: TX, bill_type: 'BILATERAL_ENERGY' }).gst_amount).toBe(0);
+    // Electricity is exempt (HSN 2716): asking for GST on an energy bill adds none, and says why.
     const withGst = buildBilateralInvoice({
       transaction_id: TX, bill_type: 'BILATERAL_ENERGY', options: { gst_applicable: true },
     });
-    expect(withGst.gst_amount).toBe(Math.round(112500 * 0.18));
+    expect(withGst.gst_amount).toBe(0);
+    expect(withGst.warnings.join(' ')).toMatch(/exempt from GST/);
+    // The fee bills are services, and carry it.
+    const sldc = buildBilateralInvoice({
+      transaction_id: TX, bill_type: 'BILATERAL_SLDC', options: { gst_applicable: true, amount: 5000 },
+    });
+    expect(sldc.gst_amount).toBe(900);
+  });
+
+  it('withholds TDS on the value of the supply, not on the GST added to it', () => {
+    addBlock({ block: '00:00-00:15', approved: 100, actual: 100 });
+    const sldc = buildBilateralInvoice({
+      transaction_id: TX, bill_type: 'BILATERAL_SLDC', options: { gst_applicable: true, amount: 5000, tds_rate: 2 },
+    });
+    expect(sldc.invoice_amount).toBe(5900);
+    expect(sldc.tds_deducted).toBe(100);
   });
 
   it('marks a bill provisional until every block is metered', () => {

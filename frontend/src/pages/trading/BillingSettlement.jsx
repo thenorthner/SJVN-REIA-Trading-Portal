@@ -8,7 +8,10 @@ import { DocumentManager } from '../../components/DocumentManager.jsx';
 import NettingModal from './NettingModal.jsx';
 import { showAlert, askConfirm, askText } from '../../lib/dialogs.js';
 
-const iso = (d) => d.toISOString().slice(0, 10);
+// Local calendar date: toISOString() is UTC and gave the day before for any
+// date built at local midnight east of Greenwich.
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const thisMonth = () => iso(new Date()).slice(0, 7);
 
 /** Whole calendar month, `offset` months from the current one. */
 function monthRange(offset) {
@@ -59,6 +62,7 @@ export default function BillingSettlement() {
     billing_period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
     delivery_date: '',
     reason_code: 'SCHEDULE_SHORTFALL_PURCHASE',
+    trading_invoice_id: '',
     quantum_mwh: '',
     rate_per_unit: '',
     tax_amount: '',
@@ -75,7 +79,7 @@ export default function BillingSettlement() {
   
   const [invForm, setInvForm] = useState({
     client_id: '', invoice_kind: 'EXCHANGE', trade_type: 'CLIENT_ACCOUNT', trade_date: '', settlement_date: '',
-    billing_period: '', quantum_mwh: '', exchange_fee: '', clearing_charges: '', sjvn_margin: '', 
+    billing_period: thisMonth(), quantum_mwh: '', exchange_fee: '', clearing_charges: '', sjvn_margin: '',
     transmission_charges: '', dsm_charges: '', gst_applicable: true
   });
   
@@ -143,6 +147,7 @@ export default function BillingSettlement() {
         billing_period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
         delivery_date: '',
         reason_code: 'SCHEDULE_SHORTFALL_PURCHASE',
+        trading_invoice_id: '',
         quantum_mwh: '',
         rate_per_unit: '',
         amount: '',
@@ -213,8 +218,33 @@ export default function BillingSettlement() {
       setShowGenerate(false);
       loadInvoices();
     } catch (err) {
-      showAlert("Failed to generate invoice");
+      // The API says what was wrong with the bill; a fixed message hid it.
+      showAlert(err.response?.data?.error || 'Failed to generate invoice');
     }
+  }
+
+  async function handleIssue(inv) {
+    if (!(await askConfirm(`Issue ${inv.invoice_no} to the client? An issued bill is counted as owed, and netting sets off against it.`))) return;
+    try {
+      await api.billingSettlement.issueInvoice(inv.id);
+      loadInvoices();
+    } catch (err) {
+      showAlert(err.response?.data?.error || 'Failed to issue the invoice');
+    }
+  }
+
+  // What is on screen, as a CSV the desk can open in Excel.
+  function exportInvoices() {
+    const cols = ['invoice_no', 'created_at', 'client_name', 'billing_period', 'invoice_kind', 'quantum_mwh',
+      'total_amount', 'gst_amount', 'tds_section', 'tds_amount', 'net_payable', 'status'];
+    const cell = (v) => (v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+    const csv = [cols.join(','), ...visibleInvoices.map((r) => cols.map((c) => cell(r[c])).join(','))].join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trading-invoices-${iso(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function handleNettingApplied(result) {
@@ -242,11 +272,10 @@ export default function BillingSettlement() {
     // invoice that lacks one reads as a real delivery period.
     { key: 'billing_period', label: 'Delivery Period', render: r => r.billing_period || '—' },
     { key: 'quantum_mwh', label: 'Billed Energy (kWh)', render: r => fmtNumber((r.quantum_mwh || 0) * 1000) },
-    { key: 'rate_per_unit', label: 'Tariff (₹/kWh)', render: r => `₹${r.rate_per_unit || '0.00'}` },
+    { key: 'rate_per_unit', label: 'Tariff (₹/kWh)', render: r => (r.rate_per_unit != null ? `₹${fmtNumber(r.rate_per_unit)}` : '—') },
     { key: 'taxable_value', label: 'Taxable Value', render: r => `₹${fmtNumber((r.total_amount || 0) - (r.gst_amount || 0))}` },
     { key: 'gst_amount', label: 'GST Amount', render: r => `₹${fmtNumber(r.gst_amount || 0)}` },
     { key: 'total_amount', label: 'Total Payable/Receivable', render: r => <span style={{fontWeight:'bold'}}>₹{fmtNumber(r.total_amount)}</span> },
-    { key: 'sap_doc', label: 'SAP Doc', render: r => <a href="#" style={{color: 'var(--on-blue)'}}>SAP-{r.invoice_no.substring(0,6)}</a> },
     { key: 'status', label: 'Status', render: r => {
         let type = 'neutral';
         let label = r.status;
@@ -256,7 +285,10 @@ export default function BillingSettlement() {
         else if (r.status === 'DRAFT') { type = 'primary'; label = 'Draft / Unbilled'; }
         return <Badge type={type}>{label}</Badge>;
     }},
-    { key: 'actions', label: 'Action', render: () => <button className="btn btn-sm" title="Download PDF" style={{padding: '2px 6px'}}>PDF</button> }
+    // A draft is not yet owed: issuing it is what puts it in front of the client.
+    { key: 'actions', label: 'Action', render: (r) => (r.status === 'DRAFT'
+      ? <WriteOnly><button className="btn btn-sm btn-outline" style={{ padding: '2px 8px' }} onClick={() => handleIssue(r)}>Issue</button></WriteOnly>
+      : null) },
   ];
 
   const ledgerColumns = [
@@ -425,6 +457,7 @@ export default function BillingSettlement() {
           { id: 'INVOICES', label: 'Invoices & Tax Statements' },
           { id: 'NOTES', label: 'Debit & Credit Notes (Reconciliation)' },
           { id: 'LEDGER', label: 'Bank & Pool Ledger' },
+          { id: 'SOA', label: 'Statements of Account' },
         ].map(t => (
           <button 
             key={t.id}
@@ -453,21 +486,21 @@ export default function BillingSettlement() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-from-delivery-date">From Delivery Date:</label>
+                <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-from-delivery-date">Invoice Date From:</label>
                 <input id="billingsettlement-from-delivery-date" type="date" className="input" value={invFilter.fromDate} onChange={e => setInvFilter({...invFilter, fromDate: e.target.value})} />
-                <div style={{ marginTop: 4, display: 'flex', gap: 5 }}>
+                <div style={{ marginTop: 4, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-sm" style={{fontSize: 14, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...monthRange(0)})}>This Month</button>
                   <button type="button" className="btn btn-sm" style={{fontSize: 14, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...monthRange(-1)})}>Last Month</button>
                   <button type="button" className="btn btn-sm" style={{fontSize: 14, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...financialYearRange()})}>FY {financialYearLabel()}</button>
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-to-delivery-date">To Delivery Date:</label>
+                <label style={{ display: 'block', fontSize: 15, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-to-delivery-date">Invoice Date To:</label>
                 <input id="billingsettlement-to-delivery-date" type="date" className="input" value={invFilter.toDate} onChange={e => setInvFilter({...invFilter, toDate: e.target.value})} />
               </div>
+              {/* The filters apply as they are changed; there is no separate search. */}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-primary">[ Search ]</button>
-                <button className="btn" style={{ background: '#28a745', color: '#fff' }}>[ EXCEL v ] Export File</button>
+                <button type="button" className="btn btn-outline" onClick={exportInvoices} disabled={!visibleInvoices.length}>Export CSV</button>
               </div>
             </div>
             {visibleInvoices.length !== invoices.length && (
@@ -564,6 +597,8 @@ export default function BillingSettlement() {
                   onChange={(e) => setNoteFilter({ ...noteFilter, status: e.target.value })}
                 >
                   <option value="">All Statuses</option>
+                  <option value="DRAFT">DRAFT (awaiting approval)</option>
+                  <option value="REJECTED">REJECTED</option>
                   <option value="ISSUED">ISSUED</option>
                   <option value="SETTLED">SETTLED</option>
                   <option value="CANCELLED">CANCELLED</option>
@@ -636,32 +671,36 @@ export default function BillingSettlement() {
                 <input type="date" className="input" value={invForm.trade_date} onChange={e => setInvForm({...invForm, trade_date: e.target.value})} required />
               </Field>
               <Field label="Settlement Date (T+x)" required>
-                <input type="date" className="input" value={invForm.settlement_date} onChange={e => setInvForm({...invForm, settlement_date: e.target.value})} required />
+                <input type="date" className="input" min={invForm.trade_date || undefined} value={invForm.settlement_date} onChange={e => setInvForm({...invForm, settlement_date: e.target.value})} required />
+              </Field>
+              {/* The month the bill belongs to: its number, and netting for that month, are read from it. */}
+              <Field label="Billing Month" required>
+                <input type="month" className="input" value={invForm.billing_period} onChange={e => setInvForm({...invForm, billing_period: e.target.value})} required />
               </Field>
             </div>
 
             <h4 style={{ marginBottom: 10 }}>Charges Breakdown</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15, marginBottom: 20 }}>
               <Field label="Quantum (MWh)" required>
-                <input type="number" step="0.1" className="input" value={invForm.quantum_mwh} onChange={e => setInvForm({...invForm, quantum_mwh: e.target.value})} required />
+                <input type="number" step="0.1" min="0" className="input" value={invForm.quantum_mwh} onChange={e => setInvForm({...invForm, quantum_mwh: e.target.value})} required />
               </Field>
               <Field label="SJVN Margin (₹)" required>
-                <input type="number" step="0.01" className="input" value={invForm.sjvn_margin} onChange={e => setInvForm({...invForm, sjvn_margin: e.target.value})} required />
+                <input type="number" step="0.01" min="0" className="input" value={invForm.sjvn_margin} onChange={e => setInvForm({...invForm, sjvn_margin: e.target.value})} required />
               </Field>
               
               {invForm.invoice_kind === 'EXCHANGE' ? (
                 <>
                   <Field label="Exchange Fee (₹)">
-                    <input type="number" step="0.01" className="input" value={invForm.exchange_fee} onChange={e => setInvForm({...invForm, exchange_fee: e.target.value})} />
+                    <input type="number" step="0.01" min="0" className="input" value={invForm.exchange_fee} onChange={e => setInvForm({...invForm, exchange_fee: e.target.value})} />
                   </Field>
                   <Field label="Clearing Charges (₹)">
-                    <input type="number" step="0.01" className="input" value={invForm.clearing_charges} onChange={e => setInvForm({...invForm, clearing_charges: e.target.value})} />
+                    <input type="number" step="0.01" min="0" className="input" value={invForm.clearing_charges} onChange={e => setInvForm({...invForm, clearing_charges: e.target.value})} />
                   </Field>
                 </>
               ) : (
                 <>
                   <Field label="Transmission Charges (₹)">
-                    <input type="number" step="0.01" className="input" value={invForm.transmission_charges} onChange={e => setInvForm({...invForm, transmission_charges: e.target.value})} />
+                    <input type="number" step="0.01" min="0" className="input" value={invForm.transmission_charges} onChange={e => setInvForm({...invForm, transmission_charges: e.target.value})} />
                   </Field>
                   <Field label="DSM Charges (₹)">
                     <input type="number" step="0.01" className="input" value={invForm.dsm_charges} onChange={e => setInvForm({...invForm, dsm_charges: e.target.value})} />
@@ -701,7 +740,7 @@ export default function BillingSettlement() {
                   className="input"
                   required
                   value={noteForm.client_id}
-                  onChange={(e) => setNoteForm({ ...noteForm, client_id: e.target.value })}
+                  onChange={(e) => setNoteForm({ ...noteForm, client_id: e.target.value, trading_invoice_id: '' })}
                 >
                   <option value="">Select Client...</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -730,6 +769,31 @@ export default function BillingSettlement() {
                   value={noteForm.billing_period}
                   onChange={(e) => setNoteForm({ ...noteForm, billing_period: e.target.value })}
                 />
+              </Field>
+
+              {/* A note adjusts a bill; the API refuses one that names none. */}
+              <Field label="Against Invoice" required>
+                <select
+                  className="input"
+                  required
+                  disabled={!noteForm.client_id}
+                  value={noteForm.trading_invoice_id}
+                  onChange={(e) => {
+                    // The note adjusts that invoice, so it falls in the invoice's period.
+                    const inv = invoices.find((i) => i.id === e.target.value);
+                    setNoteForm({ ...noteForm, trading_invoice_id: e.target.value, ...(inv?.billing_period ? { billing_period: inv.billing_period } : {}) });
+                  }}
+                >
+                  <option value="">
+                    {!noteForm.client_id ? 'Select the client first'
+                      : invoices.some((i) => i.client_id === noteForm.client_id) ? 'Select the invoice…' : 'This client has no invoice yet'}
+                  </option>
+                  {invoices.filter((i) => i.client_id === noteForm.client_id).map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.invoice_no} · {i.billing_period || '—'} · ₹{fmtNumber(i.total_amount)}
+                    </option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="Delivery / Trade Date">

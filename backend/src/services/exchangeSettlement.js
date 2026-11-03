@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { dropBilledOnce, gstBase } from './billCharges.js';
 import { computeOaCharges } from './oaCharges.js';
 import { getEffectiveRate } from './rateMaster.js';
 
@@ -196,13 +197,18 @@ function energyBillLines(contract, s, opts = {}) {
   // On a buy the margin is charged to the client; on a sell it is retained out
   // of the proceeds, so it lands on the bill with the opposite sign.
   if (s.money.trading_margin) {
-    lines.push(line(
-      contract.side === 'Buyer' ? 'Trading margin' : 'Trading margin retained',
-      'MWh @ Rs/kWh',
-      s.cleared.cleared_mwh,
-      s.rates.trading_margin_per_unit,
-      contract.side === 'Buyer' ? s.money.trading_margin : -s.money.trading_margin,
-    ));
+    lines.push({
+      ...line(
+        contract.side === 'Buyer' ? 'Trading margin' : 'Trading margin retained',
+        'MWh @ Rs/kWh',
+        s.cleared.cleared_mwh,
+        s.rates.trading_margin_per_unit,
+        contract.side === 'Buyer' ? s.money.trading_margin : -s.money.trading_margin,
+      ),
+      // The margin is the desk's service, so it is the one taxable line on an
+      // energy bill; the energy itself is exempt.
+      gst_taxable: true,
+    });
   }
   // Opt-in, the same way the bill screen asks for it on the bilateral side.
   if (opts.include_lps && num(contract.late_payment_surcharge)) {
@@ -279,13 +285,19 @@ export function buildExchangeInvoice({ contract_id, bill_type, from = null, to =
     warnings = [...warnings, ...built.warnings];
   }
 
+  const once = dropBilledOnce(lines, options.already_billed);
+  lines = once.lines;
+  warnings = [...warnings, ...once.warnings];
+
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
   const gstApplicable = Boolean(options.gst_applicable);
-  const gst = gstApplicable ? rupees(subtotal * GST_RATE) : 0;
+  const gst = gstApplicable ? rupees(gstBase(bill_type === 'EXCHANGE_ENERGY', lines) * GST_RATE) : 0;
   const invoiceAmount = subtotal + gst;
 
   const tdsPct = options.tds_rate != null ? num(options.tds_rate) : DEFAULT_TDS_PCT[bill_type];
-  const tdsDeducted = rupees(invoiceAmount * (tdsPct / 100));
+  // Withheld on the value of the supply, not on the GST charged on it (CBDT
+  // Circulars 23/2017 and 13/2021).
+  const tdsDeducted = rupees(subtotal * (tdsPct / 100));
 
   return {
     contract_id: contract.id,

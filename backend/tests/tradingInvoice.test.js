@@ -61,8 +61,9 @@ describe('pricing rules, shared by both shapes', () => {
     expect(p.subtotal).toBe(38000);
     expect(p.total_amount).toBe(38000);           // face value gross, not 38000 - tds
     expect(p.tds_section).toBe('194C');
-    expect(p.tds_amount).toBe(3800);
-    expect(p.net_payable).toBe(34200);
+    // 194C on a company is 2% (it is 1% on an individual or HUF), not 10%.
+    expect(p.tds_amount).toBe(760);
+    expect(p.net_payable).toBe(37240);
   });
 
   it('sums a bilateral settlement bill from its own legs', () => {
@@ -109,7 +110,7 @@ describe('createTradingInvoice', () => {
   it('stores the withholding fields whichever route created it', () => {
     const inv = createTradingInvoice({ client_id: 'TCL-TEST', invoice_kind: 'EXCHANGE', billing_period: '2026-05', sjvn_margin: 30000 });
     expect(inv.tds_section).toBe('194C');
-    expect(inv.tds_rate).toBe(0.10);
+    expect(inv.tds_rate).toBe(0.02);
     expect(inv.net_payable).toBe(inv.total_amount - inv.tds_amount);
   });
 
@@ -140,5 +141,25 @@ describe('createTradingInvoice', () => {
     expect(() => createTradingInvoice({ client_id: 'TCL-TEST', invoice_kind: 'MYSTERY', billing_period: '2026-05' }))
       .toThrow(/Unknown invoice_kind/);
     expect(db.prepare('SELECT COUNT(*) c FROM trading_invoices').get().c).toBe(0);
+  });
+
+  it('refuses a bill it cannot stand behind', () => {
+    const make = (over) => () => createTradingInvoice({
+      client_id: 'TCL-TEST', invoice_kind: 'EXCHANGE', billing_period: '2026-05', sjvn_margin: 1000, ...over,
+    });
+    expect(make({ billing_period: '' })).toThrow(/billing_period/);
+    expect(make({ sjvn_margin: -99999 })).toThrow(/sjvn_margin must be a number, zero or more/);
+    expect(make({ sjvn_margin: 0 })).toThrow(/Nothing to bill/);
+    expect(make({ trade_date: '2026-05-20', settlement_date: '2026-05-01' })).toThrow(/settlement_date cannot be before/);
+    expect(make({ trade_date: '2026-02-30' })).toThrow(/real date/);
+  });
+
+  it('keeps the ledger balance whole when an invoice is back-dated', () => {
+    createTradingInvoice({ client_id: 'TCL-TEST', invoice_kind: 'EXCHANGE', billing_period: '2026-05', sjvn_margin: 10000, trade_date: '2026-05-20' }, { postLedger: true });
+    createTradingInvoice({ client_id: 'TCL-TEST', invoice_kind: 'EXCHANGE', billing_period: '2026-05', sjvn_margin: 10000, trade_date: '2026-05-02' }, { postLedger: true });
+    createTradingInvoice({ client_id: 'TCL-TEST', invoice_kind: 'EXCHANGE', billing_period: '2026-05', sjvn_margin: 10000, trade_date: '2026-05-25' }, { postLedger: true });
+    const last = db.prepare(`SELECT running_balance FROM client_ledgers WHERE client_id = 'TCL-TEST' ORDER BY timestamp DESC, rowid DESC LIMIT 1`).get();
+    const sum = db.prepare(`SELECT SUM(debit) - SUM(credit) AS s FROM client_ledgers WHERE client_id = 'TCL-TEST'`).get();
+    expect(last.running_balance).toBe(sum.s);
   });
 });

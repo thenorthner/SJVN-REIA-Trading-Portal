@@ -2,6 +2,7 @@ import db from '../db/index.js';
 import { newId, genSjvnInvoiceNo, clientCodeFor } from '../util.js';
 import { buildBilateralInvoice, BILATERAL_BILL_TYPES } from './bilateralSettlement.js';
 import { buildExchangeInvoice, EXCHANGE_BILL_TYPES } from './exchangeSettlement.js';
+import { isOneOff } from './billCharges.js';
 
 // One place where a settled bill is priced and written into the View Bills
 // register, whichever desk it came from.
@@ -28,13 +29,53 @@ export const BILL_TYPES = {
 
 export const ALL_BILL_TYPES = Object.keys(BILL_TYPES);
 
+/** A bill the register already holds that this one would bill again. */
+export class BillingConflict extends Error {
+  constructor(message) {
+    super(message);
+    this.status = 409;
+  }
+}
+
+/**
+ * The one-off charges earlier bills of this type under the contract already
+ * carried, by description, with the invoice that carried each. A bill for the
+ * very same period is left out: it is the one a final bill replaces, or the
+ * duplicate the register refuses anyway.
+ */
+function billedOnce(spec, bill_type, contract_id, buyer, from, to) {
+  const column = spec.kind === 'BILATERAL' ? 'bilateral_id' : 'exchange_contract_id';
+  const rows = db.prepare(`
+    SELECT invoice_no, breakup_json, supply_from_date, supply_to_date FROM view_bill_invoices
+    WHERE ${column} = ? AND bill_type = ? AND status = 'ACTIVE'
+      AND IFNULL(bilateral_buyer, '') = IFNULL(?, '')
+    ORDER BY created_at
+  `).all(contract_id, bill_type, buyer || null);
+  const out = {};
+  for (const r of rows) {
+    if ((r.supply_from_date || '') === (from || '') && (r.supply_to_date || '') === (to || '')) continue;
+    let items = [];
+    try { items = JSON.parse(r.breakup_json || '{}').line_items || []; } catch { /* an unreadable breakup carried nothing we can see */ }
+    for (const l of items) {
+      if (isOneOff(l) && l.amount > 0 && !out[l.description]) out[l.description] = r.invoice_no;
+    }
+  }
+  return out;
+}
+
 /** Price a bill without writing it, routing to the engine behind its type. */
 export function priceBill({ bill_type, contract_id, from = null, to = null, options = {} }) {
   const spec = BILL_TYPES[bill_type];
   if (!spec) throw new Error(`bill_type must be one of: ${ALL_BILL_TYPES.join(', ')}`);
-  return spec.kind === 'BILATERAL'
-    ? buildBilateralInvoice({ transaction_id: contract_id, bill_type, from, to, options })
-    : buildExchangeInvoice({ contract_id, bill_type, from, to, options });
+  const price = (opts) => (spec.kind === 'BILATERAL'
+    ? buildBilateralInvoice({ transaction_id: contract_id, bill_type, from, to, options: opts })
+    : buildExchangeInvoice({ contract_id, bill_type, from, to, options: opts }));
+
+  // Priced once to learn the period the bill actually covers, then again
+  // without any one-off charge an earlier bill has already carried.
+  const first = price(options);
+  const already = billedOnce(spec, bill_type, contract_id, first.buyer, first.supply_from_date, first.supply_to_date);
+  return Object.keys(already).length ? price({ ...options, already_billed: already }) : first;
 }
 
 /**
@@ -80,7 +121,28 @@ export function raiseInvoice({
       LIMIT 1
     `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null, basis, priced.buyer || null);
     if (duplicate) {
-      throw new Error(`${duplicate.invoice_no} already bills this ${bill_type} period as ${basis}`);
+      throw new BillingConflict(`${duplicate.invoice_no} already bills this ${bill_type} period as ${basis}`);
+    }
+
+    // A different period that shares a day with an active bill would bill that
+    // day's energy twice. The one exception is the provisional bill for this
+    // exact period, which a final bill replaces below.
+    if (priced.supply_from_date && priced.supply_to_date) {
+      const overlap = db.prepare(`
+        SELECT invoice_no, supply_from_date, supply_to_date, settlement_basis FROM view_bill_invoices
+        WHERE ${sourceColumn} = ? AND bill_type = ? AND status = 'ACTIVE'
+          AND IFNULL(bilateral_buyer, '') = IFNULL(?, '')
+          AND supply_from_date IS NOT NULL AND supply_to_date IS NOT NULL
+          AND supply_from_date <= ? AND supply_to_date >= ?
+          AND NOT (? = 'FINAL' AND settlement_basis = 'PROVISIONAL'
+                   AND supply_from_date = ? AND supply_to_date = ?)
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(sourceId, bill_type, priced.buyer || null, priced.supply_to_date, priced.supply_from_date,
+        basis, priced.supply_from_date, priced.supply_to_date);
+      if (overlap) {
+        throw new BillingConflict(`${overlap.invoice_no} already bills ${overlap.supply_from_date} to ${overlap.supply_to_date} (${overlap.settlement_basis}) on this contract; a ${bill_type} bill for ${priced.supply_from_date} to ${priced.supply_to_date} would bill those days again`);
+      }
     }
   }
 
@@ -154,8 +216,11 @@ export function raiseInvoice({
  */
 export function billingObjection(priced, { allow_zero_volume = false } = {}) {
   if (!priced.line_items.length || priced.invoice_amount === 0) {
+    const billedBefore = priced.warnings.filter((w) => /billed once already/.test(w));
     return {
-      error: 'Nothing to bill for this period — no settled energy and no priceable charges',
+      error: billedBefore.length
+        ? `Nothing left to bill: ${billedBefore.join('; ')}`
+        : 'Nothing to bill for this period — no settled energy and no priceable charges',
       warnings: priced.warnings,
     };
   }

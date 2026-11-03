@@ -152,3 +152,27 @@ describe('the period summary', () => {
     expect(sum.awaiting_approval).toBe(1);
   });
 });
+
+describe('what a note may be raised against', () => {
+  it('refuses a period that is not a month', async () => {
+    const r = await raise({ billing_period: 'hello' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/YYYY-MM/);
+  });
+
+  it("refuses a note for one client against another client's invoice", async () => {
+    const otherId = newId('TCL');
+    db.prepare(`INSERT INTO trading_clients (id, name, client_type, status) VALUES (?, 'Other Discom', 'DISCOM', 'ACTIVE')`).run(otherId);
+    const r = await raise({ client_id: otherId });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/is not Other Discom's invoice/);
+  });
+
+  it('caps credit against an invoice at what the invoice was for', async () => {
+    expect((await raise({ note_type: 'CREDIT', amount: 400000 })).status).toBe(201);
+    const over = await raise({ note_type: 'CREDIT', amount: 150000 });
+    expect(over.status).toBe(400);
+    expect(over.body.error).toMatch(/at most ₹100000/);
+    expect((await raise({ note_type: 'CREDIT', amount: 100000 })).status).toBe(201);
+  });
+});

@@ -1800,6 +1800,20 @@ function migrateGeneratorBillingSchema() {
       ALTER TABLE generator_bills ADD COLUMN ecr_source TEXT NOT NULL DEFAULT 'MANUAL';
     `);
   }
+  // The CERC formula's own terms (3-Nov-2026): the ECR is AFC's energy half over
+  // design energy net of auxiliary consumption and free energy to the home
+  // state, and a beneficiary bears the capacity charge in its allocated share.
+  // Bills raised before these existed carry NULL: the old formula, one share.
+  for (const [name, ddl] of [
+    ['aux_consumption_pct', 'REAL'],
+    ['free_energy_pct', 'REAL'],
+    ['allocation_pct', 'REAL'],
+    ['created_by_id', 'TEXT'],
+    ['status_changed_by_id', 'TEXT'],
+    ['status_changed_at', 'TEXT'],
+  ]) {
+    if (!cols.includes(name)) db.exec(`ALTER TABLE generator_bills ADD COLUMN ${name} ${ddl};`);
+  }
 
   // One bill per station + beneficiary + month. Existing duplicates would make
   // the index fail, so report them and leave the data alone rather than losing a
@@ -1826,9 +1840,26 @@ try {
   console.error('Generator billing migration failed:', e.message);
 }
 
+/** A cancelled bill of supply says why, by whom and when (3-Nov-2026). */
+function migrateBillOfSupplyCancel() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('bill_of_supply')) return;
+  const cols = db.prepare('PRAGMA table_info(bill_of_supply)').all().map((c) => c.name);
+  for (const name of ['cancel_reason', 'cancelled_by', 'cancelled_at']) {
+    if (!cols.includes(name)) db.exec(`ALTER TABLE bill_of_supply ADD COLUMN ${name} TEXT;`);
+  }
+}
+
+try {
+  migrateBillOfSupplyCancel();
+} catch (e) {
+  console.error('Bill of supply migration failed:', e.message);
+}
+
 /**
  * TDS withholding on trading invoices. Energy sales attract Section 194Q (0.1%
- * of gross value); open-access / transmission charges attract 194C (10%). These
+ * of gross value); open-access / transmission charges attract 194C (2% for a
+ * company, 1% for an individual or HUF). These
  * columns let the desk record the deduction on the invoice itself so the buyer's
  * net remittance and the desk's TDS liability both reconcile against the ISET
  * ledger. Added column-by-column so a partial upgrade still completes.

@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
+import { BOS_UNIT_MWH } from '../services/billCharges.js';
 import { PENDING_REPORT_CATALOG, ALL_PENDING_KINDS, pendingReportRows } from '../data/pendingReportCatalog.js';
 import multer from 'multer';
 import { processCapacityBuffer, processSupplyBuffer } from '../services/ceaScraper.js';
@@ -215,7 +216,9 @@ function listKind(kind, q) {
     // catalog's sample rows, now that the entry screen actually keeps what it
     // is given.
     case 'supply-bill-report': {
-      let sql = "SELECT * FROM bill_of_supply WHERE status != 'CANCELLED'";
+      // Cancelled bills stay listed with their status: the register accounts
+      // for every number issued.
+      let sql = 'SELECT * FROM bill_of_supply WHERE 1=1';
       const params = [];
       if (q) {
         sql += ' AND (bill_no LIKE ? OR client_name LIKE ?)';
@@ -229,7 +232,8 @@ function listKind(kind, q) {
         bill_date: r.invoice_date,
         supply_from: r.supply_from_date,
         supply_to: r.supply_to_date,
-        energy_mwh: r.quantity,
+        // In MWh whatever unit the bill was raised in.
+        energy_mwh: Number(((Number(r.quantity) || 0) * (BOS_UNIT_MWH[r.unit] ?? 1)).toFixed(3)),
         amount_rs: r.amount_after_rebate,
         status: r.status,
       }));

@@ -1,5 +1,6 @@
 import db from '../db/index.js';
 import { computeOaCharges } from './oaCharges.js';
+import { dropBilledOnce, gstBase } from './billCharges.js';
 import { getEffectiveRate } from './rateMaster.js';
 import { rateSegments, splitSets, sharesOn } from './bilateralRevisions.js';
 
@@ -433,14 +434,24 @@ export function buildBilateralInvoice({ transaction_id, bill_type, from = null, 
     warnings = built.warnings;
   }
 
+  const once = dropBilledOnce(lines, options.already_billed);
+  lines = once.lines;
+  warnings = [...warnings, ...once.warnings];
+
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
   const gstApplicable = Boolean(options.gst_applicable);
-  const gst = gstApplicable ? rupees(subtotal * GST_RATE) : 0;
+  // Every line of a bilateral energy bill is energy, which is exempt (HSN 2716).
+  const gst = gstApplicable ? rupees(gstBase(bill_type === 'BILATERAL_ENERGY', lines) * GST_RATE) : 0;
+  if (gstApplicable && bill_type === 'BILATERAL_ENERGY') {
+    warnings = [...warnings, 'Electricity is exempt from GST (HSN 2716), so no GST is charged on an energy bill'];
+  }
   const invoiceAmount = subtotal + gst;
 
   const tdsPct = options.tds_rate != null ? num(options.tds_rate) : DEFAULT_TDS_PCT[bill_type];
-  // The register states the rate as a percentage, so the deduction divides by 100.
-  const tdsDeducted = rupees(invoiceAmount * (tdsPct / 100));
+  // The register states the rate as a percentage, so the deduction divides by
+  // 100. It is withheld on the value of the supply, not on the GST charged on
+  // it (CBDT Circulars 23/2017 and 13/2021).
+  const tdsDeducted = rupees(subtotal * (tdsPct / 100));
 
   if (bill_type === 'BILATERAL_ENERGY' && settlement.rates.is_average) {
     warnings = [...warnings, `The rate was revised within the period: the bill charges ${settlement.rate_segments.length} rates line by line, and the register's single rate is their average weighted by energy`];

@@ -1,12 +1,14 @@
 import express from 'express';
 import { db } from '../db/index.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 import { secureLogAudit } from '../auditEngine.js';
 import { seedInvoiceCounters } from '../util.js';
 import { createTradingInvoice } from '../services/tradingInvoice.js';
 import { nettingPosition, applyNetting, NettingError } from '../services/tradingNetting.js';
-import { clientScope, isTradingClient, mayUseClient, tradingClientIdFor } from '../services/tradingClientScope.js';
+import {
+  clientScope, isTradingClient, mayUseClient, tradingClientIdFor, TRADING_CLIENT_ROLES,
+} from '../services/tradingClientScope.js';
 
 seedInvoiceCounters();
 
@@ -17,9 +19,11 @@ function newId(prefix) {
   return `${prefix}-${uuidv4().replace(/-/g, '').slice(0, 16)}`;
 }
 
-// Ensure the user has trading or admin rights
+// The desk, Finance and management read; a client reads its own. The list was
+// typed out by hand and left out TRADING_ADMIN, MANAGEMENT and the client's
+// maker and checker, who could all open the screen and then saw it empty.
 router.use(requireAuth);
-router.use(requireRole('SJVN_ADMIN', 'TRADING_USER', 'TRADING_CLIENT', 'FINANCE_USER'));
+router.use(requireRole(...new Set([...ROLE_GROUPS.TRADING_ALL, ...TRADING_CLIENT_ROLES])));
 
 // 1. Invoices
 router.get('/invoices', (req, res) => {
@@ -56,7 +60,7 @@ router.get('/invoices', (req, res) => {
 });
 
 // Writes are the trading desk's and Finance's; SJVN_ADMIN reads this register only.
-const SETTLEMENT_WRITE = ['TRADING_USER', 'FINANCE_USER'];
+const SETTLEMENT_WRITE = [...ROLE_GROUPS.TRADING_WRITE, 'FINANCE_USER'];
 router.post('/invoices/generate', requireRole(...SETTLEMENT_WRITE, 'TRADING_CLIENT'), (req, res) => {
   if (isTradingClient(req.user)) return res.status(403).json({ error: 'Clients cannot generate invoices' });
   try {

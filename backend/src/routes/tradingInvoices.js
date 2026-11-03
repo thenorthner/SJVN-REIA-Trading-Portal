@@ -56,6 +56,9 @@ router.post('/generate', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
 router.post('/:id/send', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const inv = db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Not found' });
+  // Only a draft is issued. Sending again put a paid or part-paid bill back to
+  // SENT, and it reappeared as owed.
+  if (inv.status !== 'DRAFT') return res.status(409).json({ error: `${inv.invoice_no} is ${inv.status}; only a draft is issued` });
   db.prepare(`UPDATE trading_invoices SET status = 'SENT' WHERE id = ?`).run(inv.id);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SEND', module: 'TRADING', entityType: 'trading_invoice', entityId: inv.id });
   res.json(withClient(db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(inv.id)));

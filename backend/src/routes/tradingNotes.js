@@ -179,8 +179,8 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   const noteType = b.note_type === 'CREDIT' ? 'CREDIT' : b.note_type === 'DEBIT' ? 'DEBIT' : null;
   if (!noteType) return res.status(400).json({ error: "note_type must be 'DEBIT' or 'CREDIT'" });
 
-  if (!String(b.billing_period || '').trim()) {
-    return res.status(400).json({ error: 'billing_period is required' });
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(b.billing_period || '').trim())) {
+    return res.status(400).json({ error: 'billing_period must be the month the note adjusts, YYYY-MM' });
   }
 
   const reason = REASONS.includes(b.reason_code) ? b.reason_code : 'OTHER';
@@ -195,16 +195,40 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   if (!Number.isFinite(tax)) return res.status(400).json({ error: 'tax_amount must be a number' });
   const amount = money(taxable + tax);
 
+  let linkedValue = null;
   if (b.trading_invoice_id) {
-    const inv = db.prepare('SELECT id FROM trading_invoices WHERE id = ?').get(b.trading_invoice_id);
+    const inv = db.prepare('SELECT id, invoice_no, client_id, total_amount FROM trading_invoices WHERE id = ?').get(b.trading_invoice_id);
     if (!inv) return res.status(404).json({ error: 'Linked trading invoice not found' });
+    // A note for one client against another client's invoice posted to the
+    // first client's ledger an adjustment of a bill it never had.
+    if (inv.client_id !== client.id) {
+      return res.status(400).json({ error: `${inv.invoice_no} is not ${client.name}'s invoice` });
+    }
+    linkedValue = { invoice_no: inv.invoice_no, value: Number(inv.total_amount) || 0, column: 'trading_invoice_id', id: inv.id };
   }
   if (b.view_bill_invoice_id) {
-    const inv = db.prepare('SELECT id, client_name, supply_from_date FROM view_bill_invoices WHERE id = ?').get(b.view_bill_invoice_id);
+    const inv = db.prepare('SELECT id, invoice_no, client_name, supply_from_date, invoice_amount FROM view_bill_invoices WHERE id = ?').get(b.view_bill_invoice_id);
     if (!inv) return res.status(404).json({ error: 'Linked View Bills invoice not found' });
+    linkedValue = linkedValue || { invoice_no: inv.invoice_no, value: Number(inv.invoice_amount) || 0, column: 'view_bill_invoice_id', id: inv.id };
   }
   if (!b.trading_invoice_id && !b.view_bill_invoice_id) {
     return res.status(400).json({ error: 'Link the note to a trading invoice or a View Bills invoice' });
+  }
+
+  // A credit note reduces the bill it is raised against (CGST Act s.34); it
+  // cannot take back more than the bill was for, counting the credit notes
+  // already raised or pending against it.
+  if (noteType === 'CREDIT' && linkedValue) {
+    const credited = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) AS s FROM trading_debit_credit_notes
+      WHERE ${linkedValue.column} = ? AND note_type = 'CREDIT' AND status IN ('DRAFT', 'ISSUED', 'SETTLED')
+    `).get(linkedValue.id).s;
+    const room = money(linkedValue.value - credited);
+    if (amount > room) {
+      return res.status(400).json({
+        error: `${linkedValue.invoice_no} is for ₹${money(linkedValue.value)}${credited ? ` and ₹${money(credited)} is already credited against it` : ''}; a credit note against it can be at most ₹${Math.max(0, room)}`,
+      });
+    }
   }
 
   const id = newId('TDN');

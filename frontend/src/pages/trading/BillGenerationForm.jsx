@@ -21,8 +21,17 @@ const EMPTY = {
   to: '',
   lps: 'No',
   gst_applicable: false,
+  allow_zero_volume: false,
   invoice_date: '',
   remarks: '',
+};
+
+// Electricity is exempt from GST (HSN 2716). A bilateral energy bill is all
+// energy, so it has nothing to charge GST on; on an exchange energy bill only
+// the desk's trading margin is a taxable service.
+const GST_NOTE = {
+  BILATERAL_ENERGY: 'Electricity is exempt from GST (HSN 2716) — an energy bill carries none',
+  EXCHANGE_ENERGY: 'Charge GST at 18% on the trading margin (the energy itself is exempt)',
 };
 
 export default function BillGenerationForm() {
@@ -59,7 +68,11 @@ export default function BillGenerationForm() {
   );
 
   const set = (field, value) => {
-    setForm((f) => ({ ...f, [field]: value }));
+    setForm((f) => ({
+      ...f,
+      [field]: value,
+      ...(['from', 'to', 'contract_id', 'bill_type', 'client_name'].includes(field) ? { allow_zero_volume: false } : {}),
+    }));
     setError('');
     setRaised(null);
     if (['from', 'to', 'lps', 'gst_applicable', 'contract_id'].includes(field)) setPreview(null);
@@ -70,8 +83,9 @@ export default function BillGenerationForm() {
       bill_type: form.bill_type,
       contract_id: form.contract_id,
       lps: form.lps,
-      gst_applicable: form.gst_applicable,
+      gst_applicable: form.bill_type === 'BILATERAL_ENERGY' ? false : form.gst_applicable,
     };
+    if (form.allow_zero_volume) b.allow_zero_volume = true;
     if (form.from) b.from = form.from;
     if (form.to) b.to = form.to;
     if (form.invoice_date) b.invoice_date = form.invoice_date;
@@ -79,12 +93,12 @@ export default function BillGenerationForm() {
     return b;
   }
 
-  async function runPreview() {
+  async function runPreview(over = {}) {
     setBusy('preview');
     setError('');
     setRaised(null);
     try {
-      setPreview(await api.billing.preview(body()));
+      setPreview(await api.billing.preview({ ...body(), ...over }));
     } catch (err) {
       setPreview(null);
       setError(err.response?.data?.error || 'Could not price this bill.');
@@ -101,7 +115,7 @@ export default function BillGenerationForm() {
       const inv = await api.billing.generate(body());
       setRaised(inv);
       setPreview(null);
-      setForm((f) => ({ ...f, contract_id: '', from: '', to: '' }));
+      setForm((f) => ({ ...f, contract_id: '', from: '', to: '', allow_zero_volume: false }));
     } catch (err) {
       const d = err.response?.data || {};
       setError(d.error || 'Failed to generate the bill.');
@@ -176,9 +190,11 @@ export default function BillGenerationForm() {
             </Field>
 
             <Field label="GST">
-              <label style={{ display: 'flex', gap: 6, alignItems: 'center', height: 36, fontSize: 14.5 }}>
-                <input type="checkbox" checked={form.gst_applicable} onChange={(e) => set('gst_applicable', e.target.checked)} />
-                Charge GST at 18%
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', minHeight: 36, fontSize: 14.5 }}>
+                <input type="checkbox" checked={form.bill_type !== 'BILATERAL_ENERGY' && form.gst_applicable}
+                  disabled={form.bill_type === 'BILATERAL_ENERGY'}
+                  onChange={(e) => set('gst_applicable', e.target.checked)} />
+                {GST_NOTE[form.bill_type] || 'Charge GST at 18%'}
               </label>
             </Field>
           </div>
@@ -198,7 +214,7 @@ export default function BillGenerationForm() {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-            <button type="button" className="btn btn-outline" disabled={!ready || busy === 'preview'} onClick={runPreview}>
+            <button type="button" className="btn btn-outline" disabled={!ready || busy === 'preview'} onClick={() => runPreview()}>
               {busy === 'preview' ? 'Pricing…' : 'Preview'}
             </button>
             <button type="submit" className="btn btn-primary" disabled={!ready || busy === 'generate'}>
@@ -219,8 +235,30 @@ export default function BillGenerationForm() {
 
           {blocked && (
             <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 14.5, color: 'var(--on-red)' }}>
-              {blocked.error}
-              {blocked.would_bill != null && <> (would bill ₹{fmtNumber(blocked.would_bill, 0)})</>}
+              {/* The API's own wording names a request field; the screen says it as a choice. */}
+              {blocked.would_bill != null
+                ? 'No energy was settled in this period.'
+                : blocked.error}
+              {blocked.would_bill != null && <> It would bill ₹{fmtNumber(blocked.would_bill, 0)} of flat and per-day charges alone.</>}
+              {blocked.would_bill != null && (
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, color: 'var(--slate-700)' }}>
+                  <input type="checkbox" checked={form.allow_zero_volume}
+                    onChange={(e) => {
+                      set('allow_zero_volume', e.target.checked);
+                      runPreview({ allow_zero_volume: e.target.checked });
+                    }} />
+                  Bill the flat and per-day charges anyway
+                </label>
+              )}
+            </div>
+          )}
+
+          {!blocked && form.allow_zero_volume && (
+            <div style={{ marginBottom: 12, fontSize: 14.5, color: 'var(--slate-600)' }}>
+              No energy was settled in this period; this bill carries only the flat and per-day charges.{' '}
+              <button type="button" className="link-btn" onClick={() => { set('allow_zero_volume', false); runPreview({ allow_zero_volume: false }); }}>
+                Undo
+              </button>
             </div>
           )}
 

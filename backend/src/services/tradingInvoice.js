@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { newId, genSjvnInvoiceNo, clientCodeFor } from '../util.js';
+import { newId, genSjvnInvoiceNo, clientCodeFor, isCalendarDate } from '../util.js';
 
 // One place where a trading invoice is priced and written.
 //
@@ -19,7 +19,10 @@ import { newId, genSjvnInvoiceNo, clientCodeFor } from '../util.js';
 //   net_payable total - tds, what the client actually remits
 
 const GST_RATE = 0.18;
-const DEFAULT_TDS_RATES = { '194Q': 0.001, '194C': 0.10, '194J': 0.10, NONE: 0 };
+// 194C is 2% on a company and 1% on an individual or HUF; the desk's clients
+// are companies. It was set at 10%, the 194J professional-fee rate, which
+// withheld five times the tax on every settlement bill.
+const DEFAULT_TDS_RATES = { '194Q': 0.001, '194C': 0.02, '194J': 0.10, NONE: 0 };
 
 // invoice_kind decides which shape is being billed.
 const ENERGY_KINDS = new Set(['TRADING_MARGIN_ONLY', 'POWER_SUPPLY_ONLY', 'COMBINED']);
@@ -83,6 +86,31 @@ export function priceTradingInvoice(body) {
   };
 }
 
+// The charge legs a bill is built from. DSM may be a credit to the client, so it
+// alone may be negative; the bill as a whole may not.
+const NON_NEGATIVE_LEGS = [
+  'quantum_mwh', 'rate_per_unit', 'exchange_fee', 'clearing_charges', 'regulatory_levy',
+  'sjvn_margin', 'transmission_charges',
+];
+
+/** Why this invoice cannot be raised, or null. */
+function invoiceObjection(body, priced) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(body.billing_period || ''))) {
+    return 'billing_period must be the month billed, YYYY-MM';
+  }
+  for (const k of ['trade_date', 'settlement_date']) {
+    if (body[k] && !isCalendarDate(body[k])) return `${k} must be a real date, YYYY-MM-DD`;
+  }
+  if (body.trade_date && body.settlement_date && body.settlement_date < body.trade_date) {
+    return 'settlement_date cannot be before trade_date';
+  }
+  for (const k of NON_NEGATIVE_LEGS) {
+    if (body[k] != null && body[k] !== '' && !(Number(body[k]) >= 0)) return `${k} must be a number, zero or more`;
+  }
+  if (!(priced.subtotal > 0)) return 'Nothing to bill: the charges on this invoice add up to zero or less';
+  return null;
+}
+
 // Create the invoice and, for a settlement bill, its client ledger posting — as
 // one unit, so an invoice can never exist without the ledger line that accounts
 // for it. The ledger is debited with net_payable because that is what the client
@@ -92,6 +120,8 @@ export function createTradingInvoice(body, { postLedger = false } = {}) {
   if (!client) throw new Error('Client not found');
 
   const priced = priceTradingInvoice(body);
+  const objection = invoiceObjection(body, priced);
+  if (objection) throw new Error(objection);
   // A pure margin bill has its own register; everything else bills as energy.
   const series = body.invoice_kind === 'TRADING_MARGIN_ONLY' ? 'MARGIN' : 'ENERGY';
   // Bill under the client's own short code where one is set, so the number reads
@@ -119,9 +149,13 @@ export function createTradingInvoice(body, { postLedger = false } = {}) {
 
   // COALESCE wraps the whole subquery: with no prior row it returns no rows at
   // all, so the running balance must default to 0 for a client's first entry.
+  // The entry is stamped when it is posted, as the netting and note postings
+  // are. Stamping it with the trade date put a back-dated invoice behind the
+  // entries already posted, so the next posting carried on from the wrong row
+  // and the balance lost that invoice; rowid settles entries in the same second.
   const insertLedger = db.prepare(`
     INSERT INTO client_ledgers (id, client_id, transaction_type, reference_id, credit, debit, running_balance, description, timestamp)
-    VALUES (?, ?, 'INVOICE', ?, 0, ?, COALESCE((SELECT running_balance FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1), 0) + ?, ?, ?)
+    VALUES (?, ?, 'INVOICE', ?, 0, ?, COALESCE((SELECT running_balance FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC, rowid DESC LIMIT 1), 0) + ?, ?, datetime('now'))
   `);
 
   const n = (v) => Number(v) || 0;
@@ -154,7 +188,7 @@ export function createTradingInvoice(body, { postLedger = false } = {}) {
     });
     if (postLedger) {
       insertLedger.run(newId('CLG'), body.client_id, id, priced.net_payable, body.client_id, priced.net_payable,
-        `Invoice Generated: ${invoiceNo}`, body.trade_date ? `${body.trade_date} 10:00:00` : new Date().toISOString());
+        `Invoice Generated: ${invoiceNo}${body.trade_date ? ` (trade date ${body.trade_date})` : ''}`);
     }
   })();
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Field, Badge, fmtNumber } from '../../components/ui.jsx';
-import { askConfirm } from '../../lib/dialogs.js';
+import { askText } from '../../lib/dialogs.js';
 
 /**
  * Supply Bill Entry — the Bill of Supply register.
@@ -12,13 +12,20 @@ import { askConfirm } from '../../lib/dialogs.js';
  * form had no submit handler at all.
  */
 
+// Today on the desk's own calendar. toISOString() is UTC, which before 05:30 IST
+// is still yesterday.
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const EMPTY = {
   client_name: '',
   client_id: '',
   seller_name: '',
   buyer_name: '',
   contract_no: '',
-  invoice_date: new Date().toISOString().slice(0, 10),
+  invoice_date: '',
   invoice_due_date: '',
   supply_from_date: '',
   supply_to_date: '',
@@ -32,7 +39,7 @@ const EMPTY = {
 };
 
 export default function BillOfSupplyForm() {
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState(() => ({ ...EMPTY, invoice_date: today() }));
   const [clients, setClients] = useState([]);
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -85,9 +92,11 @@ export default function BillOfSupplyForm() {
   }
 
   async function onCancel(row) {
-    if (!(await askConfirm(`Cancel ${row.bill_no}?`))) return;
+    // The bill stays in the register as cancelled, so it says why.
+    const reason = await askText(`Why is ${row.bill_no} being cancelled?`, { title: 'Cancel bill of supply', okLabel: 'Cancel the bill' });
+    if (!reason) return;
     try {
-      await api.billing.cancelBillOfSupply(row.id);
+      await api.billing.cancelBillOfSupply(row.id, { reason });
       setMessage({ ok: true, text: `${row.bill_no} cancelled.` });
       load();
     } catch (err) {
@@ -123,14 +132,14 @@ export default function BillOfSupplyForm() {
               <input type="date" className="input" required value={form.invoice_date} onChange={(e) => set('invoice_date', e.target.value)} />
             </Field>
             <Field label="Invoice Due Date">
-              <input type="date" className="input" value={form.invoice_due_date} onChange={(e) => set('invoice_due_date', e.target.value)} />
+              <input type="date" className="input" min={form.invoice_date || undefined} value={form.invoice_due_date} onChange={(e) => set('invoice_due_date', e.target.value)} />
             </Field>
 
             <Field label="Supply Period From" required>
               <input type="date" className="input" required value={form.supply_from_date} onChange={(e) => set('supply_from_date', e.target.value)} />
             </Field>
             <Field label="Supply Period To" required>
-              <input type="date" className="input" required value={form.supply_to_date} onChange={(e) => set('supply_to_date', e.target.value)} />
+              <input type="date" className="input" required min={form.supply_from_date || undefined} value={form.supply_to_date} onChange={(e) => set('supply_to_date', e.target.value)} />
             </Field>
             <Field label="HSN Code"><input className="input" value={form.hsn_code} onChange={(e) => set('hsn_code', e.target.value)} /></Field>
 
@@ -181,7 +190,7 @@ export default function BillOfSupplyForm() {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-            <button type="button" className="btn btn-outline" onClick={() => setForm(EMPTY)}>Clear</button>
+            <button type="button" className="btn btn-outline" onClick={() => setForm({ ...EMPTY, invoice_date: today() })}>Clear</button>
             <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Submit'}</button>
           </div>
         </form>

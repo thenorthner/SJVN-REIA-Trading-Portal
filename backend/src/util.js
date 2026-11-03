@@ -331,6 +331,16 @@ export function resolvePaymentTermsDays(contract, fallback = 30) {
   return m ? parseInt(m[0], 10) : fallback;
 }
 
+/**
+ * A YYYY-MM-DD string that names a real day. The pattern alone lets through
+ * 2026-02-30 and 2026-13-45, which SQLite stores and sorts as if they were dates.
+ */
+export function isCalendarDate(v) {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
 /** Add whole days to a date and return an ISO YYYY-MM-DD string. */
 export function addDays(baseDate, days) {
   const d = baseDate ? new Date(baseDate) : new Date();

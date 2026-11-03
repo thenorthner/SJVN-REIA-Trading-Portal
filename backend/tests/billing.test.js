@@ -132,6 +132,18 @@ describe('finding what to bill', () => {
     const r = await request(app).get('/api/billing/contracts').query({ bill_type: 'NONSENSE' }).set(auth(trader));
     expect(r.status).toBe(400);
   });
+
+  it('lets the fee bills through before open access is granted, as the API does', async () => {
+    const tx = await request(app).post('/api/bilateral').set(auth(trader)).send({
+      counterparty: 'New Delhi Municipal Council', procurer_name: 'New Delhi Municipal Council',
+      client_id: clientId, quantum_mw: 10, sale_rate_per_unit: 4.5, trading_margin_per_unit: 0.03,
+      start_date: '2026-09-01', end_date: '2026-09-07',
+    });
+    for (const bill_type of ['BILATERAL_OA', 'BILATERAL_SLDC']) {
+      const r = await request(app).get('/api/billing/contracts').query({ bill_type, client_id: clientId }).set(auth(trader));
+      expect(r.body.find((c) => c.contract_id === tx.body.id).billable).toBe(true);
+    }
+  });
 });
 
 describe('previewing a bill', () => {
@@ -147,11 +159,28 @@ describe('previewing a bill', () => {
 
   it('shows the numbers and the reason when a bill could not be raised', async () => {
     const tx = await bilateralReady();
+    // Inside the contract's term, on days with no schedule.
     const r = await request(app).post('/api/billing/preview').set(auth(trader))
-      .send({ bill_type: 'BILATERAL_OA', contract_id: tx.id, from: '2027-01-01', to: '2027-01-31' });
+      .send({ bill_type: 'BILATERAL_OA', contract_id: tx.id, from: '2026-09-03', to: '2026-09-05' });
     expect(r.status).toBe(200);
     expect(r.body.objection.error).toMatch(/No volume settled/);
     expect(r.body.objection.would_bill).toBeGreaterThan(0);
+  });
+
+  it('refuses a period outside the contract term', async () => {
+    const tx = await bilateralReady();
+    const r = await request(app).post('/api/billing/preview').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_OA', contract_id: tx.id, from: '2027-01-01', to: '2027-01-31' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/cannot run past it/);
+  });
+
+  it('refuses a date that does not exist', async () => {
+    const tx = await bilateralReady();
+    const r = await request(app).post('/api/billing/preview').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_OA', contract_id: tx.id, from: '2026-02-30' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/real date/);
   });
 
   it('rejects a malformed period', async () => {
@@ -221,6 +250,46 @@ describe('generating a bill', () => {
     expect(r.status).toBe(403);
   });
 
+  it('refuses a second bill for days an active bill already covers', async () => {
+    const tx = await bilateralReady();
+    const first = await request(app).post('/api/billing/generate').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY', contract_id: tx.id, from: '2026-09-01', to: '2026-09-01' });
+    expect(first.status).toBe(201);
+    // The same day again is a duplicate; a wider period that takes it in is an overlap.
+    const same = await request(app).post('/api/billing/generate').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY', contract_id: tx.id, from: '2026-09-01', to: '2026-09-01' });
+    expect(same.status).toBe(409);
+    await request(app).post(`/api/bilateral/${tx.id}/schedules`).set(auth(trader))
+      .send({ schedule_date: '2026-09-02', blocks: [{ time_block: '00:00-00:15', approved_mw: 100 }] });
+    const wider = await request(app).post('/api/billing/generate').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY', contract_id: tx.id, from: '2026-09-01', to: '2026-09-02' });
+    expect(wider.status).toBe(409);
+    expect(wider.body.error).toMatch(/would bill those days again/);
+  });
+
+  it('charges a one-off fee once per contract, not once per bill', async () => {
+    const tx = await bilateralReady();
+    const first = await request(app).post('/api/billing/generate').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_OA', contract_id: tx.id, from: '2026-09-01', to: '2026-09-01' });
+    expect(first.status).toBe(201);
+    expect(first.body.line_items.some((l) => l.description === 'NOAR Application Fee')).toBe(true);
+    const later = await request(app).post('/api/billing/preview').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_OA', contract_id: tx.id, from: '2026-09-02', to: '2026-09-07' });
+    expect(later.body.line_items.some((l) => l.description === 'NOAR Application Fee')).toBe(false);
+    expect(later.body.warnings.join(' ')).toMatch(/billed once already/);
+  });
+
+  it('refuses an invoice date or credit period that cannot be right', async () => {
+    const tx = await bilateralReady();
+    const bad = await request(app).post('/api/billing/generate').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY', contract_id: tx.id, invoice_date: 'yesterday' });
+    expect(bad.status).toBe(400);
+    const negative = await request(app).post('/api/billing/generate').set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY', contract_id: tx.id, credit_days: -30 });
+    expect(negative.status).toBe(400);
+    expect(negative.body.error).toMatch(/credit_days/);
+  });
+
   it('404s when the contract is not in the register the bill type settles against', async () => {
     const c = await exchangeContract();
     const r = await request(app).post('/api/billing/generate').set(auth(trader))
@@ -257,11 +326,38 @@ describe('bill of supply', () => {
     expect(r.body.hsn_code).toBe('27160000');
   });
 
-  it('honours an explicit amount over the quantity times rate', async () => {
+  it('ignores a stated amount: the bill is always quantity times rate', async () => {
     const r = await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
-      .send(base({ amount: 2_000_000, rebate_percent: 0 }));
-    expect(r.body.amount).toBe(2_000_000);
-    expect(r.body.amount_after_rebate).toBe(2_000_000);
+      .send(base({ amount: -2_000_000, rebate_percent: 0 }));
+    expect(r.status).toBe(201);
+    expect(r.body.amount).toBe(500 * 4500);
+  });
+
+  it('refuses the same client billed again for days an active bill covers', async () => {
+    const first = await request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base());
+    const again = await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
+      .send(base({ supply_from_date: '2026-09-05', supply_to_date: '2026-09-10', invoice_date: '2026-09-11' }));
+    expect(again.status).toBe(409);
+    expect(again.body.existing_bill_no).toBe(first.body.bill_no);
+  });
+
+  it('refuses dates that cannot be right', async () => {
+    const post = (over) => request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base(over));
+    expect((await post({ supply_from_date: '2026-02-30', supply_to_date: '2026-02-31' })).status).toBe(400);
+    expect((await post({ invoice_due_date: '2026-09-01' })).body.error).toMatch(/invoice_due_date cannot be before/);
+    expect((await post({ invoice_date: '2026-08-01' })).body.error).toMatch(/before the supply period begins/);
+    expect((await post({ unit: 'barrels' })).body.error).toMatch(/unit must be one of/);
+    expect((await post({ client_id: 'TCL-nope' })).status).toBe(400);
+  });
+
+  it('keeps numbering past a number given by hand', async () => {
+    const a = await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
+      .send(base({ bill_no: 'SJVN/BOS/202609/0002' }));
+    expect(a.status).toBe(201);
+    const b = await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
+      .send(base({ contract_no: 'BIL/LOA/002' }));
+    expect(b.status).toBe(201);
+    expect(b.body.bill_no).toBe('SJVN/BOS/202609/0003');
   });
 
   it('refuses a supply period that ends before it starts', async () => {
@@ -293,26 +389,37 @@ describe('bill of supply', () => {
   it('lists and searches the register', async () => {
     await request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base());
     await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
-      .send(base({ client_name: 'Kreate Energy', invoice_date: '2026-08-01' }));
+      .send(base({ client_name: 'Kreate Energy', invoice_date: '2026-09-09' }));
     const all = await request(app).get('/api/billing/bill-of-supply').set(auth(trader));
     expect(all.body).toHaveLength(2);
     const one = await request(app).get('/api/billing/bill-of-supply').query({ q: 'Kreate' }).set(auth(trader));
     expect(one.body).toHaveLength(1);
   });
 
-  it('drops a cancelled bill out of the register and the report', async () => {
+  it('cancels with a reason, once, and keeps the number in the report but out of its totals', async () => {
     const created = await request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base());
-    await request(app).post(`/api/billing/bill-of-supply/${created.body.id}/cancel`).set(auth(trader)).send({});
+    const bare = await request(app).post(`/api/billing/bill-of-supply/${created.body.id}/cancel`).set(auth(trader)).send({});
+    expect(bare.status).toBe(400);
+    const done = await request(app).post(`/api/billing/bill-of-supply/${created.body.id}/cancel`).set(auth(trader))
+      .send({ reason: 'Raised on the wrong contract' });
+    expect(done.status).toBe(200);
+    expect(done.body.cancel_reason).toBe('Raised on the wrong contract');
+    const twice = await request(app).post(`/api/billing/bill-of-supply/${created.body.id}/cancel`).set(auth(trader))
+      .send({ reason: 'again' });
+    expect(twice.status).toBe(409);
     const list = await request(app).get('/api/billing/bill-of-supply').set(auth(trader));
     expect(list.body).toHaveLength(0);
     const report = await request(app).get('/api/billing/supply-bill-report').set(auth(trader));
-    expect(report.body.rows).toHaveLength(0);
+    expect(report.body.rows).toHaveLength(1);
+    expect(report.body.rows[0].status).toBe('CANCELLED');
+    expect(report.body.summary).toMatchObject({ bills: 0, cancelled: 1, total_amount: 0 });
   });
 
   it('reports the register live, with its totals', async () => {
     await request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base());
+    // The second in MU: the report adds it as 200 MWh, not 0.2.
     await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
-      .send(base({ quantity: 200, rate: 4000, rebate_percent: 0 }));
+      .send(base({ quantity: 0.2, unit: 'MU', rate: 4_000_000, rebate_percent: 0, contract_no: 'BIL/LOA/002' }));
     const r = await request(app).get('/api/billing/supply-bill-report').set(auth(trader));
     expect(r.status).toBe(200);
     expect(r.body.summary.bills).toBe(2);
@@ -323,7 +430,8 @@ describe('bill of supply', () => {
 
   it('narrows the report to a date range', async () => {
     await request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base({ invoice_date: '2026-09-08' }));
-    await request(app).post('/api/billing/bill-of-supply').set(auth(trader)).send(base({ invoice_date: '2026-07-08' }));
+    await request(app).post('/api/billing/bill-of-supply').set(auth(trader))
+      .send(base({ invoice_date: '2026-07-08', supply_from_date: '2026-07-01', supply_to_date: '2026-07-07' }));
     const r = await request(app).get('/api/billing/supply-bill-report')
       .query({ from: '2026-09-01', to: '2026-09-30' }).set(auth(trader));
     expect(r.body.summary.bills).toBe(1);
@@ -349,5 +457,20 @@ describe('the ISET supply bill report screen', () => {
     expect(r.body).toHaveLength(1);
     expect(r.body[0].client_name).toBe('New Delhi Municipal Council');
     expect(r.body[0].amount_rs).toBe(2_250_000 * 0.98);
+  });
+});
+
+describe('the trading settlement register', () => {
+  it('opens to every role the screen admits, and writes stay with the desk', async () => {
+    for (const role of ['MANAGEMENT', 'TRADING_ADMIN', 'FINANCE_USER', 'SJVN_ADMIN']) {
+      const r = await request(app).get('/api/billing-settlement/invoices').set(auth(tokenFor(role)));
+      expect(r.status, role).toBe(200);
+    }
+    const mgmt = await request(app).post('/api/billing-settlement/invoices/generate').set(auth(tokenFor('MANAGEMENT')))
+      .send({ client_id: clientId, invoice_kind: 'EXCHANGE', billing_period: '2026-09', sjvn_margin: 1000 });
+    expect(mgmt.status).toBe(403);
+    const admin = await request(app).post('/api/billing-settlement/invoices/generate').set(auth(tokenFor('TRADING_ADMIN')))
+      .send({ client_id: clientId, invoice_kind: 'EXCHANGE', billing_period: '2026-09', sjvn_margin: 1000 });
+    expect(admin.status).toBe(200);
   });
 });
